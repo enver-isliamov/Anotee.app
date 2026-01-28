@@ -8,13 +8,13 @@ import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './componen
 import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, UserRole } from './types';
-import { MOCK_PROJECTS } from './constants';
 import { generateId } from './services/utils';
 import { LanguageProvider } from './services/i18n';
 import { ThemeProvider } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
-import { useUser, useSession, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
+import { api } from './services/apiClient';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -27,7 +27,6 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'LIVE_DEMO' };
 
-const STORAGE_KEY = 'smotree_projects_data';
 const GUEST_STORAGE_KEY = 'smotree_guest_user';
 const POLLING_INTERVAL_MS = 5000;
 
@@ -37,10 +36,11 @@ interface AppLayoutProps {
     isSignedIn: boolean;
     getToken: () => Promise<string | null>;
     signOut: () => Promise<void>;
+    mockSignIn?: () => void; // Added for Mock Mode
     authMode: 'clerk' | 'guest' | 'mock';
 }
 
-const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, authMode }) => {
+const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode }) => {
   // Local Guest User State
   const [guestUser, setGuestUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(GUEST_STORAGE_KEY);
@@ -52,18 +52,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Derived Current User
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : MOCK_PROJECTS;
-  });
-
+  const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const isRemoteUpdate = useRef(false);
   const isJoiningFlow = useRef(false);
-  const offlineModeNotified = useRef(false);
   const processedInvites = useRef<Set<string>>(new Set()); 
 
   // TOAST HANDLER
@@ -83,9 +78,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (isSignedIn && clerkUser) {
         // Authenticated via Clerk or Mock Admin
         setCurrentUser({
-            id: clerkUser.primaryEmailAddress?.emailAddress || clerkUser.id,
-            name: clerkUser.fullName || 'User',
-            avatar: clerkUser.imageUrl,
+            id: clerkUser.id,
+            name: clerkUser.fullName || clerkUser.firstName || 'Developer',
+            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
             role: UserRole.ADMIN 
         });
         if (guestUser) {
@@ -100,18 +95,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     }
   }, [isLoaded, isSignedIn, clerkUser, guestUser]);
 
-  // Notify if running in Guest Mode without Key
+  // Notify if running in Mock/Guest Mode
   useEffect(() => {
       if (authMode === 'guest' && !localStorage.getItem('smotree_guest_warned')) {
           setTimeout(() => {
-             notify("Running in Offline Guest Mode (No API Key)", "warning");
+             notify("Running in Offline Guest Mode", "warning");
              localStorage.setItem('smotree_guest_warned', 'true');
-          }, 1000);
-      }
-      if (authMode === 'mock' && !localStorage.getItem('smotree_mock_warned')) {
-          setTimeout(() => {
-             notify("Dev Mode: API Keys missing. Using Local Storage.", "info");
-             localStorage.setItem('smotree_mock_warned', 'true');
           }, 1000);
       }
   }, [authMode]);
@@ -140,26 +129,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     }
   }, [isSignedIn, getToken, isMockMode]);
 
-
-  const getAuthHeader = async (overrideUser?: User): Promise<Record<string, string>> => {
-     if (isMockMode) return {}; 
-     
-     if (isSignedIn) {
-         try {
-             const token = await getToken();
-             if (token) return { 'Authorization': `Bearer ${token}` };
-         } catch(e) {}
-     }
-     
-     const targetUser = overrideUser || currentUser;
-     if (targetUser) return { 'X-Guest-ID': targetUser.id };
-     return {};
-  };
-
   const handleLogout = async () => {
     if (isSignedIn) {
         await signOut();
-        if (isMockMode) window.location.reload();
     } else {
         setGuestUser(null);
         localStorage.removeItem(GUEST_STORAGE_KEY);
@@ -171,109 +143,29 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
       
-      // MOCK MODE: Read from LocalStorage
-      if (isMockMode) {
-          const saved = localStorage.getItem(STORAGE_KEY);
-          if (saved) {
-              const data = JSON.parse(saved);
-              if (Array.isArray(data)) {
-                  isRemoteUpdate.current = true;
-                  setProjects(data);
-              }
-          }
-          return;
-      }
-
-       try {
+      try {
          setIsSyncing(true);
-         const headers = await getAuthHeader(userToUse);
-         const res = await fetch('/api/data', { headers });
+         const data = await api.getProjects(userToUse);
          
-         if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data)) {
-                isRemoteUpdate.current = true;
-                setProjects(data);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                offlineModeNotified.current = false;
-            }
-         } else if (res.status === 503) {
-             if (!offlineModeNotified.current) {
-                console.warn("Backend 503: Offline Mode active");
-             }
+         if (data && Array.isArray(data)) {
+            isRemoteUpdate.current = true;
+            setProjects(data);
          }
-       } catch (e) {
-       } finally {
+      } catch (e) {
+         console.error("Fetch failed", e);
+      } finally {
          setIsSyncing(false);
-       }
-  }, [currentUser, isSignedIn, getToken, isMockMode]);
-
-  const sanitizeProjectsForCloud = (projectsList: Project[]): Project[] => {
-      return projectsList.map(p => ({
-          ...p,
-          assets: p.assets.map(a => ({
-              ...a,
-              versions: a.versions.map(v => {
-                  const cleanVersion = { ...v };
-                  delete cleanVersion.localFileUrl;
-                  delete cleanVersion.localFileName;
-                  return cleanVersion;
-              })
-          }))
-      }));
-  };
-
-  const forceSync = async (projectsData: Project[], isRetry = false) => {
-      if (!currentUser || currentUser.role === UserRole.GUEST && !isMockMode) return;
-      
-      // MOCK MODE: Write to LocalStorage
-      if (isMockMode) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(projectsData));
-          return;
       }
-      
-      const cleanData = sanitizeProjectsForCloud(projectsData);
+  }, [currentUser]);
 
+  const forceSync = async (projectsData: Project[]) => {
+      if (!currentUser) return;
+      
       try {
           setIsSyncing(true);
-          const headers = await getAuthHeader();
-          const res = await fetch('/api/data', {
-              method: 'POST',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  ...headers
-              },
-              body: JSON.stringify(cleanData)
-          });
-          
-          if (!res.ok) {
-             if (res.status === 503) {
-                 if (!offlineModeNotified.current) {
-                     notify("Offline Mode: Cloud Sync Paused", "info");
-                     offlineModeNotified.current = true;
-                 }
-                 return;
-             }
-
-             if (!isRetry && res.status !== 404 && res.status !== 500) {
-                 try {
-                     const setupRes = await fetch('/api/setup');
-                     if (setupRes.ok) {
-                        await forceSync(projectsData, true);
-                        return;
-                     }
-                 } catch (setupError) {
-                     console.error("Auto-repair failed", setupError);
-                 }
-             }
-          } else {
-             if (offlineModeNotified.current) {
-                 notify("Online: Cloud Sync Restored", "success");
-                 offlineModeNotified.current = false;
-             }
-          }
+          await api.syncProjects(projectsData, currentUser);
       } catch (e) {
-          console.error("Force sync network error", e);
+          console.error("Sync failed", e);
       } finally {
           setIsSyncing(false);
       }
@@ -290,32 +182,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const shouldPoll = ['DASHBOARD', 'PROJECT_VIEW', 'PLAYER'].includes(view.type);
     if (!shouldPoll) return;
 
-    const interval = setInterval(async () => {
+    const interval = setInterval(() => {
         if (isSyncing || isJoiningFlow.current) return;
-        try {
-            const headers = await getAuthHeader();
-            const res = await fetch('/api/data', { headers });
-            if (res.ok) {
-                const cloudData = await res.json();
-                if (cloudData && Array.isArray(cloudData)) {
-                    setProjects(prevCurrent => {
-                        const cleanPrev = sanitizeProjectsForCloud(prevCurrent);
-                        if (JSON.stringify(cleanPrev) !== JSON.stringify(cloudData)) {
-                            isRemoteUpdate.current = true;
-                            return cloudData;
-                        }
-                        return prevCurrent;
-                    });
-                }
-            }
-        } catch (e) {}
+        fetchCloudData();
     }, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isSyncing, currentUser, isSignedIn, getToken, view.type, isMockMode]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  }, [projects]);
+  }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
   const processInviteLink = async (user: User, projectId: string, assetId?: string | null) => {
       if (processedInvites.current.has(projectId)) return; 
@@ -323,52 +195,30 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       isJoiningFlow.current = true;
       notify("Accepting invitation...", "info");
 
-      // MOCK MODE: Simulate Join
-      if (isMockMode) {
-          setTimeout(() => {
-              const project = projects.find(p => p.id === projectId);
-              if (project) {
-                  // Already exists locally
-                  setView(assetId ? { type: 'PLAYER', projectId, assetId } : { type: 'PROJECT_VIEW', projectId });
-                  notify(`Joined "${project.name}" (Local)`, "success");
-              } else {
-                  notify("Project not found in local storage", "error");
-              }
-              isJoiningFlow.current = false;
-          }, 500);
-          return;
-      }
-
       try {
-          const joinRes = await fetch('/api/join', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ projectId: projectId, user: user })
-          });
+          const result = await api.joinProject(projectId, user);
           
-          if (joinRes.ok) {
-              const joinData = await joinRes.json();
-              if (joinData.project) {
-                  processedInvites.current.add(projectId);
-                  isRemoteUpdate.current = true;
-                  setProjects(prev => {
-                      const exists = prev.some(p => p.id === joinData.project.id);
-                      if (exists) return prev.map(p => p.id === joinData.project.id ? joinData.project : p);
-                      return [joinData.project, ...prev]; 
-                  });
-                  notify(`You joined "${joinData.project.name}"`, "success");
-                  
-                  if (assetId) {
-                      setView({ type: 'PLAYER', projectId: projectId, assetId: assetId, restrictedAssetId: assetId });
-                  } else {
-                      setView({ type: 'PROJECT_VIEW', projectId: projectId });
-                  }
-                  
-                  const url = new URL(window.location.href);
-                  url.searchParams.delete('projectId');
-                  if (assetId) url.searchParams.delete('assetId');
-                  window.history.replaceState({}, '', url.toString());
+          if (result.success && result.project) {
+              processedInvites.current.add(projectId);
+              isRemoteUpdate.current = true;
+              setProjects(prev => {
+                  const exists = prev.some(p => p.id === result.project!.id);
+                  if (exists) return prev.map(p => p.id === result.project!.id ? result.project! : p);
+                  return [result.project!, ...prev]; 
+              });
+              notify(`You joined "${result.project.name}"`, "success");
+              
+              if (assetId) {
+                  setView({ type: 'PLAYER', projectId: projectId, assetId: assetId, restrictedAssetId: assetId });
+              } else {
+                  setView({ type: 'PROJECT_VIEW', projectId: projectId });
               }
+              
+              // Clean URL
+              const url = new URL(window.location.href);
+              url.searchParams.delete('projectId');
+              if (assetId) url.searchParams.delete('assetId');
+              window.history.replaceState({}, '', url.toString());
           } else {
                notify("Failed to join project.", "error");
           }
@@ -469,12 +319,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
+  // Called when user clicks "Login" in Clerk (handled by Clerk) OR "Guest Login"
+  // Also called when "Mock Login" is triggered
   const handleGuestLogin = async (user: User) => {
-    // If in Mock Mode, treat manual login as Admin login to test full features
-    if (isMockMode) {
-        user.role = UserRole.ADMIN;
-        user.id = 'mock-admin';
-    }
+    // If we are in mock mode, this might be triggered by the manual guest form
     setGuestUser(user);
     localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(user));
     notify(`Welcome, ${user.name}`, "success");
@@ -517,11 +365,28 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
                 </MainLayout>
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
+                {isMockMode && (
+                    <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm">
+                        PREVIEW MODE: No Backend (Data saved to LocalStorage)
+                    </div>
+                )}
             </div>
           );
       }
       
-      return <Login onLogin={handleGuestLogin} onNavigate={handleNavigate} />;
+      return (
+        <>
+            <Login 
+                onLogin={isMockMode && mockSignIn ? () => mockSignIn() : handleGuestLogin} 
+                onNavigate={handleNavigate} 
+            />
+            {isMockMode && (
+                <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm">
+                    PREVIEW MODE: Login to test (No real backend)
+                </div>
+            )}
+        </>
+      );
   }
 
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
@@ -588,6 +453,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           />
         )}
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        {isMockMode && (
+            <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm pointer-events-none">
+                PREVIEW MODE: Local Data Only
+            </div>
+        )}
       </main>
     </div>
   );
@@ -613,38 +483,33 @@ const ClerkAuthWrapper = () => {
 };
 
 const MockAuthWrapper = () => {
-    // Used when API Keys are missing (e.g. AI Studio Preview)
-    const mockSignOut = async () => {
-        window.location.reload(); 
+    // Manually manage mock login state
+    const [mockUser, setMockUser] = useState<any>(() => {
+        return sessionStorage.getItem('mock_auth_user') ? JSON.parse(sessionStorage.getItem('mock_auth_user')!) : null;
+    });
+
+    const mockSignIn = () => {
+        const user = { id: 'mock-dev', fullName: 'Developer', imageUrl: '' };
+        sessionStorage.setItem('mock_auth_user', JSON.stringify(user));
+        setMockUser(user);
     };
+
+    const mockSignOut = async () => {
+        sessionStorage.removeItem('mock_auth_user');
+        setMockUser(null);
+    };
+
     const mockGetToken = async () => null;
 
     return (
         <AppLayout 
-            clerkUser={null} 
+            clerkUser={mockUser} 
             isLoaded={true} 
-            isSignedIn={false} 
+            isSignedIn={!!mockUser} 
             getToken={mockGetToken} 
             signOut={mockSignOut}
+            mockSignIn={mockSignIn}
             authMode="mock"
-        />
-    );
-};
-
-const GuestAuthWrapper = () => {
-    const mockSignOut = async () => {
-        window.location.reload(); 
-    };
-    const mockGetToken = async () => null;
-
-    return (
-        <AppLayout 
-            clerkUser={null} 
-            isLoaded={true} 
-            isSignedIn={false} 
-            getToken={mockGetToken} 
-            signOut={mockSignOut}
-            authMode="guest"
         />
     );
 };
@@ -663,7 +528,7 @@ const App: React.FC = () => {
                  <ClerkAuthWrapper />
               </ClerkProvider>
           ) : (
-              // If Key is missing, use MockWrapper (dev/preview) instead of just Guest
+              // If Key is missing, use MockWrapper (dev/preview)
               <MockAuthWrapper />
           )}
       </LanguageProvider>

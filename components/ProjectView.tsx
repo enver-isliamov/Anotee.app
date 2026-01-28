@@ -7,6 +7,7 @@ import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
+import { api } from '../services/apiClient';
 
 interface ProjectViewProps {
   project: Project;
@@ -412,12 +413,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             });
 
             if (urlsToDelete.length > 0) {
-                const token = localStorage.getItem('smotree_auth_token');
-                await fetch('/api/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
-                    body: JSON.stringify({ urls: urlsToDelete })
-                });
+                await api.deleteAssets(urlsToDelete);
             }
         }
 

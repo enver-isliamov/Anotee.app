@@ -5,6 +5,7 @@ import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
+import { api } from '../services/apiClient';
 
 interface DashboardProps {
   projects: Project[];
@@ -155,21 +156,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           });
       });
 
-      if (urlsToDelete.length > 0 && !isMockMode) {
-          try {
-              const token = localStorage.getItem('smotree_auth_token');
-              await fetch('/api/delete', {
-                  method: 'POST',
-                  headers: { 
-                      'Content-Type': 'application/json',
-                      'Authorization': token ? `Bearer ${token}` : ''
-                  },
-                  body: JSON.stringify({ urls: urlsToDelete })
-              });
-          } catch (err) {
-              console.error("Failed to delete blobs", err);
-              notify(t('common.error'), "error");
-          }
+      if (urlsToDelete.length > 0) {
+          await api.deleteAssets(urlsToDelete);
       }
 
       onDeleteProject(project.id);

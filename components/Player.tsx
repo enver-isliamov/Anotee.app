@@ -7,6 +7,7 @@ import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
 import { GoogleDriveService } from '../services/googleDrive';
+import { api } from '../services/apiClient';
 
 interface PlayerProps {
   asset: ProjectAsset;
@@ -328,24 +329,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       onUpdateProject({ ...project, assets: updatedAssets });
 
       // If online and NOT mock mode, call API
-      if (!isDemo && !isMockMode && currentUser) {
-          try {
-             const token = localStorage.getItem('smotree_auth_token');
-             await fetch('/api/comment', {
-                 method: 'POST',
-                 headers: { 
-                     'Content-Type': 'application/json',
-                     ...(token ? { 'Authorization': `Bearer ${token}` } : { 'X-Guest-ID': currentUser.id })
-                 },
-                 body: JSON.stringify({
-                     projectId: project.id,
-                     assetId: asset.id,
-                     versionId: version.id,
-                     action,
-                     payload
-                 })
-             });
-          } catch (e) { console.error("Comment Sync Error", e); }
+      if (!isDemo && currentUser) {
+          await api.comment(project.id, asset.id, version.id, action, payload, currentUser);
       }
   };
 
@@ -1004,7 +989,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime)} - {markerOutPoint ? formatTimecode(markerOutPoint) : '...'}</span></div></div>)}
                         <div className="flex gap-2 items-center pb-[env(safe-area-inset-bottom)]">
                             <div className="relative flex-1">
-                                <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? "Comments locked" : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
+                                <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? "Comments locked" : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
                                 <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={12} /> : <Mic size={12} />}</button>
                             </div>
                             <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-2 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={14} /></button>
