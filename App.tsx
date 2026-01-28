@@ -31,15 +31,13 @@ const STORAGE_KEY = 'smotree_projects_data';
 const GUEST_STORAGE_KEY = 'smotree_guest_user';
 const POLLING_INTERVAL_MS = 5000;
 
-// --- PROPS INTERFACE FOR THE INNER APP ---
-// This allows us to pass auth data regardless of whether it comes from Clerk or our Guest Mock
 interface AppLayoutProps {
     clerkUser: any | null;
     isLoaded: boolean;
     isSignedIn: boolean;
     getToken: () => Promise<string | null>;
     signOut: () => Promise<void>;
-    authMode: 'clerk' | 'guest';
+    authMode: 'clerk' | 'guest' | 'mock';
 }
 
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, authMode }) => {
@@ -48,6 +46,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const saved = localStorage.getItem(GUEST_STORAGE_KEY);
     return saved ? JSON.parse(saved) : null;
   });
+
+  const isMockMode = authMode === 'mock';
 
   // Derived Current User
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -81,14 +81,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (!isLoaded) return;
 
     if (isSignedIn && clerkUser) {
-        // Authenticated via Clerk
+        // Authenticated via Clerk or Mock Admin
         setCurrentUser({
             id: clerkUser.primaryEmailAddress?.emailAddress || clerkUser.id,
             name: clerkUser.fullName || 'User',
             avatar: clerkUser.imageUrl,
-            role: UserRole.ADMIN // Clerk users are always Admins/Creators
+            role: UserRole.ADMIN 
         });
-        // Clear local guest if we logged in fully
         if (guestUser) {
             setGuestUser(null);
             localStorage.removeItem(GUEST_STORAGE_KEY);
@@ -104,46 +103,47 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Notify if running in Guest Mode without Key
   useEffect(() => {
       if (authMode === 'guest' && !localStorage.getItem('smotree_guest_warned')) {
-          // Small delay to ensure UI is ready
           setTimeout(() => {
              notify("Running in Offline Guest Mode (No API Key)", "warning");
              localStorage.setItem('smotree_guest_warned', 'true');
+          }, 1000);
+      }
+      if (authMode === 'mock' && !localStorage.getItem('smotree_mock_warned')) {
+          setTimeout(() => {
+             notify("Dev Mode: API Keys missing. Using Local Storage.", "info");
+             localStorage.setItem('smotree_mock_warned', 'true');
           }, 1000);
       }
   }, [authMode]);
 
   // --- CONFIGURE GOOGLE DRIVE SERVICE ---
   useEffect(() => {
-    if (isSignedIn) {
+    if (isSignedIn && !isMockMode) {
         GoogleDriveService.setTokenProvider(async () => {
             try {
-                // 1. Get the Clerk JWT for the backend call
                 const clerkToken = await getToken();
                 if (!clerkToken) return null;
-
-                // 2. Call our backend to get the Google Drive Token
                 const res = await fetch('/api/driveToken', {
                     headers: { 'Authorization': `Bearer ${clerkToken}` }
                 });
-
                 if (res.ok) {
                     const data = await res.json();
-                    return data.token; // Returns Google OAuth Access Token
+                    return data.token; 
                 }
                 return null;
             } catch (e) {
-                console.error("Failed to retrieve Drive Token", e);
                 return null;
             }
         });
     } else {
         GoogleDriveService.setTokenProvider(async () => null);
     }
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, isMockMode]);
 
 
   const getAuthHeader = async (overrideUser?: User): Promise<Record<string, string>> => {
-     // If Clerk user, get JWT
+     if (isMockMode) return {}; 
+     
      if (isSignedIn) {
          try {
              const token = await getToken();
@@ -151,7 +151,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
          } catch(e) {}
      }
      
-     // Fallback to Guest header
      const targetUser = overrideUser || currentUser;
      if (targetUser) return { 'X-Guest-ID': targetUser.id };
      return {};
@@ -160,22 +159,34 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleLogout = async () => {
     if (isSignedIn) {
         await signOut();
+        if (isMockMode) window.location.reload();
     } else {
         setGuestUser(null);
         localStorage.removeItem(GUEST_STORAGE_KEY);
     }
     setView({ type: 'DASHBOARD' });
-    window.history.pushState({}, '', window.location.pathname);
   };
 
   const fetchCloudData = useCallback(async (userOverride?: User) => {
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
+      
+      // MOCK MODE: Read from LocalStorage
+      if (isMockMode) {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+              const data = JSON.parse(saved);
+              if (Array.isArray(data)) {
+                  isRemoteUpdate.current = true;
+                  setProjects(data);
+              }
+          }
+          return;
+      }
 
        try {
          setIsSyncing(true);
          const headers = await getAuthHeader(userToUse);
-         
          const res = await fetch('/api/data', { headers });
          
          if (res.ok) {
@@ -192,11 +203,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
              }
          }
        } catch (e) {
-         // Silent fail on fetch
        } finally {
          setIsSyncing(false);
        }
-  }, [currentUser, isSignedIn, getToken]);
+  }, [currentUser, isSignedIn, getToken, isMockMode]);
 
   const sanitizeProjectsForCloud = (projectsList: Project[]): Project[] => {
       return projectsList.map(p => ({
@@ -214,7 +224,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   const forceSync = async (projectsData: Project[], isRetry = false) => {
-      if (!currentUser || currentUser.role === UserRole.GUEST) return;
+      if (!currentUser || currentUser.role === UserRole.GUEST && !isMockMode) return;
+      
+      // MOCK MODE: Write to LocalStorage
+      if (isMockMode) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(projectsData));
+          return;
+      }
       
       const cleanData = sanitizeProjectsForCloud(projectsData);
 
@@ -269,9 +285,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   }, [currentUser, fetchCloudData]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || isMockMode) return;
     
-    // Only poll when on active project management views
     const shouldPoll = ['DASHBOARD', 'PROJECT_VIEW', 'PLAYER'].includes(view.type);
     if (!shouldPoll) return;
 
@@ -296,7 +311,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         } catch (e) {}
     }, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isSyncing, currentUser, isSignedIn, getToken, view.type]);
+  }, [isSyncing, currentUser, isSignedIn, getToken, view.type, isMockMode]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
@@ -305,9 +320,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const processInviteLink = async (user: User, projectId: string, assetId?: string | null) => {
       if (processedInvites.current.has(projectId)) return; 
       
-      console.log(`🔗 Processing invite for project: ${projectId}`);
       isJoiningFlow.current = true;
       notify("Accepting invitation...", "info");
+
+      // MOCK MODE: Simulate Join
+      if (isMockMode) {
+          setTimeout(() => {
+              const project = projects.find(p => p.id === projectId);
+              if (project) {
+                  // Already exists locally
+                  setView(assetId ? { type: 'PLAYER', projectId, assetId } : { type: 'PROJECT_VIEW', projectId });
+                  notify(`Joined "${project.name}" (Local)`, "success");
+              } else {
+                  notify("Project not found in local storage", "error");
+              }
+              isJoiningFlow.current = false;
+          }, 500);
+          return;
+      }
 
       try {
           const joinRes = await fetch('/api/join', {
@@ -366,7 +396,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (pId) {
       const projectExists = projects.find(p => p.id === pId);
       if (projectExists) {
-          // If viewing specific asset via link
             if (aId) {
                 const assetExists = projectExists.assets.find(a => a.id === aId);
                 const shouldRestrict = currentUser.role === UserRole.GUEST; 
@@ -435,13 +464,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       setProjects(prev => prev.filter(p => p.id !== projectId));
       notify("Project deleted", "info");
       
-      // Cleanup logic removed for brevity in this snippet
       if ((view.type === 'PROJECT_VIEW' || view.type === 'PLAYER') && view.projectId === projectId) {
           handleBackToDashboard();
       }
   };
 
   const handleGuestLogin = async (user: User) => {
+    // If in Mock Mode, treat manual login as Admin login to test full features
+    if (isMockMode) {
+        user.role = UserRole.ADMIN;
+        user.id = 'mock-admin';
+    }
     setGuestUser(user);
     localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(user));
     notify(`Welcome, ${user.name}`, "success");
@@ -513,6 +546,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     onEditProject={handleEditProject}
                     onNavigate={handleNavigate}
                     notify={notify}
+                    isMockMode={isMockMode}
                 />
                 )}
                 {view.type === 'PROFILE' && (
@@ -537,6 +571,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             onUpdateProject={handleUpdateProject}
             notify={notify}
             restrictedAssetId={view.restrictedAssetId}
+            isMockMode={isMockMode}
           />
         )}
         {view.type === 'PLAYER' && currentProject && currentAsset && (
@@ -549,6 +584,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             onUpdateProject={(p, skipSync) => handleUpdateProject(p, skipSync)}
             isSyncing={isSyncing}
             notify={notify}
+            isMockMode={isMockMode}
           />
         )}
         <ToastContainer toasts={toasts} removeToast={removeToast} />
@@ -576,10 +612,27 @@ const ClerkAuthWrapper = () => {
     );
 };
 
-const GuestAuthWrapper = () => {
-    // Mock Auth Functions for Guest Mode
+const MockAuthWrapper = () => {
+    // Used when API Keys are missing (e.g. AI Studio Preview)
     const mockSignOut = async () => {
-        // Just reload to clear guest state in AppLayout
+        window.location.reload(); 
+    };
+    const mockGetToken = async () => null;
+
+    return (
+        <AppLayout 
+            clerkUser={null} 
+            isLoaded={true} 
+            isSignedIn={false} 
+            getToken={mockGetToken} 
+            signOut={mockSignOut}
+            authMode="mock"
+        />
+    );
+};
+
+const GuestAuthWrapper = () => {
+    const mockSignOut = async () => {
         window.location.reload(); 
     };
     const mockGetToken = async () => null;
@@ -610,7 +663,8 @@ const App: React.FC = () => {
                  <ClerkAuthWrapper />
               </ClerkProvider>
           ) : (
-              <GuestAuthWrapper />
+              // If Key is missing, use MockWrapper (dev/preview) instead of just Guest
+              <MockAuthWrapper />
           )}
       </LanguageProvider>
     </ThemeProvider>

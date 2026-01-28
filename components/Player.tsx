@@ -18,6 +18,7 @@ interface PlayerProps {
   isSyncing: boolean;
   notify: (msg: string, type: ToastType) => void;
   isDemo?: boolean;
+  isMockMode?: boolean;
 }
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 50, 60];
@@ -29,36 +30,29 @@ const canManageProject = (user: User, project: Project) => {
     return isOwner || isTeamMember;
 };
 
-// Interface for Transcript Items
 interface TranscriptChunk {
     text: string;
-    timestamp: [number, number] | null; // start, end
+    timestamp: [number, number] | null; 
 }
 
-export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false }) => {
+export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
   const { t } = useLanguage();
   const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.currentVersionIndex);
   
-  // COMPARISON STATE
   const [compareVersionIdx, setCompareVersionIdx] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'single' | 'side-by-side'>('single');
 
-  // TAB STATE
   const [sidebarTab, setSidebarTab] = useState<'comments' | 'transcript'>('comments');
 
-  // Safely get current version
   const version = asset.versions[currentVersionIdx] || asset.versions[0];
   const compareVersion = compareVersionIdx !== null ? asset.versions[compareVersionIdx] : null;
   
-  // Project-level lock takes precedence, then Version-level lock
   const isLocked = project.isLocked || version?.isLocked || false;
   const isGuest = currentUser.role === UserRole.GUEST;
   
-  // View State
   const [showMobileViewMenu, setShowMobileViewMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Video State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -66,19 +60,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [isFpsDetected, setIsFpsDetected] = useState(false);
   const [isVerticalVideo, setIsVerticalVideo] = useState(false);
   
-  // Loading & Error States
   const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [driveUrlRetried, setDriveUrlRetried] = useState(false); 
   const [driveFileMissing, setDriveFileMissing] = useState(false); 
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [videoError, setVideoError] = useState(false);
 
-  // Scrubbing State
   const [isScrubbing, setIsScrubbing] = useState(false);
   const scrubStartDataRef = useRef<{ x: number, time: number, wasPlaying: boolean } | null>(null);
   const isDragRef = useRef(false); 
   
-  // Floating Controls State (Persisted)
   const [controlsPos, setControlsPos] = useState(() => {
     try {
         const saved = localStorage.getItem('smotree_controls_pos');
@@ -90,44 +81,35 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isDraggingControls = useRef(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
 
-  // Export & Version Menus
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCompareMenu, setShowCompareMenu] = useState(false);
   const [showVersionSelector, setShowVersionSelector] = useState(false);
 
-  // Local File Fallback State
   const [localFileSrc, setLocalFileSrc] = useState<string | null>(null);
   const [localFileName, setLocalFileName] = useState<string | null>(null);
   const localFileRef = useRef<HTMLInputElement>(null);
 
-  // Comments & Local State
   const [comments, setComments] = useState<Comment[]>(version?.comments || []);
   const [swipeCommentId, setSwipeCommentId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartRef = useRef<{x: number, y: number} | null>(null);
   
-  // Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   
-  // Comment Creation & Editing State
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   
-  // Voice Modal State
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   
-  // Range Marker State
   const [markerInPoint, setMarkerInPoint] = useState<number | null>(null);
   const [markerOutPoint, setMarkerOutPoint] = useState<number | null>(null);
 
-  // Voice State
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
-  // TRANSCRIPTION STATE
   const [transcript, setTranscript] = useState<TranscriptChunk[] | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState<{status: string, progress: number} | null>(null);
@@ -159,14 +141,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     return `${hh}:${mm}:${ss}:${ff}`;
   };
 
-  // --- SAVE FLOATING POS ---
   useEffect(() => {
     localStorage.setItem('smotree_controls_pos', JSON.stringify(controlsPos));
   }, [controlsPos]);
 
-  // --- WORKER SETUP ---
   useEffect(() => {
-      // Clean up worker on unmount
       return () => {
           workerRef.current?.terminate();
       };
@@ -175,7 +154,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTranscribe = async () => {
     if (isTranscribing) return;
     
-    // Check if we have a valid source
     const sourceUrl = localFileSrc || driveUrl || version.url;
     if (!sourceUrl) {
         notify("No video source available for transcription", "error");
@@ -187,7 +165,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     setTranscribeProgress({ status: 'init', progress: 0 });
 
     try {
-        // 1. Initialize Worker if needed
         if (!workerRef.current) {
              workerRef.current = new Worker(new URL('../services/transcriptionWorker.ts', import.meta.url), { type: 'module' });
              
@@ -195,14 +172,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 const { type, data, result, error } = event.data;
                 
                 if (type === 'download') {
-                    // Downloading model
                     if (data.status === 'progress') {
                         setTranscribeProgress({ status: 'downloading', progress: data.progress || 0 });
                     } else if (data.status === 'done') {
                         setTranscribeProgress({ status: 'processing', progress: 0 });
                     }
                 } else if (type === 'complete') {
-                    // Done
                     if (result && Array.isArray(result.chunks)) {
                         setTranscript(result.chunks);
                         notify("Transcription complete", "success");
@@ -218,16 +193,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              };
         }
 
-        // 2. Extract Audio
         notify("Extracting audio from video...", "info");
         const audioData = await extractAudioFromUrl(sourceUrl);
         
-        // 3. Send to Worker
         notify("Starting AI Model (Whisper Tiny)...", "info");
         workerRef.current.postMessage({
             type: 'transcribe',
             audio: audioData,
-            language: 'en' // Hardcoded for V1, can be made dynamic later
+            language: 'en' 
         });
 
     } catch (e: any) {
@@ -238,7 +211,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     }
   };
 
-  // Helper for precise seeking
   const seekByFrame = (frames: number) => {
       const frameDuration = 1 / videoFps;
       const newTime = Math.min(Math.max(currentTime + (frames * frameDuration), 0), duration);
@@ -248,7 +220,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
   };
 
-  // --- KEYBOARD SHORTCUTS ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (isLocked) return;
@@ -337,7 +308,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           setComments(prev => prev.filter(c => c.id !== payload.id));
       }
 
-      // Sync with parent project state
       const updatedVersions = [...asset.versions];
       const versionToUpdate = updatedVersions[currentVersionIdx];
       
@@ -357,8 +327,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a);
       onUpdateProject({ ...project, assets: updatedAssets });
 
-      // If online, call API
-      if (!isDemo && currentUser) {
+      // If online and NOT mock mode, call API
+      if (!isDemo && !isMockMode && currentUser) {
           try {
              const token = localStorage.getItem('smotree_auth_token');
              await fetch('/api/comment', {
@@ -381,7 +351,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   useEffect(() => { setComments(version?.comments || []); }, [version?.comments]);
 
-  // Handle Removal of Dead Version
   const handleRemoveDeadVersion = async () => {
       if (!confirm("Are you sure you want to remove this version from the project history? This cannot be undone.")) return;
       
@@ -391,22 +360,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           return;
       }
       
-      // Calculate new index - ensure it points to the LAST available version (usually most recent)
-      // or keep current if valid. Since we removed one, length decreased.
       let newIdx = Math.min(currentVersionIdx, uV.length - 1);
       if (newIdx < 0) newIdx = 0;
 
-      // Update Project Data
       const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a);
       
-      // CRITICAL: Reset ALL error states for the new version load BEFORE triggering update
       setDriveUrl(null); 
       setDriveFileMissing(false);
       setVideoError(false);
       setDriveUrlRetried(false);
-      setLoadingDrive(true); // Show loading while next one preps
+      setLoadingDrive(true); 
       
-      // Set new index to trigger reload
       setCurrentVersionIdx(newIdx);
       
       onUpdateProject({ ...project, assets: uA });
@@ -414,18 +378,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   useEffect(() => {
-    // NOTIFY USER ON VERSION LOAD
-    if (version) {
-        // notify(`Loaded Version ${version.versionNumber}: ${version.filename || 'Video'}`, "success"); // Removed to reduce noise on switch
-    }
-
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null);
     setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     
-    // STRICT RESET OF ERROR STATES ON VERSION CHANGE
     setVideoError(false); 
     setDriveFileMissing(false);
-    setDriveUrlRetried(false); // Reset Retry Flag
+    setDriveUrlRetried(false); 
     setDriveUrl(null); 
     setLoadingDrive(false);
     
@@ -433,9 +391,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     setTranscript(null);
 
     const checkDriveStatus = async () => {
-        if (version?.storageType === 'drive' && version.googleDriveId) {
+        if (!isMockMode && version?.storageType === 'drive' && version.googleDriveId) {
             setLoadingDrive(true);
-            // Check existence first
             const status = await GoogleDriveService.checkFileStatus(version.googleDriveId);
             if (status !== 'ok') {
                 console.warn(`File ${version.googleDriveId} is ${status}`);
@@ -444,9 +401,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 return;
             }
 
-            // Fetch stream URL
             const streamUrl = GoogleDriveService.getVideoStreamUrl(version.googleDriveId);
-            // Trust URL initially
             setDriveUrl(streamUrl);
             setLoadingDrive(false);
         } else if (version?.localFileUrl) { 
@@ -455,19 +410,18 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         } else { 
             setLocalFileSrc(null); 
             setLocalFileName(null); 
-            if (version && !version.url) setVideoError(false); // Waiting for URL
+            if (version && !version.url) setVideoError(false); 
         }
     };
 
     checkDriveStatus();
 
-    // Force reset Video Element specifically
     if (videoRef.current) { 
         videoRef.current.pause();
         videoRef.current.currentTime = 0; 
         videoRef.current.load(); 
     }
-  }, [version?.id]); // CRITICAL: version.id changes -> everything reloads
+  }, [version?.id, isMockMode]); 
 
   useEffect(() => {
     const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); };
@@ -504,7 +458,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
   }, [isPlaying, updateTimeLoop, isFpsDetected]);
 
-  // Handler functions (omitted for brevity as they remain unchanged)
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
       const t = parseFloat(e.target.value); setCurrentTime(t);
       if (videoRef.current) videoRef.current.currentTime = t;
@@ -514,31 +467,29 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimeUpdate = () => { if (!isScrubbing) setCurrentTime(videoRef.current?.currentTime || 0); };
   
   const handleVideoError = () => {
-      // Avoid flickering error if we are just loading
       if (loadingDrive) return;
 
-      if (!localFileSrc && !driveFileMissing) {
-          // Attempt Drive Fallback Logic (Auto-Fallback)
+      if (!localFileSrc && !driveFileMissing && !isMockMode) {
           if (version.storageType === 'drive' && version.googleDriveId && !driveUrlRetried) {
               console.warn("Primary API link failed (likely CORS). Switching to UC fallback link...");
               setDriveUrlRetried(true);
               setDriveUrl(`https://drive.google.com/uc?export=download&id=${version.googleDriveId}`);
               
-              // Force retry in the video element
               setTimeout(() => {
                 if (videoRef.current) {
                     videoRef.current.load();
-                    // Optionally auto-play if it was meant to be playing
                     if (isPlaying) videoRef.current.play().catch(() => {});
                 }
               }, 100);
           } else {
               setVideoError(true);
           }
+      } else if (!localFileSrc && !driveFileMissing && isMockMode) {
+          // If in mock mode and local blob URL expired or is missing
+          setVideoError(true);
       }
   };
   
-  // -- RE-IMPLEMENTED PRECISE SCRUBBING LOGIC (Frame Accurate) --
   const handlePointerDown = (e: React.PointerEvent) => {
     isDragRef.current = false;
     scrubStartDataRef.current = {
@@ -550,7 +501,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-      // Trigger drag state if moved more than 5 pixels
       if (!isDragRef.current && scrubStartDataRef.current && Math.abs(e.clientX - scrubStartDataRef.current.x) > 5) {
           isDragRef.current = true;
           setIsScrubbing(true);
@@ -576,10 +526,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handlePointerUp = (e: React.PointerEvent) => {
       if (isDragRef.current && scrubStartDataRef.current) {
-          // If we were scrubbing, resume playback if it was playing before
           if (scrubStartDataRef.current.wasPlaying) togglePlay();
       } else if (e.button === 0) {
-          // If it was just a click (no drag), toggle play/pause
           togglePlay();
       }
       
@@ -598,10 +546,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       e.stopPropagation();
       const idx = VALID_FPS.indexOf(videoFps);
       setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]);
-      setIsFpsDetected(false); // Manually overridden
+      setIsFpsDetected(false); 
   };
 
-  // Dragging Controls Logic
   const handleDragStart = (e: React.PointerEvent) => {
       isDraggingControls.current = true;
       dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y };
@@ -625,7 +572,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       }
   };
 
-  // Comments Logic
   const handleAddComment = () => {
     if (!newCommentText.trim()) return;
     const cId = generateId();
@@ -643,7 +589,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const saveEdit = (id: string) => { syncCommentAction('update', { id, text: editText }); setEditingCommentId(null); setEditText(''); };
   const handleBulkResolve = () => { comments.filter(c => c.status === CommentStatus.OPEN).forEach(c => syncCommentAction('update', { id: c.id, status: CommentStatus.RESOLVED })); };
 
-  // Add the missing function here
   const handleToggleLock = () => {
     const updatedVersions = [...asset.versions];
     const versionToUpdate = { ...updatedVersions[currentVersionIdx] };
@@ -655,7 +600,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     notify(versionToUpdate.isLocked ? t('player.lock_ver') : t('player.unlock_ver'), "info");
   };
 
-  // Voice Logic
   const startListening = () => {
     if (!('webkitSpeechRecognition' in window)) { notify("Speech recognition not supported in this browser.", "error"); return; }
     const SpeechRecognition = (window as any).webkitSpeechRecognition;
@@ -671,14 +615,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const toggleListening = () => { if (isListening) recognitionRef.current?.stop(); else startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
 
-  // Markers
-  const handleQuickMarker = () => { setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; // Needs text? No, Quick Marker usually adds empty/default, but here we just set point.
-  // Actually usually quick marker adds a marker instantly. Let's make it open comment box.
+  const handleQuickMarker = () => { setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
   const handleSetInPoint = () => { setMarkerInPoint(currentTime); notify("In Point Set", "info"); };
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
 
-  // Export
   const handleExport = (format: 'xml' | 'csv' | 'edl') => {
       let content = ''; let mime = 'text/plain'; let ext = '';
       if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments); mime = 'application/xml'; ext = 'xml'; }
@@ -696,7 +637,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   const handleSwitchVersion = (idx: number) => {
-      // FORCE RESET STATES
       setDriveUrl(null); 
       setVideoError(false);
       setDriveFileMissing(false);
@@ -726,10 +666,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
               </div>
           );
       }
-      if (version?.storageType === 'drive') {
+      if (version?.storageType === 'drive' && !isMockMode) {
           return (
               <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
                   <HardDrive size={10} /> Drive
+              </div>
+          );
+      }
+      if (isMockMode) {
+           return (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20">
+                  <HardDrive size={10} /> Mock
               </div>
           );
       }
@@ -740,7 +687,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       );
   };
 
-  if (!version) return null; // Safety check
+  if (!version) return null; 
 
   return (
     <div className="flex flex-col h-[100dvh] bg-white dark:bg-zinc-950 overflow-hidden select-none fixed inset-0 transition-colors">
@@ -850,30 +797,24 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         </header>
       )}
 
-      {/* The rest of the player component logic... */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
-        {/* VIDEO CONTAINER */}
         <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
-             {/* ... Overlays ... */}
              <div className="absolute bottom-4 right-4 z-50 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300">
                 <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
              </div>
              
-             {/* Timecode & FPS */}
              <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
                 <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime)}</div>
                 <div className="h-6 w-px bg-white/20"></div>
                 <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
-             {/* On-screen Comments */}
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
                  {activeOverlayComments.map(c => { const a = {name: 'User', role: 'Viewer'}; const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
              </div>
 
-             {/* Voice Modal */}
              {showVoiceModal && isFullscreen && (
                  <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4">
@@ -890,16 +831,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
-             {/* Play/Pause Center Icon */}
              {!isPlaying && !isScrubbing && !videoError && !showVoiceModal && !driveFileMissing && !loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center shadow-xl animate-in fade-in zoom-in duration-200">{isPlaying ? <Pause size={32} fill="white" className="text-white"/> : <Play size={32} fill="white" className="ml-1 text-white" />}</div></div>)}
 
-             {/* Loading State */}
              {loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><Loader2 size={48} className="animate-spin text-white/50"/></div>)}
 
-             {/* Error State */}
              {videoError && !driveFileMissing && (<div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-6 text-center animate-in fade-in duration-300"><div className="bg-zinc-800 p-4 rounded-full mb-4 ring-1 ring-zinc-700"><FileVideo size={32} className="text-zinc-400" /></div><p className="text-zinc-300 font-bold text-lg mb-2">{t('player.media_offline')}</p><p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">{t('player.offline_desc')}</p><button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer"><Upload size={16} /> {t('player.link_local')}</button></div>)}
 
-             {/* Drive File Missing State */}
              {driveFileMissing && (
                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-red-950/80 backdrop-blur-md p-6 text-center animate-in fade-in duration-300">
                      <div className="bg-red-900/50 p-4 rounded-full mb-4 ring-1 ring-red-700/50 text-red-300"><Trash2 size={32} /></div>
@@ -920,12 +857,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
-             {/* Video Element */}
              <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
                     <video 
-                        key={version.id} // Forces re-render when version changes
+                        key={version.id} 
                         ref={videoRef} 
                         src={localFileSrc || driveUrl || version.url} 
                         className="w-full h-full object-contain pointer-events-none" 
@@ -943,7 +879,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              </div>
           </div>
 
-          {/* Timeline & Controls */}
           <div className={`${isVerticalVideo ? 'absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pb-6 pt-10' : 'bg-zinc-900 border-t border-zinc-800 pb-2'} p-2 lg:p-4 shrink-0 transition-transform duration-300`}>
              <div className="relative h-6 md:h-8 group cursor-pointer flex items-center touch-none">
                 <input type="range" min={0} max={duration || 100} step={0.01} value={currentTime} onChange={handleSeek} disabled={videoError || driveFileMissing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30 disabled:cursor-not-allowed" />
@@ -953,7 +888,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           </div>
         </div>
 
-        {/* SIDEBAR & CONTROLS (Floating) */}
         {!isFullscreen && (
         <div className="w-full lg:w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shrink-0 h-[45vh] lg:h-auto z-10 shadow-2xl lg:shadow-none pb-20 lg:pb-0 relative transition-colors">
              <>
@@ -971,7 +905,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         <List size={14} /> Transcript
                     </button>
                 </div>
-                {/* ... Comments List Logic ... */}
                 {sidebarTab === 'comments' && (
                     <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 sticky top-0 z-20">
                         <div className="flex items-center gap-3"><span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total: ({filteredComments.length})</span></div>
@@ -982,14 +915,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     </div>
                 )}
                 
-                {/* Comments List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
-                    {/* ... (Comments rendering logic) ... */}
                     {sidebarTab === 'comments' && filteredComments.map(comment => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isG = false; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager && currentUser.role === UserRole.ADMIN);
                         return (
                         <div key={comment.id} className="relative group/wrapper" id={`comment-${comment.id}`}>
-                            {/* ... same comment card ... */}
                              <div className="absolute inset-0 rounded-lg flex items-center justify-between px-4"><div className="flex items-center text-blue-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o > 20 ? 1 : 0 }}><Pencil size={16} /> {t('common.edit')}</div><div className="flex items-center text-red-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o < -20 ? 1 : 0 }}>{t('common.delete')} <Trash2 size={16} /></div></div>
                             <div onTouchStart={(e) => {}} style={{ transform: `translateX(${o}px)` }} onClick={() => { if (isE) return; setSelectedCommentId(comment.id); if (videoRef.current && !videoError) { videoRef.current.currentTime = comment.timestamp; setCurrentTime(comment.timestamp); setIsPlaying(false); videoRef.current.pause(); } }} className={`rounded-lg p-2 border text-xs cursor-pointer transition-all relative z-10 shadow-sm ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/50' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-zinc-700'} ${isG && !isSelected ? 'border-orange-200 dark:border-orange-500/20' : ''} ${isA && !isSelected ? 'border-l-4 border-l-indigo-500 bg-zinc-50 dark:bg-zinc-800 shadow-md ring-1 ring-inset ring-indigo-500/20' : ''}`}>
                                 <div className="flex justify-between items-start mb-1">
@@ -1006,7 +936,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         </div>);
                     })}
 
-                    {/* --- RESTORED TRANSCRIPT UI --- */}
                     {sidebarTab === 'transcript' && (
                         <div className="h-full flex flex-col">
                             {!transcript && !isTranscribing && (

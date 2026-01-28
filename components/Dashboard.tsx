@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Project, User, UserRole } from '../types';
 import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight } from 'lucide-react';
@@ -14,11 +13,12 @@ interface DashboardProps {
   onAddProject: (project: Project) => void;
   onDeleteProject: (projectId: string) => void;
   onEditProject: (projectId: string, data: Partial<Project>) => void;
-  onNavigate: (page: string) => void; // Kept for upsell buttons
+  onNavigate: (page: string) => void; 
   notify: (msg: string, type: ToastType) => void;
+  isMockMode?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onSelectProject, onAddProject, onDeleteProject, onEditProject, onNavigate, notify }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onSelectProject, onAddProject, onDeleteProject, onEditProject, onNavigate, notify, isMockMode = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
@@ -155,7 +155,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           });
       });
 
-      if (urlsToDelete.length > 0) {
+      if (urlsToDelete.length > 0 && !isMockMode) {
           try {
               const token = localStorage.getItem('smotree_auth_token');
               await fetch('/api/delete', {

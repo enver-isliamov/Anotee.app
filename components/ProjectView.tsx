@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, User, UserRole, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle } from 'lucide-react';
@@ -17,6 +16,7 @@ interface ProjectViewProps {
   onUpdateProject: (project: Project) => void;
   notify: (msg: string, type: ToastType) => void;
   restrictedAssetId?: string;
+  isMockMode?: boolean;
 }
 
 // Helper to generate a thumbnail from a video file client-side
@@ -66,7 +66,7 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
   });
 };
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false }) => {
   const { t } = useLanguage();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -116,6 +116,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   }, []);
 
   const toggleStorage = () => {
+      if (isMockMode) {
+          notify("Drive Storage unavailable in Mock Mode", "info");
+          return;
+      }
       if (!isDriveReady && !useDriveStorage) {
           notify("Please connect Google Drive in your Profile first.", "info");
           return;
@@ -153,56 +157,68 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       let finalFileName = file.name;
       const token = localStorage.getItem('smotree_auth_token');
 
-      // Upload Logic
-      if (useDriveStorage && isDriveReady) {
-           try {
-               notify("Preparing Drive Folders...", "info");
-               // 1. Root -> Project
-               const appFolder = await GoogleDriveService.ensureAppFolder();
-               const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-               // 2. Project -> Asset
-               const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
-               
-               // 3. Rename File: AssetName_v1.ext
-               const ext = file.name.split('.').pop();
-               const niceName = `${assetTitle}_v1.${ext}`;
-
-               notify("Uploading to Drive...", "info");
-               const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => setUploadProgress(p), niceName);
-               
-               googleDriveId = result.id;
-               storageType = 'drive';
-               assetUrl = ''; // Drive uses ID
-               finalFileName = niceName; // Store the nice name we used!
-           } catch (driveErr) {
-               console.error("Drive upload failed", driveErr);
-               notify("Drive upload failed. Falling back to local.", "error");
-               isLocalFallback = true;
-           }
-      } else {
-          // Vercel Blob
-          try {
-            const newBlob = await upload(file.name, file, {
-              access: 'public',
-              handleUploadUrl: '/api/upload',
-              clientPayload: JSON.stringify({
-                  token: token,
-                  user: currentUser.id
-              }),
-              onUploadProgress: (progressEvent) => {
-                 setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
-              }
-            });
-            assetUrl = newBlob.url;
-          } catch (uploadError) {
-            console.warn("Cloud upload failed. Switching to Local Mode.", uploadError);
-            assetUrl = URL.createObjectURL(file);
-            storageType = 'local';
-            isLocalFallback = true;
+      // MOCK MODE HANDLING
+      if (isMockMode) {
+          assetUrl = URL.createObjectURL(file);
+          storageType = 'local';
+          // Simulate progress
+          for (let i = 0; i <= 100; i+=20) {
+              setUploadProgress(i);
+              await new Promise(r => setTimeout(r, 100));
           }
+      } else {
+        // ... (existing upload logic) ...
+        // Upload Logic
+        if (useDriveStorage && isDriveReady) {
+            try {
+                notify("Preparing Drive Folders...", "info");
+                // 1. Root -> Project
+                const appFolder = await GoogleDriveService.ensureAppFolder();
+                const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
+                // 2. Project -> Asset
+                const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
+                
+                // 3. Rename File: AssetName_v1.ext
+                const ext = file.name.split('.').pop();
+                const niceName = `${assetTitle}_v1.${ext}`;
+
+                notify("Uploading to Drive...", "info");
+                const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => setUploadProgress(p), niceName);
+                
+                googleDriveId = result.id;
+                storageType = 'drive';
+                assetUrl = ''; // Drive uses ID
+                finalFileName = niceName; // Store the nice name we used!
+            } catch (driveErr) {
+                console.error("Drive upload failed", driveErr);
+                notify("Drive upload failed. Falling back to local.", "error");
+                isLocalFallback = true;
+            }
+        } else {
+            // Vercel Blob
+            try {
+                const newBlob = await upload(file.name, file, {
+                access: 'public',
+                handleUploadUrl: '/api/upload',
+                clientPayload: JSON.stringify({
+                    token: token,
+                    user: currentUser.id
+                }),
+                onUploadProgress: (progressEvent) => {
+                    setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
+                }
+                });
+                assetUrl = newBlob.url;
+            } catch (uploadError) {
+                console.warn("Cloud upload failed. Switching to Local Mode.", uploadError);
+                assetUrl = URL.createObjectURL(file);
+                storageType = 'local';
+                isLocalFallback = true;
+            }
+        }
       }
 
-      if (isLocalFallback && !googleDriveId) {
+      if (isLocalFallback && !googleDriveId && !isMockMode) {
           assetUrl = URL.createObjectURL(file);
           storageType = 'local';
       }
@@ -222,8 +238,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             googleDriveId: googleDriveId,
             uploadedAt: 'Just now',
             comments: [],
-            localFileUrl: isLocalFallback ? URL.createObjectURL(file) : undefined,
-            localFileName: isLocalFallback ? file.name : undefined
+            localFileUrl: (isLocalFallback || isMockMode) ? URL.createObjectURL(file) : undefined,
+            localFileName: (isLocalFallback || isMockMode) ? file.name : undefined
           }
         ]
       };
@@ -236,7 +252,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       
       onUpdateProject(updatedProject);
       notify(t('common.success'), "success");
-      if (isLocalFallback) notify(t('player.media_offline'), "info");
+      if (isLocalFallback && !isMockMode) notify(t('player.media_offline'), "info");
 
     } catch (error) {
       console.error("Critical error adding asset", error);
@@ -269,46 +285,57 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         let finalFileName = file.name;
         const token = localStorage.getItem('smotree_auth_token');
 
-        // Upload Logic
-        if (useDriveStorage && isDriveReady) {
-             try {
-                 notify("Finding Drive Folder...", "info");
-                 const appFolder = await GoogleDriveService.ensureAppFolder();
-                 const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-                 // We assume asset folder name matches asset title. If renamed, it creates new folder.
-                 const assetFolder = await GoogleDriveService.ensureFolder(targetAsset.title, projectFolder);
-
-                 const ext = file.name.split('.').pop();
-                 const niceName = `${targetAsset.title}_v${nextVersionNum}.${ext}`;
-
-                 notify("Uploading version...", "info");
-                 const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => setUploadProgress(p), niceName);
-                 googleDriveId = result.id;
-                 storageType = 'drive';
-                 assetUrl = '';
-                 finalFileName = niceName; // Store nice name
-             } catch (e) {
-                 console.error("Drive upload failed", e);
-                 isLocalFallback = true;
+         // MOCK MODE HANDLING
+        if (isMockMode) {
+             assetUrl = URL.createObjectURL(file);
+             storageType = 'local';
+             // Simulate progress
+             for (let i = 0; i <= 100; i+=20) {
+                 setUploadProgress(i);
+                 await new Promise(r => setTimeout(r, 100));
              }
         } else {
-            try {
-                const newBlob = await upload(file.name, file, {
-                access: 'public',
-                handleUploadUrl: '/api/upload',
-                clientPayload: JSON.stringify({
-                    token: token,
-                    user: currentUser.id
-                }),
-                onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded/p.total)*100))
-                });
-                assetUrl = newBlob.url;
-            } catch (uploadError) {
-                isLocalFallback = true;
+             // ... Existing upload logic ...
+             if (useDriveStorage && isDriveReady) {
+                try {
+                    notify("Finding Drive Folder...", "info");
+                    const appFolder = await GoogleDriveService.ensureAppFolder();
+                    const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
+                    // We assume asset folder name matches asset title. If renamed, it creates new folder.
+                    const assetFolder = await GoogleDriveService.ensureFolder(targetAsset.title, projectFolder);
+
+                    const ext = file.name.split('.').pop();
+                    const niceName = `${targetAsset.title}_v${nextVersionNum}.${ext}`;
+
+                    notify("Uploading version...", "info");
+                    const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => setUploadProgress(p), niceName);
+                    googleDriveId = result.id;
+                    storageType = 'drive';
+                    assetUrl = '';
+                    finalFileName = niceName; // Store nice name
+                } catch (e) {
+                    console.error("Drive upload failed", e);
+                    isLocalFallback = true;
+                }
+            } else {
+                try {
+                    const newBlob = await upload(file.name, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                    clientPayload: JSON.stringify({
+                        token: token,
+                        user: currentUser.id
+                    }),
+                    onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded/p.total)*100))
+                    });
+                    assetUrl = newBlob.url;
+                } catch (uploadError) {
+                    isLocalFallback = true;
+                }
             }
         }
 
-        if (isLocalFallback && !googleDriveId) {
+        if (isLocalFallback && !googleDriveId && !isMockMode) {
             assetUrl = URL.createObjectURL(file);
             storageType = 'local';
         }
@@ -322,8 +349,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             googleDriveId: googleDriveId,
             uploadedAt: 'Just now',
             comments: [],
-            localFileUrl: isLocalFallback ? URL.createObjectURL(file) : undefined,
-            localFileName: isLocalFallback ? file.name : undefined
+            localFileUrl: (isLocalFallback || isMockMode) ? URL.createObjectURL(file) : undefined,
+            localFileName: (isLocalFallback || isMockMode) ? file.name : undefined
         };
 
         const updatedVersions = [...targetAsset.versions, newVersion];
@@ -365,31 +392,33 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     setIsDeleting(true);
 
     try {
-        // 1. Delete from Drive if requested
-        if (deleteFromDrive && isDriveReady) {
-            notify("Deleting files from Drive...", "info");
-            for (const v of asset.versions) {
-                if (v.storageType === 'drive' && v.googleDriveId) {
-                    await GoogleDriveService.deleteFile(v.googleDriveId);
+        if (!isMockMode) {
+            // 1. Delete from Drive if requested
+            if (deleteFromDrive && isDriveReady) {
+                notify("Deleting files from Drive...", "info");
+                for (const v of asset.versions) {
+                    if (v.storageType === 'drive' && v.googleDriveId) {
+                        await GoogleDriveService.deleteFile(v.googleDriveId);
+                    }
                 }
             }
-        }
 
-        // 2. Delete Vercel Blobs (always cleanup cloud storage if possible)
-        const urlsToDelete: string[] = [];
-        asset.versions.forEach(v => {
-            if (v.storageType === 'vercel' && v.url.startsWith('http')) {
-                urlsToDelete.push(v.url);
-            }
-        });
-
-        if (urlsToDelete.length > 0) {
-            const token = localStorage.getItem('smotree_auth_token');
-            await fetch('/api/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
-                body: JSON.stringify({ urls: urlsToDelete })
+            // 2. Delete Vercel Blobs (always cleanup cloud storage if possible)
+            const urlsToDelete: string[] = [];
+            asset.versions.forEach(v => {
+                if (v.storageType === 'vercel' && v.url.startsWith('http')) {
+                    urlsToDelete.push(v.url);
+                }
             });
+
+            if (urlsToDelete.length > 0) {
+                const token = localStorage.getItem('smotree_auth_token');
+                await fetch('/api/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
+                    body: JSON.stringify({ urls: urlsToDelete })
+                });
+            }
         }
 
         // 3. Update State
@@ -536,10 +565,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <button
                         onClick={toggleStorage}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${useDriveStorage && isDriveReady ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                        title={isDriveReady ? "Toggle Storage" : "Drive not connected"}
+                        title={isMockMode ? "Mock Mode (Local)" : (isDriveReady ? "Toggle Storage" : "Drive not connected")}
                     >
                         {useDriveStorage && isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
-                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? "Drive Storage" : "SmoTree Cloud"}</span>
+                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? "Drive Storage" : (isMockMode ? "Local Mode" : "SmoTree Cloud")}</span>
                     </button>
 
                     <button 
@@ -645,7 +674,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   </p>
                   
                   <div className="space-y-3">
-                      {isDriveReady && (
+                      {isDriveReady && !isMockMode && (
                           <button 
                             onClick={() => confirmDeleteAsset(true)} 
                             disabled={isDeleting}
@@ -681,8 +710,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               </div>
           </div>
       )}
-
-       {/* Share & Participants Modals remain unchanged ... */}
+      
+       {/* Share Modal & Participants Modal (same as before) */}
        {(isShareModalOpen || isParticipantsModalOpen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative p-6">
