@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, UserRole } from '../types';
-import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History } from 'lucide-react';
+import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2 } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor } from '../services/utils';
 import { ToastType } from './Toast';
@@ -172,6 +171,72 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           workerRef.current?.terminate();
       };
   }, []);
+
+  const handleTranscribe = async () => {
+    if (isTranscribing) return;
+    
+    // Check if we have a valid source
+    const sourceUrl = localFileSrc || driveUrl || version.url;
+    if (!sourceUrl) {
+        notify("No video source available for transcription", "error");
+        return;
+    }
+
+    setIsTranscribing(true);
+    setTranscript([]);
+    setTranscribeProgress({ status: 'init', progress: 0 });
+
+    try {
+        // 1. Initialize Worker if needed
+        if (!workerRef.current) {
+             workerRef.current = new Worker(new URL('../services/transcriptionWorker.ts', import.meta.url), { type: 'module' });
+             
+             workerRef.current.onmessage = (event) => {
+                const { type, data, result, error } = event.data;
+                
+                if (type === 'download') {
+                    // Downloading model
+                    if (data.status === 'progress') {
+                        setTranscribeProgress({ status: 'downloading', progress: data.progress || 0 });
+                    } else if (data.status === 'done') {
+                        setTranscribeProgress({ status: 'processing', progress: 0 });
+                    }
+                } else if (type === 'complete') {
+                    // Done
+                    if (result && Array.isArray(result.chunks)) {
+                        setTranscript(result.chunks);
+                        notify("Transcription complete", "success");
+                    }
+                    setIsTranscribing(false);
+                    setTranscribeProgress(null);
+                } else if (type === 'error') {
+                    console.error("Worker Error:", error);
+                    notify(`Transcription Failed: ${error}`, "error");
+                    setIsTranscribing(false);
+                    setTranscribeProgress(null);
+                }
+             };
+        }
+
+        // 2. Extract Audio
+        notify("Extracting audio from video...", "info");
+        const audioData = await extractAudioFromUrl(sourceUrl);
+        
+        // 3. Send to Worker
+        notify("Starting AI Model (Whisper Tiny)...", "info");
+        workerRef.current.postMessage({
+            type: 'transcribe',
+            audio: audioData,
+            language: 'en' // Hardcoded for V1, can be made dynamic later
+        });
+
+    } catch (e: any) {
+        console.error("Transcription Start Error:", e);
+        notify(e.message || "Failed to start transcription", "error");
+        setIsTranscribing(false);
+        setTranscribeProgress(null);
+    }
+  };
 
   // Helper for precise seeking
   const seekByFrame = (frames: number) => {
@@ -888,7 +953,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           </div>
         </div>
 
-        {/* SIDEBAR & CONTROLS (Floating) omitted for brevity as they are unchanged functionally, just re-rendered */}
+        {/* SIDEBAR & CONTROLS (Floating) */}
         {!isFullscreen && (
         <div className="w-full lg:w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shrink-0 h-[45vh] lg:h-auto z-10 shadow-2xl lg:shadow-none pb-20 lg:pb-0 relative transition-colors">
              <>
@@ -917,8 +982,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     </div>
                 )}
                 
-                {/* Comments List & Transcript View implementation remains same as previous version */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0">
+                {/* Comments List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
                     {/* ... (Comments rendering logic) ... */}
                     {sidebarTab === 'comments' && filteredComments.map(comment => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isG = false; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager && currentUser.role === UserRole.ADMIN);
@@ -940,6 +1005,69 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             </div>
                         </div>);
                     })}
+
+                    {/* --- RESTORED TRANSCRIPT UI --- */}
+                    {sidebarTab === 'transcript' && (
+                        <div className="h-full flex flex-col">
+                            {!transcript && !isTranscribing && (
+                                <div className="flex flex-col items-center justify-center h-64 text-center px-6">
+                                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/10 flex items-center justify-center mb-4 text-indigo-500">
+                                        <Bot size={24} />
+                                    </div>
+                                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">AI Transcription</h3>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed">
+                                        Use Client-Side AI to convert speech to text. The audio is processed locally in your browser.
+                                    </p>
+                                    <button 
+                                        onClick={handleTranscribe}
+                                        disabled={loadingDrive || driveFileMissing || videoError}
+                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all hover:scale-105 active:scale-95"
+                                    >
+                                        <Wand2 size={14} /> Generate Transcript
+                                    </button>
+                                </div>
+                            )}
+
+                            {isTranscribing && (
+                                <div className="flex flex-col items-center justify-center h-64 px-8 text-center">
+                                    <Loader2 size={32} className="animate-spin text-indigo-500 mb-4" />
+                                    <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden">
+                                        <div 
+                                            className="bg-indigo-500 h-full transition-all duration-300 ease-out" 
+                                            style={{ width: `${transcribeProgress?.progress || 0}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
+                                        {transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {transcript && transcript.length > 0 && (
+                                <div className="space-y-1 p-2">
+                                    {transcript.map((chunk, i) => {
+                                        const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1];
+                                        return (
+                                            <div 
+                                                key={i}
+                                                onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)}
+                                                className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}
+                                            >
+                                                <div className="flex gap-2">
+                                                    <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">
+                                                        {chunk.timestamp ? formatTimecode(chunk.timestamp[0]) : '--:--'}
+                                                    </span>
+                                                    <p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>
+                                                        {chunk.text}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {sidebarTab === 'comments' && (
