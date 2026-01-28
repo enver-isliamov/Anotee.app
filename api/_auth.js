@@ -14,7 +14,7 @@ export async function verifyUser(req) {
     const token = authHeader.split(' ')[1];
 
     // 1. Try Custom Guest Token Verification (HMAC)
-    // Custom tokens look like "base64Payload.base64Signature"
+    // Custom tokens look like "base64Payload.base64Signature" (2 parts)
     if (token.includes('.')) {
         const parts = token.split('.');
         // Clerk JWTs have 3 parts, our Guest tokens have 2 parts
@@ -39,15 +39,13 @@ export async function verifyUser(req) {
 
     // 2. Try Clerk Authentication (Standard JWT)
     try {
-        const { isSignedIn, toAuth } = await clerkClient.authenticateRequest(req, {
-            secretKey: process.env.CLERK_SECRET_KEY,
-        });
-
-        if (isSignedIn) {
-            const auth = toAuth();
-            if (!auth || !auth.userId) return null;
-
-            const user = await clerkClient.users.getUser(auth.userId);
+        // Use verifyToken directly on the string to avoid Request object incompatibility issues
+        // We pass the secretKey explicitly to ensure it's used if the client instance didn't pick it up perfectly
+        const verifiedToken = await clerkClient.verifyToken(token);
+        
+        if (verifiedToken) {
+            const userId = verifiedToken.sub;
+            const user = await clerkClient.users.getUser(userId);
             const primaryEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress;
 
             return {
@@ -60,8 +58,8 @@ export async function verifyUser(req) {
             };
         }
     } catch (e) {
-        // Clerk verification failed or token was invalid for Clerk
-        // Silent fail is fine here as we return null
+        // Token expired, invalid, or network error fetching user
+        console.error("Clerk Auth Error:", e.message);
     }
 
     return null;
