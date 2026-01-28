@@ -15,7 +15,7 @@ export async function verifyUser(req) {
 
     // 1. Try Custom Guest Token Verification (HMAC)
     // Custom tokens look like "base64Payload.base64Signature" (2 parts)
-    if (token.includes('.')) {
+    if (token.includes('.') && !token.startsWith('eyJ')) { // Add check to avoid confusing with JWT which also starts with chars but usually has 3 parts
         const parts = token.split('.');
         // Clerk JWTs have 3 parts, our Guest tokens have 2 parts
         if (parts.length === 2) {
@@ -39,9 +39,11 @@ export async function verifyUser(req) {
 
     // 2. Try Clerk Authentication (Standard JWT)
     try {
-        // Use verifyToken directly on the string to avoid Request object incompatibility issues
-        // We pass the secretKey explicitly to ensure it's used if the client instance didn't pick it up perfectly
-        const verifiedToken = await clerkClient.verifyToken(token);
+        // Explicitly pass secretKey and allow 1 minute clock skew
+        const verifiedToken = await clerkClient.verifyToken(token, {
+            secretKey: process.env.CLERK_SECRET_KEY,
+            clockSkewInMs: 60000 
+        });
         
         if (verifiedToken) {
             const userId = verifiedToken.sub;
@@ -59,7 +61,7 @@ export async function verifyUser(req) {
         }
     } catch (e) {
         // Token expired, invalid, or network error fetching user
-        console.error("Clerk Auth Error:", e.message);
+        console.error("Clerk Auth Error details:", e.message || e);
     }
 
     return null;
