@@ -19,7 +19,12 @@ export default async function handler(req, res) {
              throw new Error("Unauthorized: Invalid Token");
         }
 
-        // 2. Allow Upload
+        // 2. Role Check: Guests cannot upload
+        if (!user.isVerified) {
+            throw new Error("Forbidden: Guests cannot upload files. Please sign in with Google.");
+        }
+
+        // 3. Allow Upload
         return {
           allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska'],
           tokenPayload: JSON.stringify({
@@ -34,6 +39,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json(jsonResponse);
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    // Return 403 for Forbidden errors to handle them gracefully on frontend
+    const status = error.message.includes('Forbidden') ? 403 : 400;
+    return res.status(status).json({ error: error.message });
   }
 }

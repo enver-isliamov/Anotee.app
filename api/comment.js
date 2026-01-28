@@ -56,14 +56,33 @@ export default async function handler(req, res) {
           case 'update':
               const uIdx = version.comments.findIndex(c => c.id === payload.id);
               if (uIdx !== -1) {
-                  if (version.comments[uIdx].userId !== user.id && !user.isVerified) return res.status(403).json({ error: "Forbidden" });
+                  // GUEST RESTRICTIONS
+                  if (!user.isVerified) {
+                      // Guest can only update their own comment
+                      if (version.comments[uIdx].userId !== user.id) {
+                          return res.status(403).json({ error: "Forbidden: Cannot edit others' comments" });
+                      }
+                      // Guest CANNOT change status (Resolve/Open)
+                      if (payload.status && payload.status !== version.comments[uIdx].status) {
+                          delete payload.status; 
+                      }
+                  }
+                  
+                  // Allow Admins/Owners to edit anyone (moderation), or users to edit own
+                  if (version.comments[uIdx].userId !== user.id && !user.isVerified) {
+                       return res.status(403).json({ error: "Forbidden" });
+                  }
+
                   version.comments[uIdx] = { ...version.comments[uIdx], ...payload };
               }
               break;
           case 'delete':
               const dIdx = version.comments.findIndex(c => c.id === payload.id);
               if (dIdx !== -1) {
-                  if (version.comments[dIdx].userId !== user.id && !user.isVerified) return res.status(403).json({ error: "Forbidden" });
+                  // Guest can only delete own
+                  if (version.comments[dIdx].userId !== user.id && !user.isVerified) {
+                      return res.status(403).json({ error: "Forbidden: Cannot delete others' comments" });
+                  }
                   version.comments.splice(dIdx, 1);
               }
               break;

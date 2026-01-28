@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, User, UserRole, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
@@ -144,6 +145,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   const handleRealUpload = async (file: File) => {
+    if (isGuest) {
+        notify("Guests cannot upload files", "error");
+        return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -168,7 +174,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               await new Promise(r => setTimeout(r, 100));
           }
       } else {
-        // ... (existing upload logic) ...
         // Upload Logic
         if (useDriveStorage && isDriveReady) {
             try {
@@ -212,6 +217,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 assetUrl = newBlob.url;
             } catch (uploadError) {
                 console.warn("Cloud upload failed. Switching to Local Mode.", uploadError);
+                // Check if it's a permission error
+                if ((uploadError as any).message?.includes('Forbidden')) {
+                    throw new Error("Upload Forbidden: Guest Access");
+                }
                 assetUrl = URL.createObjectURL(file);
                 storageType = 'local';
                 isLocalFallback = true;
@@ -255,9 +264,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       notify(t('common.success'), "success");
       if (isLocalFallback && !isMockMode) notify(t('player.media_offline'), "info");
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Critical error adding asset", error);
-      notify(t('common.error'), "error");
+      notify(error.message || t('common.error'), "error");
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -495,9 +504,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             <span className="font-bold text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                 SmoTree <span className="text-zinc-600">/</span> {isGuest ? t('dash.shared_projects') : <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>}
             </span>
-            <div className="flex items-center gap-1 font-semibold text-sm md:text-base leading-tight text-zinc-100 truncate">
+            <div className="flex items-center gap-2 font-semibold text-sm md:text-base leading-tight text-zinc-100 truncate">
                <span className="truncate">{project.name}</span>
-               {isLocked && <Lock size={12} className="text-red-500 ml-2" />}
+               {isLocked && <Lock size={12} className="text-red-500" />}
+               
+               {/* Guest Badge */}
+               {isGuest && (
+                   <div className="hidden sm:flex items-center gap-1 bg-orange-900/30 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+                       <Eye size={10} />
+                       Read Only
+                   </div>
+               )}
             </div>
           </div>
         </div>
