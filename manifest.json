@@ -1,0 +1,22 @@
+{
+  "short_name": "SmoTree",
+  "name": "SmoTree Video Review",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=192&h=192&fit=crop&crop=faces",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=512&h=512&fit=crop&crop=faces",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#09090b",
+  "background_color": "#09090b"
+}
