@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -28,6 +29,7 @@ type ViewState =
   | { type: 'LIVE_DEMO' };
 
 const GUEST_STORAGE_KEY = 'smotree_guest_user';
+const GUEST_TOKEN_KEY = 'smotree_guest_token';
 const POLLING_INTERVAL_MS = 5000;
 
 interface AppLayoutProps {
@@ -86,6 +88,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         if (guestUser) {
             setGuestUser(null);
             localStorage.removeItem(GUEST_STORAGE_KEY);
+            localStorage.removeItem(GUEST_TOKEN_KEY);
         }
     } else if (guestUser) {
         // Fallback to Guest
@@ -135,6 +138,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     } else {
         setGuestUser(null);
         localStorage.removeItem(GUEST_STORAGE_KEY);
+        localStorage.removeItem(GUEST_TOKEN_KEY);
     }
     setView({ type: 'DASHBOARD' });
   };
@@ -321,10 +325,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   // Called when user clicks "Login" in Clerk (handled by Clerk) OR "Guest Login"
   // Also called when "Mock Login" is triggered
-  const handleGuestLogin = async (user: User) => {
+  const handleGuestLogin = async (user: User, token?: string) => {
     // If we are in mock mode, this might be triggered by the manual guest form
     setGuestUser(user);
     localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(user));
+    if (token) {
+        localStorage.setItem(GUEST_TOKEN_KEY, token);
+    }
     notify(`Welcome, ${user.name}`, "success");
   };
   

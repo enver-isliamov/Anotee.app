@@ -1,25 +1,44 @@
 
 import { createClerkClient } from '@clerk/backend';
+import { createHmac } from 'crypto';
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 export async function verifyUser(req) {
-    // 1. Check for Guest ID first (Manual Header)
-    const guestId = req.headers['x-guest-id'];
-    if (guestId && guestId.startsWith('guest-')) {
-        return {
-            id: guestId,
-            userId: guestId,
-            name: 'Guest',
-            role: 'Guest',
-            isVerified: false
-        };
+    // Check Authorization Header
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
     }
 
-    // 2. Check for Clerk Authentication
+    const token = authHeader.split(' ')[1];
+
+    // 1. Try Custom Guest Token Verification (HMAC)
+    // Custom tokens look like "base64Payload.base64Signature"
+    if (token.includes('.')) {
+        const parts = token.split('.');
+        // Clerk JWTs have 3 parts, our Guest tokens have 2 parts
+        if (parts.length === 2) {
+            const [payloadStr, signature] = parts;
+            const secret = process.env.CLERK_SECRET_KEY || 'dev-fallback-secret';
+            
+            const expectedSignature = createHmac('sha256', secret)
+                .update(payloadStr)
+                .digest('base64url');
+
+            if (signature === expectedSignature) {
+                try {
+                    const user = JSON.parse(Buffer.from(payloadStr, 'base64url').toString());
+                    return user;
+                } catch (e) {
+                    console.error("Guest token parse error", e);
+                }
+            }
+        }
+    }
+
+    // 2. Try Clerk Authentication (Standard JWT)
     try {
-        // authenticateRequest looks for the standard Clerk cookies or Authorization Bearer header
-        // We removed jwtKey as it is optional and causes issues if not set in Env Vars
         const { isSignedIn, toAuth } = await clerkClient.authenticateRequest(req, {
             secretKey: process.env.CLERK_SECRET_KEY,
         });
@@ -28,23 +47,21 @@ export async function verifyUser(req) {
             const auth = toAuth();
             if (!auth || !auth.userId) return null;
 
-            // Optional: Fetch full user details if needed, but for speed we might just use the ID.
-            // For now, let's fetch basic info to emulate the old object structure
             const user = await clerkClient.users.getUser(auth.userId);
-            
             const primaryEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress;
 
             return {
-                id: primaryEmail || user.id, // Keep using email as ID if possible for backward compat, or user.id
-                userId: user.id, // Clerk ID
+                id: primaryEmail || user.id,
+                userId: user.id,
                 email: primaryEmail,
                 name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User',
-                role: 'Admin', // Clerk users are always "Authenticated"
+                role: 'Admin',
                 isVerified: true
             };
         }
     } catch (e) {
-        console.error("Clerk Auth Error:", e);
+        // Clerk verification failed or token was invalid for Clerk
+        // Silent fail is fine here as we return null
     }
 
     return null;

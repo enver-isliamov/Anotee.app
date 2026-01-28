@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { ArrowRight, UserPlus, ShieldCheck, Mail, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download, Rocket } from 'lucide-react';
+import { ArrowRight, UserPlus, ShieldCheck, Mail, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download, Rocket, Loader2 } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
@@ -8,7 +9,7 @@ import { RoadmapBlock } from './RoadmapBlock';
 import { SignInButton, useSignIn } from '@clerk/clerk-react';
 
 interface LoginProps {
-  onLogin: (user: User) => void;
+  onLogin: (user: User, token?: string) => void;
   onNavigate: (page: string) => void;
 }
 
@@ -19,10 +20,11 @@ interface LoginCardProps {
     name: string;
     setName: (name: string) => void;
     handleManualSubmit: (e: React.FormEvent) => void;
+    isLoading?: boolean;
 }
 
 const LoginCard: React.FC<LoginCardProps> = ({ 
-    inviteProjectId, showManualLogin, name, setName, handleManualSubmit
+    inviteProjectId, showManualLogin, name, setName, handleManualSubmit, isLoading
 }) => {
     const { t } = useLanguage();
     const { signIn } = useSignIn();
@@ -76,8 +78,9 @@ const LoginCard: React.FC<LoginCardProps> = ({
                                     className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-9 pr-4 py-2.5 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-600" 
                                 />
                             </div>
-                            <button type="submit" disabled={!name.trim()} className={`w-full p-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white`}>
-                                {inviteProjectId ? t('auth.btn.join') : 'Continue as Guest'} <ArrowRight size={14} />
+                            <button type="submit" disabled={!name.trim() || isLoading} className={`w-full p-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white`}>
+                                {isLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+                                {inviteProjectId ? t('auth.btn.join') : 'Continue as Guest'} {!isLoading && <ArrowRight size={14} />}
                             </button>
                         </form>
                     </>
@@ -90,6 +93,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
 export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
   const [name, setName] = useState('');
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { t } = useLanguage();
   
   // Logic: Show manual login only if there's an invite (Guest mode)
@@ -102,19 +106,31 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     }
   }, []);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     
-    // Only Guests use manual submit now
-    const role = UserRole.GUEST;
-    const newUser: User = {
-      id: `guest-${generateId()}`,
-      name: name,
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}`,
-      role: role 
-    };
-    onLogin(newUser);
+    setIsLoading(true);
+    try {
+        const res = await fetch('/api/guest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+
+        const data = await res.json();
+        
+        if (data.success && data.user && data.token) {
+            onLogin(data.user, data.token);
+        } else {
+            alert("Login failed: " + (data.error || "Unknown error"));
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Connection error");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -147,6 +163,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                       name={name}
                       setName={setName}
                       handleManualSubmit={handleManualSubmit}
+                      isLoading={isLoading}
                   />
               </div>
           </div>
@@ -206,11 +223,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                             name={name}
                             setName={setName}
                             handleManualSubmit={handleManualSubmit}
+                            isLoading={isLoading}
                         />
                     </div>
                 </div>
             </div>
 
+            {/* Rest of the landing page remains the same */}
             {/* SECTION: STATS (SPEED) */}
             <div className="py-24 bg-white dark:bg-zinc-900 border-y border-zinc-200 dark:border-zinc-800 relative overflow-hidden">
                  <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">

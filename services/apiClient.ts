@@ -1,3 +1,4 @@
+
 import { Project, User, ProjectAsset, Comment } from '../types';
 import { MOCK_PROJECTS } from '../constants';
 import { generateId } from './utils';
@@ -8,6 +9,7 @@ const HAS_CLERK_KEY = ENV.VITE_CLERK_PUBLISHABLE_KEY && !ENV.VITE_CLERK_PUBLISHA
 const IS_MOCK_MODE = !HAS_CLERK_KEY;
 
 const STORAGE_KEY = 'smotree_projects_data';
+const GUEST_TOKEN_KEY = 'smotree_guest_token';
 
 // Helper to get local data
 const getLocalData = (): Project[] => {
@@ -37,11 +39,16 @@ export const api = {
         
         // Real API Call
         try {
-            const token = await (window as any).Clerk?.session?.getToken();
+            let token = await (window as any).Clerk?.session?.getToken();
+            
+            // If no Clerk token, try to find guest token
+            if (!token) {
+                token = localStorage.getItem(GUEST_TOKEN_KEY);
+            }
+
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
-            else headers['X-Guest-ID'] = user.id;
-
+            
             const res = await fetch('/api/data', { headers });
             if (!res.ok) throw new Error(res.statusText);
             return await res.json();
@@ -60,10 +67,13 @@ export const api = {
         if (!user) return;
 
         try {
-            const token = await (window as any).Clerk?.session?.getToken();
+            let token = await (window as any).Clerk?.session?.getToken();
+            if (!token) {
+                token = localStorage.getItem(GUEST_TOKEN_KEY);
+            }
+
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
-            else headers['X-Guest-ID'] = user.id;
 
             // Sanitize data (remove local blob urls before sending to server)
             const cleanData = projects.map(p => ({
@@ -123,7 +133,9 @@ export const api = {
         }
 
         try {
-            const token = await (window as any).Clerk?.session?.getToken();
+            let token = await (window as any).Clerk?.session?.getToken();
+            if (!token) token = localStorage.getItem(GUEST_TOKEN_KEY);
+
             await fetch('/api/delete', {
                 method: 'POST',
                 headers: { 
@@ -146,10 +158,11 @@ export const api = {
         }
 
         try {
-            const token = await (window as any).Clerk?.session?.getToken();
+            let token = await (window as any).Clerk?.session?.getToken();
+            if (!token) token = localStorage.getItem(GUEST_TOKEN_KEY);
+
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
-            else headers['X-Guest-ID'] = user.id;
 
             await fetch('/api/comment', {
                 method: 'POST',
