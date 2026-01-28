@@ -19,8 +19,8 @@ export async function verifyUser(req) {
     // 2. Check for Clerk Authentication
     try {
         // authenticateRequest looks for the standard Clerk cookies or Authorization Bearer header
+        // We removed jwtKey as it is optional and causes issues if not set in Env Vars
         const { isSignedIn, toAuth } = await clerkClient.authenticateRequest(req, {
-            jwtKey: process.env.CLERK_JWT_KEY,
             secretKey: process.env.CLERK_SECRET_KEY,
         });
 
