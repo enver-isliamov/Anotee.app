@@ -1,10 +1,10 @@
 
 // Service to handle Google Drive API interactions
-// Now powered by Clerk for Authentication
+// Powered by Clerk for Authentication
 
 const APP_FOLDER_NAME = 'SmoTree.App';
 
-// We no longer store tokens here. We request them on demand from Clerk.
+// We rely on the app to inject a method to get a fresh token from Clerk/Server
 let tokenGetter: (() => Promise<string | null>) | null = null;
 
 export const GoogleDriveService = {
@@ -38,14 +38,8 @@ export const GoogleDriveService = {
     return !!tokenGetter;
   },
   
-  /**
-   * Stub for legacy calls - handled by Clerk automatically now
-   */
+  // Legacy stub - can be removed, keeping for safety if called elsewhere temporarily
   init: (clientId: string) => { /* No-op */ },
-  restoreSession: () => { /* No-op */ },
-  authorize: () => { console.warn("Use Clerk Login button"); },
-  disconnect: () => { console.warn("Use Clerk Logout"); },
-  isConnected: () => !!tokenGetter,
 
   /**
    * Check if a file exists and is not trashed.
@@ -260,34 +254,14 @@ export const GoogleDriveService = {
    * Returns a streaming URL for the file.
    */
   getVideoStreamUrl: (fileId: string): string => {
-      // NOTE: For <video> tags, we usually need the API key or a public link 
-      // because we can't easily inject the Bearer token into the src="" attribute
-      // unless we proxy the video or fetch it as a blob.
-      
-      // However, we can use the access_token in the query param for Google Drive API
-      // IF we have a valid token currently.
-      
-      // Since this method is synchronous and getToken is async, 
-      // we have to rely on the calling component to handle token refresh logic 
-      // or use a fallback.
-      
+      // Prioritize API key for unauthenticated stream if available (better performance usually)
       const env = (import.meta as any).env || {};
       const apiKey = env.VITE_GOOGLE_API_KEY;
       if (apiKey) {
          return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
       }
 
-      return `https://drive.google.com/uc?export=download&id=${fileId}`;
-  },
-  
-  /**
-   * Async method to get an authenticated stream URL
-   */
-  getAuthenticatedStreamUrl: async (fileId: string): Promise<string> => {
-      const token = await GoogleDriveService.getToken();
-      if (token) {
-           return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${token}`;
-      }
+      // Fallback to simple export link (often redirects to a temp link)
       return `https://drive.google.com/uc?export=download&id=${fileId}`;
   }
 };
