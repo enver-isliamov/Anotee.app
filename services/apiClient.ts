@@ -25,8 +25,30 @@ const setLocalData = (data: Project[]) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
 
+// Internal token provider function
+let clerkTokenProvider: (() => Promise<string | null>) | null = null;
+
+const getAuthToken = async (): Promise<string | null> => {
+    // 1. Try getting Clerk Token first
+    if (clerkTokenProvider) {
+        try {
+            const token = await clerkTokenProvider();
+            if (token) return token;
+        } catch (e) {
+            console.warn("Failed to retrieve Clerk token", e);
+        }
+    }
+    // 2. Fallback to Guest Token
+    return localStorage.getItem(GUEST_TOKEN_KEY);
+};
+
 export const api = {
     isMockMode: IS_MOCK_MODE,
+
+    // Dependency Injection for Auth
+    setTokenProvider: (provider: () => Promise<string | null>) => {
+        clerkTokenProvider = provider;
+    },
 
     getProjects: async (user: User | null): Promise<Project[]> => {
         if (IS_MOCK_MODE) {
@@ -37,15 +59,8 @@ export const api = {
 
         if (!user) return [];
         
-        // Real API Call
         try {
-            let token = await (window as any).Clerk?.session?.getToken();
-            
-            // If no Clerk token, try to find guest token
-            if (!token) {
-                token = localStorage.getItem(GUEST_TOKEN_KEY);
-            }
-
+            const token = await getAuthToken();
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             
@@ -67,11 +82,7 @@ export const api = {
         if (!user) return;
 
         try {
-            let token = await (window as any).Clerk?.session?.getToken();
-            if (!token) {
-                token = localStorage.getItem(GUEST_TOKEN_KEY);
-            }
-
+            const token = await getAuthToken();
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -115,9 +126,14 @@ export const api = {
         }
 
         try {
+            // Even for joining, we might need auth if available (e.g. to verify the user identity)
+            const token = await getAuthToken();
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const res = await fetch('/api/join', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ projectId, user })
             });
             const data = await res.json();
@@ -133,9 +149,7 @@ export const api = {
         }
 
         try {
-            let token = await (window as any).Clerk?.session?.getToken();
-            if (!token) token = localStorage.getItem(GUEST_TOKEN_KEY);
-
+            const token = await getAuthToken();
             await fetch('/api/delete', {
                 method: 'POST',
                 headers: { 
@@ -151,16 +165,11 @@ export const api = {
 
     comment: async (projectId: string, assetId: string, versionId: string, action: string, payload: any, user: User) => {
         if (IS_MOCK_MODE) {
-            // Comments are handled via syncProjects in App.tsx state, 
-            // but if we moved logic here, we would update localStorage.
-            // For now, Player.tsx handles state update and calls syncProjects via onUpdateProject
             return; 
         }
 
         try {
-            let token = await (window as any).Clerk?.session?.getToken();
-            if (!token) token = localStorage.getItem(GUEST_TOKEN_KEY);
-
+            const token = await getAuthToken();
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 

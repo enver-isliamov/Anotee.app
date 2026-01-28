@@ -108,8 +108,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   }, [authMode]);
 
-  // --- CONFIGURE GOOGLE DRIVE SERVICE ---
+  // --- CONFIGURE API & DRIVE SERVICES ---
   useEffect(() => {
+    // 1. Configure Main API
+    api.setTokenProvider(getToken);
+
+    // 2. Configure Google Drive Service
     if (isSignedIn && !isMockMode) {
         GoogleDriveService.setTokenProvider(async () => {
             try {
