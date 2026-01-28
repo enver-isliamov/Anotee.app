@@ -9,7 +9,6 @@ import { useUser } from '@clerk/clerk-react';
 interface ProfileProps {
   currentUser: User;
   onLogout: () => void;
-  // onMigrate is removed as we handle linking via Clerk now
 }
 
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
@@ -18,39 +17,60 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const { t } = useLanguage();
   const { user } = useUser();
   
-  // DRIVE SCOPE DEFINITION
+  // CONSTANTS
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
-  // 1. Find Google Account in Clerk Data
-  const googleAccount = user?.externalAccounts.find(
-      a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
-  );
-
-  // 2. Check for Permission Scope
-  const hasDriveScope = googleAccount?.approvedScopes?.split(' ').includes(DRIVE_SCOPE);
-  
+  // STATE
   const [isDriveConnected, setIsDriveConnected] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // LOGIC: Check if user has the specific scope granted
   useEffect(() => {
-      setIsDriveConnected(!!hasDriveScope);
-  }, [hasDriveScope]);
+      if (!user) {
+          setIsDriveConnected(false);
+          return;
+      }
+
+      // 1. Find the Google Account
+      const googleAccount = user.externalAccounts.find(
+          a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
+      );
+
+      if (!googleAccount) {
+          setIsDriveConnected(false);
+          return;
+      }
+
+      // 2. Check Scopes
+      // approvedScopes is a string like "email profile https://www.googleapis.com/auth/drive.file"
+      const scopes = googleAccount.approvedScopes || "";
+      const hasScope = scopes.includes(DRIVE_SCOPE);
+
+      setIsDriveConnected(hasScope);
+
+  }, [user]);
 
   const handleConnectDrive = async () => {
       if (!user) return;
       setIsProcessing(true);
       
       try {
+          // Find existing Google account
+          const googleAccount = user.externalAccounts.find(
+             a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
+          );
+
           if (googleAccount) {
-              // Case A: User has Google linked, but missing Drive permissions.
-              // Re-authorize to add the scope.
+              // SCENARIO A: User logged in with Google, but lacks Drive permission.
+              // We must RE-AUTHORIZE the existing account.
+              console.log("Re-authorizing existing Google account for Drive scope...");
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
                   redirectUrl: window.location.href
               });
           } else {
-              // Case B: User has no Google account linked (e.g. email login or Guest upgrading).
-              // Link new Google account.
+              // SCENARIO B: User logged in via Email/Guest, needs to LINK Google.
+              console.log("Linking new Google account...");
               await user.createExternalAccount({
                   strategy: 'oauth_google',
                   redirectUrl: window.location.href,
@@ -59,7 +79,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           }
       } catch (e) {
           console.error("Failed to authorize Drive scope", e);
-          alert("Failed to connect Google Drive. Please try again.");
+          alert("Failed to connect Google Drive. Please ensure popups are allowed and try again.");
       } finally {
           setIsProcessing(false);
       }

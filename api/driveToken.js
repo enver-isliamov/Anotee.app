@@ -7,26 +7,44 @@ export default async function handler(req, res) {
     }
 
     try {
+        // 1. Verify User (Must be Clerk/Google user, not Guest)
         const user = await verifyUser(req);
         
-        if (!user || !user.isVerified) {
-            return res.status(401).json({ error: "Unauthorized. Please login with Google." });
+        if (!user) {
+            console.warn("DriveToken: No user found from token.");
+            return res.status(401).json({ error: "Unauthorized" });
         }
 
-        // Retrieve the Google OAuth Access Token from Clerk
-        // We assume the provider is 'oauth_google'
-        const response = await clerkClient.users.getUserOauthAccessToken(user.userId, 'oauth_google');
+        if (!user.isVerified) {
+            return res.status(403).json({ error: "Guests cannot access Drive." });
+        }
+
+        // 2. Fetch OAuth Token from Clerk
+        // We explicitly look for 'oauth_google' provider
+        let response;
+        try {
+            response = await clerkClient.users.getUserOauthAccessToken(user.userId, 'oauth_google');
+        } catch (clerkErr) {
+            console.error("DriveToken: Clerk API error", clerkErr);
+            return res.status(500).json({ error: "Failed to communicate with Auth provider" });
+        }
         
+        // 3. Check for Token existence
         if (response.data && response.data.length > 0) {
             const tokenData = response.data[0];
+            
+            // Optional: Check scopes if Clerk returns them, but usually simply having the token is enough here.
+            // The frontend handles the scope verification logic.
+            
             return res.status(200).json({ token: tokenData.token });
         } else {
-            console.warn("No Google OAuth token found for user", user.userId);
-            return res.status(404).json({ error: "No Google Drive connection found. Please re-login." });
+            // Valid user, but no Google connection found in Clerk
+            console.log(`DriveToken: User ${user.userId} has no Google OAuth tokens.`);
+            return res.status(404).json({ error: "Google Drive not connected" });
         }
 
     } catch (error) {
-        console.error("Drive Token Error:", error);
+        console.error("DriveToken Critical Error:", error);
         return res.status(500).json({ error: error.message });
     }
 }
