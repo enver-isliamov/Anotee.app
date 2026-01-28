@@ -270,6 +270,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   useEffect(() => {
     if (!currentUser) return;
+    
+    // Only poll when on active project management views
+    const shouldPoll = ['DASHBOARD', 'PROJECT_VIEW', 'PLAYER'].includes(view.type);
+    if (!shouldPoll) return;
+
     const interval = setInterval(async () => {
         if (isSyncing || isJoiningFlow.current) return;
         try {
@@ -291,7 +296,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         } catch (e) {}
     }, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isSyncing, currentUser, isSignedIn, getToken]);
+  }, [isSyncing, currentUser, isSignedIn, getToken, view.type]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
