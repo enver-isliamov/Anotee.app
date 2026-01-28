@@ -14,7 +14,7 @@ import { LanguageProvider } from './services/i18n';
 import { ThemeProvider } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
-import { useUser, useSession, useClerk, useAuth } from '@clerk/clerk-react';
+import { useUser, useSession, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -28,16 +28,21 @@ type ViewState =
   | { type: 'LIVE_DEMO' };
 
 const STORAGE_KEY = 'smotree_projects_data';
-const GUEST_STORAGE_KEY = 'smotree_guest_user'; // Renamed to clarify it's only for guests
+const GUEST_STORAGE_KEY = 'smotree_guest_user';
 const POLLING_INTERVAL_MS = 5000;
 
-const AppContent: React.FC = () => {
-  // Clerk Hooks
-  const { user: clerkUser, isLoaded, isSignedIn } = useUser();
-  const { session } = useSession();
-  const { getToken } = useAuth();
-  const { signOut } = useClerk();
+// --- PROPS INTERFACE FOR THE INNER APP ---
+// This allows us to pass auth data regardless of whether it comes from Clerk or our Guest Mock
+interface AppLayoutProps {
+    clerkUser: any | null;
+    isLoaded: boolean;
+    isSignedIn: boolean;
+    getToken: () => Promise<string | null>;
+    signOut: () => Promise<void>;
+    authMode: 'clerk' | 'guest';
+}
 
+const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, authMode }) => {
   // Local Guest User State
   const [guestUser, setGuestUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(GUEST_STORAGE_KEY);
@@ -60,6 +65,16 @@ const AppContent: React.FC = () => {
   const isJoiningFlow = useRef(false);
   const offlineModeNotified = useRef(false);
   const processedInvites = useRef<Set<string>>(new Set()); 
+
+  // TOAST HANDLER
+  const notify = (message: string, type: ToastType = 'info') => {
+    const id = generateId();
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   // --- SYNC AUTH STATE ---
   useEffect(() => {
@@ -85,6 +100,17 @@ const AppContent: React.FC = () => {
         setCurrentUser(null);
     }
   }, [isLoaded, isSignedIn, clerkUser, guestUser]);
+
+  // Notify if running in Guest Mode without Key
+  useEffect(() => {
+      if (authMode === 'guest' && !localStorage.getItem('smotree_guest_warned')) {
+          // Small delay to ensure UI is ready
+          setTimeout(() => {
+             notify("Running in Offline Guest Mode (No API Key)", "warning");
+             localStorage.setItem('smotree_guest_warned', 'true');
+          }, 1000);
+      }
+  }, [authMode]);
 
   // --- CONFIGURE GOOGLE DRIVE SERVICE ---
   useEffect(() => {
@@ -115,16 +141,6 @@ const AppContent: React.FC = () => {
     }
   }, [isSignedIn, getToken]);
 
-
-  // TOAST HANDLER
-  const notify = (message: string, type: ToastType = 'info') => {
-    const id = generateId();
-    setToasts(prev => [...prev, { id, message, type }]);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
 
   const getAuthHeader = async (overrideUser?: User): Promise<Record<string, string>> => {
      // If Clerk user, get JWT
@@ -217,7 +233,7 @@ const AppContent: React.FC = () => {
           if (!res.ok) {
              if (res.status === 503) {
                  if (!offlineModeNotified.current) {
-                     notify("Offline Mode: Cloud DB disconnected. Changes saved locally.", "info");
+                     notify("Offline Mode: Cloud Sync Paused", "info");
                      offlineModeNotified.current = true;
                  }
                  return;
@@ -536,11 +552,61 @@ const AppContent: React.FC = () => {
   );
 };
 
+// --- AUTH WRAPPERS ---
+
+const ClerkAuthWrapper = () => {
+    const { user, isLoaded, isSignedIn } = useUser();
+    const { signOut } = useClerk();
+    const { getToken } = useAuth();
+    
+    return (
+        <AppLayout 
+            clerkUser={user} 
+            isLoaded={isLoaded} 
+            isSignedIn={isSignedIn || false} 
+            getToken={getToken} 
+            signOut={signOut}
+            authMode="clerk"
+        />
+    );
+};
+
+const GuestAuthWrapper = () => {
+    // Mock Auth Functions for Guest Mode
+    const mockSignOut = async () => {
+        // Just reload to clear guest state in AppLayout
+        window.location.reload(); 
+    };
+    const mockGetToken = async () => null;
+
+    return (
+        <AppLayout 
+            clerkUser={null} 
+            isLoaded={true} 
+            isSignedIn={false} 
+            getToken={mockGetToken} 
+            signOut={mockSignOut}
+            authMode="guest"
+        />
+    );
+};
+
 const App: React.FC = () => {
+  // Check for Valid Clerk Key
+  const env = (import.meta as any).env || {};
+  const PUBLISHABLE_KEY = env.VITE_CLERK_PUBLISHABLE_KEY || "";
+  const isValidKey = PUBLISHABLE_KEY && !PUBLISHABLE_KEY.includes("placeholder");
+
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <AppContent />
+          {isValidKey ? (
+              <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+                 <ClerkAuthWrapper />
+              </ClerkProvider>
+          ) : (
+              <GuestAuthWrapper />
+          )}
       </LanguageProvider>
     </ThemeProvider>
   );

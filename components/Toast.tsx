@@ -1,8 +1,7 @@
-
 import React, { useEffect } from 'react';
-import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, X, AlertTriangle } from 'lucide-react';
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastMessage {
   id: string;
@@ -36,13 +35,15 @@ const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ to
   const icons = {
     success: <CheckCircle size={16} className="text-green-400" />,
     error: <AlertCircle size={16} className="text-red-400" />,
-    info: <Info size={16} className="text-blue-400" />
+    info: <Info size={16} className="text-blue-400" />,
+    warning: <AlertTriangle size={16} className="text-orange-400" />
   };
 
   const bgColors = {
     success: 'bg-zinc-900 border-green-900/50',
     error: 'bg-zinc-900 border-red-900/50',
-    info: 'bg-zinc-900 border-blue-900/50'
+    info: 'bg-zinc-900 border-blue-900/50',
+    warning: 'bg-zinc-900 border-orange-900/50'
   };
 
   return (
