@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, UserRole } from '../types';
-import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2 } from 'lucide-react';
+import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2 } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor } from '../services/utils';
 import { ToastType } from './Toast';
@@ -23,6 +23,23 @@ interface PlayerProps {
 }
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 50, 60];
+
+const TRANSCRIBE_LANGUAGES = [
+    { code: 'auto', label: 'Auto-Detect' },
+    { code: 'en', label: 'English' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'fr', label: 'French' },
+    { code: 'de', label: 'German' },
+    { code: 'it', label: 'Italian' },
+    { code: 'ja', label: 'Japanese' },
+    { code: 'zh', label: 'Chinese' },
+];
+
+const TRANSCRIBE_MODELS = [
+    { id: 'Xenova/whisper-tiny', label: 'Fast (Tiny)' },
+    { id: 'Xenova/whisper-base', label: 'Balanced (Base)' },
+];
 
 const canManageProject = (user: User, project: Project) => {
     if (user.role === UserRole.GUEST) return false;
@@ -111,9 +128,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
+  // Transcription State
   const [transcript, setTranscript] = useState<TranscriptChunk[] | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState<{status: string, progress: number} | null>(null);
+  const [transcribeLanguage, setTranscribeLanguage] = useState<string>('auto');
+  const [transcribeModel, setTranscribeModel] = useState<string>('Xenova/whisper-tiny');
   const workerRef = useRef<Worker | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -197,11 +217,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         notify("Extracting audio from video...", "info");
         const audioData = await extractAudioFromUrl(sourceUrl);
         
-        notify("Starting AI Model (Whisper Tiny)...", "info");
+        notify(`Starting AI Model (${transcribeLanguage === 'auto' ? 'Auto-Detect' : transcribeLanguage.toUpperCase()})...`, "info");
         workerRef.current.postMessage({
             type: 'transcribe',
             audio: audioData,
-            language: 'en' 
+            language: transcribeLanguage,
+            model: transcribeModel
         });
 
     } catch (e: any) {
@@ -226,7 +247,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         if (isLocked) return;
         
         const target = e.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable || target.tagName === 'SELECT') return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
 
         switch (e.code) {
@@ -924,21 +945,62 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     {sidebarTab === 'transcript' && (
                         <div className="h-full flex flex-col">
                             {!transcript && !isTranscribing && (
-                                <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-                                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/10 flex items-center justify-center mb-4 text-indigo-500">
-                                        <Bot size={24} />
+                                <div className="flex flex-col h-full p-4">
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                                        <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/10 flex items-center justify-center mb-4 text-indigo-500">
+                                            <Bot size={24} />
+                                        </div>
+                                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">AI Transcription</h3>
+                                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed max-w-[240px]">
+                                            Use Client-Side AI to convert speech to text locally.
+                                        </p>
                                     </div>
-                                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">AI Transcription</h3>
-                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed">
-                                        Use Client-Side AI to convert speech to text. The audio is processed locally in your browser.
-                                    </p>
-                                    <button 
-                                        onClick={handleTranscribe}
-                                        disabled={loadingDrive || driveFileMissing || videoError}
-                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all hover:scale-105 active:scale-95"
-                                    >
-                                        <Wand2 size={14} /> Generate Transcript
-                                    </button>
+                                    
+                                    <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
+                                                Language
+                                            </label>
+                                            <div className="relative">
+                                                <select 
+                                                    value={transcribeLanguage} 
+                                                    onChange={(e) => setTranscribeLanguage(e.target.value)}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500"
+                                                >
+                                                    {TRANSCRIBE_LANGUAGES.map(lang => (
+                                                        <option key={lang.code} value={lang.code}>{lang.label}</option>
+                                                    ))}
+                                                </select>
+                                                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
+                                                Model Quality
+                                            </label>
+                                            <div className="relative">
+                                                <select 
+                                                    value={transcribeModel} 
+                                                    onChange={(e) => setTranscribeModel(e.target.value)}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500"
+                                                >
+                                                    {TRANSCRIBE_MODELS.map(m => (
+                                                        <option key={m.id} value={m.id}>{m.label}</option>
+                                                    ))}
+                                                </select>
+                                                <Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+
+                                        <button 
+                                            onClick={handleTranscribe}
+                                            disabled={loadingDrive || driveFileMissing || videoError}
+                                            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+                                        >
+                                            <Wand2 size={14} /> Generate Transcript
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -958,7 +1020,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             )}
 
                             {transcript && transcript.length > 0 && (
-                                <div className="space-y-1 p-2">
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                    <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between">
+                                        <span>Result</span>
+                                        <button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button>
+                                    </div>
                                     {transcript.map((chunk, i) => {
                                         const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1];
                                         return (
