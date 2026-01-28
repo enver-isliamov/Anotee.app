@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { ArrowRight, UserPlus, ShieldCheck, Mail, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download } from 'lucide-react';
+import { ArrowRight, UserPlus, ShieldCheck, Mail, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download, Rocket } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
+import { RoadmapBlock } from './RoadmapBlock';
 import { SignInButton, useSignIn } from '@clerk/clerk-react';
 
 interface LoginProps {
@@ -355,6 +356,37 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                          <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-sm">{t('why.feat3.desc')}</p>
                      </div>
                 </div>
+            </div>
+
+            {/* SECTION: PRICING / ROADMAP (RESTORED) */}
+            <div className="py-24 bg-zinc-50 dark:bg-black border-y border-zinc-200 dark:border-zinc-800">
+                <div className="max-w-7xl mx-auto px-4 text-center">
+                    <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">{t('roadmap.title')}</h2>
+                    <p className="text-zinc-600 dark:text-zinc-400 mb-12 max-w-2xl mx-auto">{t('roadmap.subtitle')}</p>
+                    <RoadmapBlock />
+                </div>
+            </div>
+
+            {/* SECTION: FINAL CTA (RESTORED) */}
+            <div className="py-24 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
+                <div className="max-w-5xl mx-auto px-4 text-center relative z-10">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 mb-8 shadow-lg shadow-indigo-900/10 ring-1 ring-indigo-500/20">
+                         <Rocket size={32} />
+                    </div>
+                    <h2 className="text-4xl md:text-5xl font-bold text-zinc-900 dark:text-white mb-8 tracking-tight">
+                        {t('land.try_now')}
+                    </h2>
+                    <div className="flex flex-col sm:flex-row justify-center gap-4">
+                        <button 
+                            onClick={() => document.getElementById('auth-section')?.scrollIntoView({ behavior: 'smooth' })}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-indigo-900/20"
+                        >
+                            {t('hero.cta')} <ArrowRight size={20} />
+                        </button>
+                    </div>
+                </div>
+                {/* Background Decor */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-gradient-to-r from-indigo-500/10 to-purple-500/10 blur-[120px] rounded-full pointer-events-none"></div>
             </div>
 
             {/* FOOTER */}
