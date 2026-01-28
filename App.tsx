@@ -151,9 +151,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
       
+      // EXPLICIT TOKEN FETCH: Fixes race condition where api.setTokenProvider hasn't run yet.
+      let token: string | null = null;
+      if (authMode === 'clerk') {
+          try {
+              token = await getToken();
+          } catch (e) {
+              console.warn("Failed to fetch fresh token during data sync", e);
+          }
+      }
+
       try {
          setIsSyncing(true);
-         const data = await api.getProjects(userToUse);
+         // Pass explicit token to API
+         const data = await api.getProjects(userToUse, token);
          
          if (data && Array.isArray(data)) {
             isRemoteUpdate.current = true;
@@ -164,14 +175,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       } finally {
          setIsSyncing(false);
       }
-  }, [currentUser]);
+  }, [currentUser, getToken, authMode]);
 
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
       
+      let token: string | null = null;
+      if (authMode === 'clerk') {
+          try { token = await getToken(); } catch(e) {}
+      }
+
       try {
           setIsSyncing(true);
-          await api.syncProjects(projectsData, currentUser);
+          await api.syncProjects(projectsData, currentUser, token);
       } catch (e) {
           console.error("Sync failed", e);
       } finally {
@@ -203,8 +219,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       isJoiningFlow.current = true;
       notify("Accepting invitation...", "info");
 
+      let token: string | null = null;
+      if (authMode === 'clerk') {
+          try { token = await getToken(); } catch(e) {}
+      }
+
       try {
-          const result = await api.joinProject(projectId, user);
+          const result = await api.joinProject(projectId, user, token);
           
           if (result.success && result.project) {
               processedInvites.current.add(projectId);

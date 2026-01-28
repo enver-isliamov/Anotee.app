@@ -50,7 +50,7 @@ export const api = {
         clerkTokenProvider = provider;
     },
 
-    getProjects: async (user: User | null): Promise<Project[]> => {
+    getProjects: async (user: User | null, explicitToken?: string | null): Promise<Project[]> => {
         if (IS_MOCK_MODE) {
             // Simulate network delay
             await new Promise(r => setTimeout(r, 600));
@@ -60,11 +60,19 @@ export const api = {
         if (!user) return [];
         
         try {
-            const token = await getAuthToken();
+            // Use explicit token if provided (fixes race condition), otherwise use provider
+            const token = explicitToken || await getAuthToken();
+            
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             
             const res = await fetch('/api/data', { headers });
+            
+            if (res.status === 401) {
+                console.error("Unauthorized request to /api/data. Token present:", !!token);
+                throw new Error("Unauthorized");
+            }
+            
             if (!res.ok) throw new Error(res.statusText);
             return await res.json();
         } catch (e) {
@@ -73,7 +81,7 @@ export const api = {
         }
     },
 
-    syncProjects: async (projects: Project[], user: User | null): Promise<void> => {
+    syncProjects: async (projects: Project[], user: User | null, explicitToken?: string | null): Promise<void> => {
         if (IS_MOCK_MODE) {
             setLocalData(projects);
             return;
@@ -82,7 +90,7 @@ export const api = {
         if (!user) return;
 
         try {
-            const token = await getAuthToken();
+            const token = explicitToken || await getAuthToken();
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -108,7 +116,7 @@ export const api = {
         }
     },
 
-    joinProject: async (projectId: string, user: User): Promise<{ success: boolean, project?: Project }> => {
+    joinProject: async (projectId: string, user: User, explicitToken?: string | null): Promise<{ success: boolean, project?: Project }> => {
         if (IS_MOCK_MODE) {
             await new Promise(r => setTimeout(r, 800));
             const projects = getLocalData();
@@ -127,7 +135,7 @@ export const api = {
 
         try {
             // Even for joining, we might need auth if available (e.g. to verify the user identity)
-            const token = await getAuthToken();
+            const token = explicitToken || await getAuthToken();
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -143,13 +151,13 @@ export const api = {
         }
     },
 
-    deleteAssets: async (urls: string[]): Promise<void> => {
+    deleteAssets: async (urls: string[], explicitToken?: string | null): Promise<void> => {
         if (IS_MOCK_MODE) {
             return; // Nothing to delete on server
         }
 
         try {
-            const token = await getAuthToken();
+            const token = explicitToken || await getAuthToken();
             await fetch('/api/delete', {
                 method: 'POST',
                 headers: { 
@@ -163,13 +171,13 @@ export const api = {
         }
     },
 
-    comment: async (projectId: string, assetId: string, versionId: string, action: string, payload: any, user: User) => {
+    comment: async (projectId: string, assetId: string, versionId: string, action: string, payload: any, user: User, explicitToken?: string | null) => {
         if (IS_MOCK_MODE) {
             return; 
         }
 
         try {
-            const token = await getAuthToken();
+            const token = explicitToken || await getAuthToken();
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
