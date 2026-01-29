@@ -28,8 +28,6 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'LIVE_DEMO' };
 
-const GUEST_STORAGE_KEY = 'smotree_guest_user';
-const GUEST_TOKEN_KEY = 'smotree_guest_token';
 const POLLING_INTERVAL_MS = 5000;
 
 interface AppLayoutProps {
@@ -39,15 +37,10 @@ interface AppLayoutProps {
     getToken: () => Promise<string | null>;
     signOut: () => Promise<void>;
     mockSignIn?: () => void;
-    authMode: 'clerk' | 'guest' | 'mock';
+    authMode: 'clerk' | 'mock';
 }
 
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode }) => {
-  const [guestUser, setGuestUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem(GUEST_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
-  });
-
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -56,9 +49,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const isRemoteUpdate = useRef(false);
-  const isJoiningFlow = useRef(false);
-  // CRITICAL: Track processed invites to prevent infinite loops
-  const processedInvites = useRef<Set<string>>(new Set()); 
 
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
@@ -80,17 +70,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
             role: UserRole.ADMIN 
         });
-        if (guestUser) {
-            setGuestUser(null);
-            localStorage.removeItem(GUEST_STORAGE_KEY);
-            localStorage.removeItem(GUEST_TOKEN_KEY);
-        }
-    } else if (guestUser) {
-        setCurrentUser(guestUser);
     } else {
         setCurrentUser(null);
     }
-  }, [isLoaded, isSignedIn, clerkUser, guestUser]);
+  }, [isLoaded, isSignedIn, clerkUser]);
 
   // --- CONFIGURE API & DRIVE SERVICES ---
   useEffect(() => {
@@ -126,11 +109,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleLogout = async () => {
     if (isSignedIn) {
         await signOut();
-    } else {
-        setGuestUser(null);
-        localStorage.removeItem(GUEST_STORAGE_KEY);
-        localStorage.removeItem(GUEST_TOKEN_KEY);
-    }
+    } 
     setView({ type: 'DASHBOARD' });
   };
 
@@ -173,7 +152,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   useEffect(() => {
-    if (!currentUser || isJoiningFlow.current) return; 
+    if (!currentUser) return; 
     fetchCloudData();
   }, [currentUser, fetchCloudData]);
 
@@ -183,62 +162,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (!shouldPoll) return;
 
     const interval = setInterval(() => {
-        if (isSyncing || isJoiningFlow.current) return;
+        if (isSyncing) return;
         fetchCloudData();
     }, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
-  const processInviteLink = async (user: User, projectId: string, assetId?: string | null) => {
-      // PREVENT INFINITE LOOP: If we already tried this project ID, stop.
-      if (processedInvites.current.has(projectId)) {
-          return; 
-      }
-      
-      isJoiningFlow.current = true;
-      notify("Accepting invitation...", "info");
-
-      let token: string | null = null;
-      if (authMode === 'clerk') try { token = await getToken(); } catch(e) {}
-
-      try {
-          const result = await api.joinProject(projectId, user, token);
-          
-          if (result.success && result.project) {
-              processedInvites.current.add(projectId);
-              isRemoteUpdate.current = true;
-              setProjects(prev => {
-                  const exists = prev.some(p => p.id === result.project!.id);
-                  if (exists) return prev.map(p => p.id === result.project!.id ? result.project! : p);
-                  return [result.project!, ...prev]; 
-              });
-              notify(`You joined "${result.project.name}"`, "success");
-              
-              if (assetId) {
-                  setView({ type: 'PLAYER', projectId: projectId, assetId: assetId, restrictedAssetId: assetId });
-              } else {
-                  setView({ type: 'PROJECT_VIEW', projectId: projectId });
-              }
-              
-              const url = new URL(window.location.href);
-              url.searchParams.delete('projectId');
-              if (assetId) url.searchParams.delete('assetId');
-              window.history.replaceState({}, '', url.toString());
-          } else {
-               notify("Failed to join project.", "error");
-               // CRITICAL: Mark as processed even on failure
-               processedInvites.current.add(projectId);
-          }
-      } catch (e) {
-          console.error("Join flow error:", e);
-          notify("Network error joining project.", "error");
-          processedInvites.current.add(projectId);
-      } finally {
-          setTimeout(() => { isJoiningFlow.current = false; }, 1000);
-          await fetchCloudData(user);
-      }
-  };
-
+  // Deep Linking for Navigation (Not Joining)
   useEffect(() => {
     if (!currentUser) return;
 
@@ -246,27 +176,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const pId = params.get('projectId');
     const aId = params.get('assetId');
 
-    if (pId && !projects.some(p => p.id === pId)) {
-        processInviteLink(currentUser, pId, aId);
-        return; 
-    } 
-    
     if (pId) {
       const projectExists = projects.find(p => p.id === pId);
       if (projectExists) {
             if (aId) {
                 const assetExists = projectExists.assets.find(a => a.id === aId);
-                const shouldRestrict = currentUser.role === UserRole.GUEST; 
-                if (assetExists) setView({ type: 'PLAYER', projectId: pId, assetId: aId, restrictedAssetId: shouldRestrict ? aId : undefined });
+                if (assetExists) setView({ type: 'PLAYER', projectId: pId, assetId: aId });
                 else setView({ type: 'PROJECT_VIEW', projectId: pId });
             } else {
                 setView({ type: 'PROJECT_VIEW', projectId: pId });
             }
-      } else {
-          processInviteLink(currentUser, pId, aId);
       }
+      // Note: If project doesn't exist in fetched list, it means no access (not in Org/Team)
     }
-  }, [currentUser]); 
+  }, [currentUser, projects]); 
 
   const handleSelectProject = (project: Project) => {
     setView({ type: 'PROJECT_VIEW', projectId: project.id });
@@ -326,15 +249,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           handleBackToDashboard();
       }
   };
-
-  const handleGuestLogin = async (user: User, token?: string) => {
-    setGuestUser(user);
-    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(user));
-    if (token) {
-        localStorage.setItem(GUEST_TOKEN_KEY, token);
-    }
-    notify(`Welcome, ${user.name}`, "success");
-  };
   
   const handleNavigate = (page: string) => {
       switch(page) {
@@ -383,7 +297,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return (
         <>
             <Login 
-                onLogin={isMockMode && mockSignIn ? () => mockSignIn() : handleGuestLogin} 
+                onLogin={() => {}} // Deprecated prop
                 onNavigate={handleNavigate} 
             />
             {isMockMode && (

@@ -1,10 +1,9 @@
 
 import { createClerkClient, verifyToken } from '@clerk/backend';
-import { createHmac } from 'crypto';
 
 /**
- * Validates the auth token from the request headers.
- * Supports both Clerk JWTs (Standard Users) and Custom HMAC Tokens (Guests).
+ * Validates the auth token from the request headers using Clerk.
+ * Guests are no longer supported.
  */
 export async function verifyUser(req) {
     // 1. Critical Environment Check
@@ -22,54 +21,8 @@ export async function verifyUser(req) {
 
     const token = authHeader.split(' ')[1].trim();
 
-    // 3. Determine Token Type
-    // JWT has 3 parts (header.payload.signature), our Guest token has 2 (payload.signature)
-    const parts = token.split('.');
-    const isGuestToken = parts.length === 2;
-    const isClerkToken = parts.length === 3;
-
-    if (isGuestToken) {
-        return verifyGuestToken(token, secretKey);
-    } else if (isClerkToken) {
-        return await verifyClerkToken(token, secretKey);
-    }
-
-    console.warn("⚠️ Auth: Unknown token format (parts length: " + parts.length + ")");
-    return null;
-}
-
-// --- HELPER FUNCTIONS ---
-
-function verifyGuestToken(token, secret) {
+    // 3. Verify Token with Clerk
     try {
-        const [payloadStr, signature] = token.split('.');
-        
-        // Re-create signature
-        const expectedSignature = createHmac('sha256', secret)
-            .update(payloadStr)
-            .digest('base64url');
-
-        if (signature !== expectedSignature) {
-            console.warn("⛔ Auth: Guest signature mismatch");
-            return null;
-        }
-
-        const user = JSON.parse(Buffer.from(payloadStr, 'base64url').toString());
-        // Enforce guest structure
-        return { 
-            ...user, 
-            role: 'Guest', 
-            isVerified: false // Guests are never "verified" for external API usage like Drive
-        };
-    } catch (e) {
-        console.error("❌ Auth: Guest token parse error", e.message);
-        return null;
-    }
-}
-
-async function verifyClerkToken(token, secretKey) {
-    try {
-        // Use the standalone verifyToken function which is the correct way in newer SDKs
         const verified = await verifyToken(token, {
             secretKey: secretKey,
             clockSkewInMs: 60000 
@@ -89,7 +42,7 @@ async function verifyClerkToken(token, secretKey) {
             email: primaryEmail,
             name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User',
             avatar: user.imageUrl,
-            role: 'Admin', // In this app, all Google-auth users are Admins/Creators
+            role: 'Admin', // In this app, all Authenticated users are Admins/Creators of their own scope
             isVerified: true
         };
 

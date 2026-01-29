@@ -1,34 +1,25 @@
 
-import React, { useState, useEffect } from 'react';
-import { User, UserRole } from '../types';
-import { ArrowRight, UserPlus, ShieldCheck, Mail, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download, Rocket, Loader2 } from 'lucide-react';
-import { generateId } from '../services/utils';
+import React from 'react';
+import { User } from '../types';
+import { ArrowRight, UserPlus, ShieldCheck, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download, Rocket, Server, Heart, Code2 } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
 import { RoadmapBlock } from './RoadmapBlock';
 import { IntegrationBlock } from './StaticPages';
-import { SignInButton, useSignIn } from '@clerk/clerk-react';
+import { SignInButton } from '@clerk/clerk-react';
 
 interface LoginProps {
-  onLogin: (user: User, token?: string) => void;
+  onLogin: (user: User, token?: string) => void; // Deprecated but kept for signature compatibility
   onNavigate: (page: string) => void;
 }
 
 // --- LOGIN CARD COMPONENT ---
 interface LoginCardProps {
     inviteProjectId: string | null;
-    showManualLogin: boolean;
-    name: string;
-    setName: (name: string) => void;
-    handleManualSubmit: (e: React.FormEvent) => void;
-    isLoading?: boolean;
 }
 
-const LoginCard: React.FC<LoginCardProps> = ({ 
-    inviteProjectId, showManualLogin, name, setName, handleManualSubmit, isLoading
-}) => {
+const LoginCard: React.FC<LoginCardProps> = ({ inviteProjectId }) => {
     const { t } = useLanguage();
-    const { signIn } = useSignIn();
 
     return (
         <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden w-full max-w-sm mx-auto animate-in zoom-in-95 duration-300 transition-colors">
@@ -56,83 +47,23 @@ const LoginCard: React.FC<LoginCardProps> = ({
             <div className="space-y-4">
                 {/* CLERK BUTTON */}
                 <SignInButton mode="modal">
-                     <button className="w-full flex items-center justify-center gap-2 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm">
-                         <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
-                         <span>{inviteProjectId ? t('auth.btn.join') : t('auth.btn.login')} with Google</span>
+                     <button className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20 group">
+                         <span>{inviteProjectId ? t('auth.btn.join') : t('auth.btn.login')}</span>
+                         <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
                      </button>
                 </SignInButton>
                 
-                {showManualLogin && (
-                    <>
-                        <div className="relative py-2">
-                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-200 dark:border-zinc-800"></div></div>
-                            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white dark:bg-zinc-900 px-2 text-zinc-400 dark:text-zinc-500">{t('auth.manual')}</span></div>
-                        </div>
-                        <form onSubmit={handleManualSubmit} className="space-y-3">
-                            <div className="relative">
-                                <Mail size={16} className="absolute top-3.5 left-3 text-zinc-400 dark:text-zinc-500" />
-                                <input 
-                                    type="text" 
-                                    placeholder={t('auth.placeholder.guest')} 
-                                    value={name} 
-                                    onChange={(e) => setName(e.target.value)} 
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-9 pr-4 py-2.5 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-600" 
-                                />
-                            </div>
-                            <button type="submit" disabled={!name.trim() || isLoading} className={`w-full p-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white`}>
-                                {isLoading ? <Loader2 size={14} className="animate-spin" /> : null}
-                                {inviteProjectId ? t('auth.btn.join') : 'Continue as Guest'} {!isLoading && <ArrowRight size={14} />}
-                            </button>
-                        </form>
-                    </>
-                )}
+                <p className="text-center text-[10px] text-zinc-400 dark:text-zinc-600">
+                    Secured by Clerk & Google
+                </p>
             </div>
         </div>
     );
 };
 
-export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
-  const [name, setName] = useState('');
-  const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   const { t } = useLanguage();
-  
-  // Logic: Show manual login only if there's an invite (Guest mode)
-  // If standard login page, we encourage Clerk/Google login for Admin access
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const pId = params.get('projectId');
-    if (pId) {
-        setInviteProjectId(pId);
-    }
-  }, []);
-
-  const handleManualSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    
-    setIsLoading(true);
-    try {
-        const res = await fetch('/api/guest', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-
-        const data = await res.json();
-        
-        if (data.success && data.user && data.token) {
-            onLogin(data.user, data.token);
-        } else {
-            alert("Login failed: " + (data.error || "Unknown error"));
-        }
-    } catch (err) {
-        console.error(err);
-        alert("Connection error");
-    } finally {
-        setIsLoading(false);
-    }
-  };
+  const inviteProjectId = new URLSearchParams(window.location.search).get('projectId');
 
   return (
     <div className="min-h-screen w-full bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white selection:bg-indigo-500/30 transition-colors duration-500">
@@ -158,14 +89,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                       <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">{t('hero.title.1')} {t('app.name')}</h1>
                       <p className="text-zinc-500 dark:text-zinc-400 text-sm">You have been invited to collaborate.</p>
                   </div>
-                  <LoginCard 
-                      inviteProjectId={inviteProjectId}
-                      showManualLogin={true} 
-                      name={name}
-                      setName={setName}
-                      handleManualSubmit={handleManualSubmit}
-                      isLoading={isLoading}
-                  />
+                  <LoginCard inviteProjectId={inviteProjectId} />
               </div>
           </div>
       ) : (
@@ -218,14 +142,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                     {/* Login Card */}
                     <div id="auth-section" className="lg:col-span-5 relative z-10 animate-in fade-in zoom-in-95 duration-1000 delay-200 flex justify-center lg:justify-end">
                         <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 blur-2xl rounded-full transform scale-90"></div>
-                        <LoginCard 
-                            inviteProjectId={inviteProjectId}
-                            showManualLogin={false} // Hide manual login on main page, prioritize Clerk
-                            name={name}
-                            setName={setName}
-                            handleManualSubmit={handleManualSubmit}
-                            isLoading={isLoading}
-                        />
+                        <LoginCard inviteProjectId={null} />
                     </div>
                 </div>
             </div>
@@ -380,7 +297,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                 </div>
             </div>
 
-            {/* SECTION: PRICING / ROADMAP (RESTORED) */}
+            {/* SECTION: PRICING / ROADMAP */}
             <div className="py-24 bg-zinc-50 dark:bg-black border-y border-zinc-200 dark:border-zinc-800">
                 <div className="max-w-7xl mx-auto px-4 text-center">
                     <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">{t('roadmap.title')}</h2>
@@ -389,7 +306,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                 </div>
             </div>
 
-            {/* SECTION: FINAL CTA (RESTORED) */}
+            {/* SECTION: FINAL CTA */}
             <div className="py-24 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
                 <div className="max-w-5xl mx-auto px-4 text-center relative z-10">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 mb-8 shadow-lg shadow-indigo-900/10 ring-1 ring-indigo-500/20">
