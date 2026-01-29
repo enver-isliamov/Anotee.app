@@ -1,5 +1,5 @@
 
-import { createClerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { createHmac } from 'crypto';
 
 /**
@@ -69,14 +69,14 @@ function verifyGuestToken(token, secret) {
 
 async function verifyClerkToken(token, secretKey) {
     try {
-        // Initialize client locally to ensure Env vars are picked up
-        const clerk = createClerkClient({ secretKey });
-
-        const verified = await clerk.verifyToken(token, {
+        // Use the standalone verifyToken function which is the correct way in newer SDKs
+        const verified = await verifyToken(token, {
             secretKey: secretKey,
-            // Allow 60s clock skew to prevent 401s on slight server time diffs
             clockSkewInMs: 60000 
         });
+
+        // Initialize client to fetch user details
+        const clerk = createClerkClient({ secretKey });
 
         // Token is valid, now fetch full user details for roles/email
         const user = await clerk.users.getUser(verified.sub);
