@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, User, UserRole, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye } from 'lucide-react';
-import { upload } from '@vercel/blob/client';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -19,66 +18,11 @@ interface ProjectViewProps {
   notify: (msg: string, type: ToastType) => void;
   restrictedAssetId?: string;
   isMockMode?: boolean;
+  onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
 }
 
-// Helper to generate a thumbnail from a video file client-side
-const generateVideoThumbnail = (file: File): Promise<string> => {
-  return new Promise((resolve) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.src = URL.createObjectURL(file);
-    video.muted = true;
-    video.playsInline = true;
-
-    // Fallback image in case of error
-    const fallback = 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44c?w=600&q=80';
-
-    // Timeout safety
-    const timeout = setTimeout(() => {
-        URL.revokeObjectURL(video.src);
-        resolve(fallback);
-    }, 3000); 
-
-    video.onloadedmetadata = () => {
-      const seekTime = Math.min(1.0, video.duration / 2);
-      video.currentTime = seekTime;
-    };
-
-    video.onseeked = () => {
-      clearTimeout(timeout);
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 320;
-        canvas.height = 180;
-        
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-            resolve(dataUrl);
-        } else {
-            resolve(fallback);
-        }
-      } catch (e) {
-        console.warn("Thumbnail generation failed", e);
-        resolve(fallback);
-      } finally {
-        URL.revokeObjectURL(video.src);
-      }
-    };
-
-    video.onerror = () => {
-      clearTimeout(timeout);
-      URL.revokeObjectURL(video.src);
-      resolve(fallback);
-    };
-  });
-};
-
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
   const { t } = useLanguage();
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
@@ -138,243 +82,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleRealUpload(e.target.files[0]);
+      onUploadAsset(e.target.files[0], project.id, useDriveStorage);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleVersionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && uploadingVersionFor) {
-        handleRealVersionUpload(e.target.files[0], uploadingVersionFor);
+        onUploadAsset(e.target.files[0], project.id, useDriveStorage, uploadingVersionFor);
     }
     setUploadingVersionFor(null);
-  };
-
-  const handleRealUpload = async (file: File) => {
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    try {
-      const thumbnailDataUrl = await generateVideoThumbnail(file);
-      const assetTitle = file.name.replace(/\.[^/.]+$/, "");
-
-      let assetUrl = '';
-      let googleDriveId = undefined;
-      let storageType: StorageType = 'vercel';
-      let finalFileName = file.name;
-      const token = localStorage.getItem('smotree_auth_token');
-
-      // MOCK MODE HANDLING
-      if (isMockMode) {
-          assetUrl = URL.createObjectURL(file);
-          storageType = 'local';
-          for (let i = 0; i <= 100; i+=20) {
-              setUploadProgress(i);
-              await new Promise(r => setTimeout(r, 100));
-          }
-      } else {
-        // Upload Logic
-        if (useDriveStorage) {
-            if (!isDriveReady) {
-                throw new Error("Google Drive disconnected. Please 'Repair Connection' in Profile.");
-            }
-
-            try {
-                notify("Preparing Drive...", "info");
-                const appFolder = await GoogleDriveService.ensureAppFolder();
-                const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-                const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
-                
-                const ext = file.name.split('.').pop();
-                const niceName = `${assetTitle}_v1.${ext}`;
-
-                notify("Uploading to Drive...", "info");
-                const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => setUploadProgress(p), niceName);
-                
-                googleDriveId = result.id;
-                storageType = 'drive';
-                assetUrl = ''; 
-                finalFileName = niceName; 
-            } catch (driveErr: any) {
-                console.error("Drive upload failed", driveErr);
-                if (driveErr.message.includes("Token") || driveErr.message.includes("404") || driveErr.message.includes("401")) {
-                    throw new Error("Drive Auth Error: Please reconnect in Profile.");
-                }
-                throw driveErr; 
-            }
-        } else {
-            // Vercel Blob
-            try {
-                const newBlob = await upload(file.name, file, {
-                access: 'public',
-                handleUploadUrl: '/api/upload',
-                clientPayload: JSON.stringify({
-                    token: token,
-                    user: currentUser.id
-                }),
-                onUploadProgress: (progressEvent) => {
-                    setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
-                }
-                });
-                assetUrl = newBlob.url;
-            } catch (uploadError: any) {
-                console.warn("Cloud upload failed", uploadError);
-                throw new Error("Upload failed. Please try again.");
-            }
-        }
-      }
-
-      const newAsset: ProjectAsset = {
-        id: generateId(),
-        title: assetTitle,
-        thumbnail: thumbnailDataUrl,
-        currentVersionIndex: 0,
-        versions: [
-          {
-            id: generateId(),
-            versionNumber: 1,
-            filename: finalFileName,
-            url: assetUrl,
-            storageType: storageType,
-            googleDriveId: googleDriveId,
-            uploadedAt: 'Just now',
-            comments: [],
-            localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
-            localFileName: isMockMode ? file.name : undefined
-          }
-        ]
-      };
-
-      const updatedProject = {
-        ...project,
-        assets: [...project.assets, newAsset],
-        updatedAt: 'Just now'
-      };
-      
-      onUpdateProject(updatedProject);
-      notify(t('common.success'), "success");
-
-    } catch (error: any) {
-      console.error("Critical error adding asset", error);
-      notify(error.message || t('common.error'), "error");
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleRealVersionUpload = async (file: File, assetId: string) => {
-      setIsUploading(true);
-      setUploadProgress(0);
-      const targetAssetIndex = project.assets.findIndex(a => a.id === assetId);
-      
-      if (targetAssetIndex === -1) {
-          setIsUploading(false);
-          return;
-      }
-      
-      const targetAsset = project.assets[targetAssetIndex];
-      const nextVersionNum = targetAsset.versions.length + 1;
-
-      try {
-        let assetUrl = '';
-        let googleDriveId = undefined;
-        let storageType: StorageType = 'vercel';
-        let finalFileName = file.name;
-        const token = localStorage.getItem('smotree_auth_token');
-
-        if (isMockMode) {
-             assetUrl = URL.createObjectURL(file);
-             storageType = 'local';
-             for (let i = 0; i <= 100; i+=20) {
-                 setUploadProgress(i);
-                 await new Promise(r => setTimeout(r, 100));
-             }
-        } else {
-             if (useDriveStorage) {
-                if (!isDriveReady) {
-                    throw new Error("Google Drive disconnected.");
-                }
-                try {
-                    notify("Finding Drive Folder...", "info");
-                    const appFolder = await GoogleDriveService.ensureAppFolder();
-                    const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-                    const assetFolder = await GoogleDriveService.ensureFolder(targetAsset.title, projectFolder);
-
-                    const ext = file.name.split('.').pop();
-                    const niceName = `${targetAsset.title}_v${nextVersionNum}.${ext}`;
-
-                    notify("Uploading version...", "info");
-                    const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => setUploadProgress(p), niceName);
-                    googleDriveId = result.id;
-                    storageType = 'drive';
-                    assetUrl = '';
-                    finalFileName = niceName;
-                } catch (e: any) {
-                    console.error("Drive upload failed", e);
-                    throw new Error("Drive Upload Failed: " + e.message);
-                }
-            } else {
-                try {
-                    const newBlob = await upload(file.name, file, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                    clientPayload: JSON.stringify({
-                        token: token,
-                        user: currentUser.id
-                    }),
-                    onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded/p.total)*100))
-                    });
-                    assetUrl = newBlob.url;
-                } catch (uploadError) {
-                    throw new Error("Upload Failed");
-                }
-            }
-        }
-
-        const newVersion = {
-            id: generateId(),
-            versionNumber: nextVersionNum,
-            filename: finalFileName,
-            url: assetUrl,
-            storageType: storageType,
-            googleDriveId: googleDriveId,
-            uploadedAt: 'Just now',
-            comments: [],
-            localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
-            localFileName: isMockMode ? file.name : undefined
-        };
-
-        const updatedVersions = [...targetAsset.versions, newVersion];
-        const newThumbnail = await generateVideoThumbnail(file);
-
-        const updatedAsset = {
-            ...targetAsset,
-            thumbnail: newThumbnail,
-            versions: updatedVersions,
-            currentVersionIndex: updatedVersions.length - 1 
-        };
-
-        const updatedAssets = [...project.assets];
-        updatedAssets[targetAssetIndex] = updatedAsset;
-
-        const updatedProject = {
-            ...project,
-            assets: updatedAssets,
-            updatedAt: 'Just now'
-        };
-
-        onUpdateProject(updatedProject);
-        notify(`${t('pv.version')} ${nextVersionNum}`, "success");
-
-      } catch (e: any) {
-          console.error(e);
-          notify(e.message || t('common.error'), "error");
-      } finally {
-          setIsUploading(false);
-          setUploadProgress(0);
-          if (versionInputRef.current) versionInputRef.current.value = '';
-      }
+    if (versionInputRef.current) versionInputRef.current.value = '';
   };
 
   const confirmDeleteAsset = async (deleteFromDrive: boolean) => {
@@ -556,11 +274,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
                     <button 
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center"
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center"
                     >
-                        {isUploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14} />}
-                        {isUploading ? `${uploadProgress}%` : t('pv.upload_asset')}
+                        <Upload size={14} />
+                        {t('pv.upload_asset')}
                     </button>
                     </div>
                 )}

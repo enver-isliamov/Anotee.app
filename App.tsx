@@ -8,15 +8,16 @@ import { Profile } from './components/Profile';
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
-import { Project, ProjectAsset, User, UserRole } from './types';
-import { generateId } from './services/utils';
+import { Project, ProjectAsset, User, UserRole, StorageType, UploadTask } from './types';
+import { generateId, generateVideoThumbnail } from './services/utils';
 import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
-import { Loader2 } from 'lucide-react';
+import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -30,6 +31,54 @@ type ViewState =
   | { type: 'LIVE_DEMO' };
 
 const POLLING_INTERVAL_MS = 5000;
+
+// --- GLOBAL UPLOAD WIDGET COMPONENT ---
+const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
+    if (tasks.length === 0) return null;
+
+    return (
+        <div className="fixed bottom-4 right-4 z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300">
+            <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700">
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
+                    <UploadCloud size={14} /> Uploads ({tasks.length})
+                </span>
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+                {tasks.map(task => (
+                    <div key={task.id} className="p-3 border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 relative">
+                        <div className="flex justify-between items-start mb-1">
+                            <div className="truncate pr-4">
+                                <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate" title={task.file.name}>{task.file.name}</div>
+                                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">in {task.projectName}</div>
+                            </div>
+                            <div className="shrink-0">
+                                {task.status === 'done' && <CheckCircle size={14} className="text-green-500" />}
+                                {task.status === 'error' && <AlertCircle size={14} className="text-red-500" />}
+                                {task.status === 'uploading' && <span className="text-[10px] font-mono font-bold text-indigo-500">{task.progress}%</span>}
+                                {(task.status === 'done' || task.status === 'error') && (
+                                    <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        {task.status === 'uploading' && (
+                            <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1 mt-1 overflow-hidden">
+                                <div className="bg-indigo-500 h-full transition-all duration-300" style={{ width: `${task.progress}%` }}></div>
+                            </div>
+                        )}
+                        {task.status === 'processing' && (
+                            <div className="flex items-center gap-1 text-[10px] text-indigo-500 mt-1">
+                                <Loader2 size={10} className="animate-spin" /> Processing...
+                            </div>
+                        )}
+                        {task.status === 'error' && <div className="text-[10px] text-red-500 mt-1">{task.error}</div>}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 interface AppLayoutProps {
     clerkUser: any | null;
@@ -48,6 +97,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
   const isRemoteUpdate = useRef(false);
 
@@ -112,6 +162,161 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         await signOut();
     } 
     setView({ type: 'DASHBOARD' });
+  };
+
+  // --- GLOBAL UPLOAD HANDLER ---
+  const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
+      const taskId = generateId();
+      const project = projects.find(p => p.id === projectId);
+      
+      if (!project || !currentUser) return;
+
+      const newTask: UploadTask = {
+          id: taskId,
+          file,
+          projectName: project.name,
+          progress: 0,
+          status: 'uploading'
+      };
+
+      setUploadTasks(prev => [...prev, newTask]);
+
+      const updateTask = (updates: Partial<UploadTask>) => {
+          setUploadTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+      };
+
+      try {
+          // 1. Generate Thumbnail
+          updateTask({ status: 'processing' });
+          const thumbnailDataUrl = await generateVideoThumbnail(file);
+          const assetTitle = file.name.replace(/\.[^/.]+$/, "");
+          
+          updateTask({ status: 'uploading' });
+
+          let assetUrl = '';
+          let googleDriveId = undefined;
+          let storageType: StorageType = 'vercel';
+          let finalFileName = file.name;
+          const token = localStorage.getItem('smotree_auth_token');
+
+          // 2. Upload Process
+          if (isMockMode) {
+              // Simulating slow upload
+              for (let i = 0; i <= 100; i+=10) {
+                  updateTask({ progress: i });
+                  await new Promise(r => setTimeout(r, 200));
+              }
+              assetUrl = URL.createObjectURL(file);
+              storageType = 'local';
+          } else {
+              if (useDrive) {
+                  const isDriveReady = GoogleDriveService.isAuthenticated();
+                  if (!isDriveReady) throw new Error("Google Drive not connected");
+
+                  const appFolder = await GoogleDriveService.ensureAppFolder();
+                  const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
+                  
+                  // For versioning, we might want a subfolder per asset, but simpler for now
+                  const assetFolder = targetAssetId 
+                        ? await GoogleDriveService.ensureFolder(assetTitle, projectFolder) // Use existing logic if cleaner
+                        : await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
+
+                  const ext = file.name.split('.').pop();
+                  const niceName = targetAssetId 
+                        ? `${assetTitle}_vNEW.${ext}` // Could improve version logic
+                        : `${assetTitle}_v1.${ext}`;
+
+                  const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateTask({ progress: p }), niceName);
+                  googleDriveId = result.id;
+                  storageType = 'drive';
+                  finalFileName = niceName;
+              } else {
+                  // Vercel Blob
+                  const newBlob = await upload(file.name, file, {
+                      access: 'public',
+                      handleUploadUrl: '/api/upload',
+                      clientPayload: JSON.stringify({ token: token, user: currentUser.id }),
+                      onUploadProgress: (p) => updateTask({ progress: Math.round((p.loaded / p.total) * 100) })
+                  });
+                  assetUrl = newBlob.url;
+              }
+          }
+
+          // 3. Construct Data Objects
+          const newVersion = {
+              id: generateId(),
+              versionNumber: 1, // Will be updated if appending
+              filename: finalFileName,
+              url: assetUrl,
+              storageType,
+              googleDriveId,
+              uploadedAt: 'Just now',
+              comments: [],
+              localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
+              localFileName: isMockMode ? file.name : undefined
+          };
+
+          // 4. Update Project State safely (using functional update to get fresh state)
+          setProjects(currentProjects => {
+              const projIndex = currentProjects.findIndex(p => p.id === projectId);
+              if (projIndex === -1) return currentProjects;
+
+              const updatedProject = { ...currentProjects[projIndex] };
+              
+              if (targetAssetId) {
+                  // Adding Version
+                  const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
+                  if (assetIdx !== -1) {
+                      const asset = { ...updatedProject.assets[assetIdx] };
+                      newVersion.versionNumber = asset.versions.length + 1;
+                      if (!isMockMode && useDrive) {
+                          // Simple version name fix for Drive if needed
+                          newVersion.filename = `${asset.title}_v${newVersion.versionNumber}.${file.name.split('.').pop()}`;
+                      }
+                      
+                      asset.versions = [...asset.versions, newVersion];
+                      asset.thumbnail = thumbnailDataUrl; // Update thumb to latest
+                      asset.currentVersionIndex = asset.versions.length - 1;
+                      updatedProject.assets[assetIdx] = asset;
+                  }
+              } else {
+                  // New Asset
+                  const newAsset: ProjectAsset = {
+                      id: generateId(),
+                      title: assetTitle,
+                      thumbnail: thumbnailDataUrl,
+                      currentVersionIndex: 0,
+                      versions: [newVersion]
+                  };
+                  updatedProject.assets = [...updatedProject.assets, newAsset];
+              }
+              
+              updatedProject.updatedAt = 'Just now';
+              
+              // Trigger sync in background
+              forceSync([updatedProject]); // Assuming forceSync handles array of 1 properly, or pass full list if needed. 
+              // Better: forceSync needs full list usually, so let's refactor forceSync usage.
+              // Actually forceSync below takes a list.
+              
+              const newAllProjects = [...currentProjects];
+              newAllProjects[projIndex] = updatedProject;
+              api.syncProjects([updatedProject], currentUser, null).catch(console.error);
+
+              return newAllProjects;
+          });
+
+          updateTask({ status: 'done', progress: 100 });
+          notify("Upload completed", "success");
+
+      } catch (e: any) {
+          console.error("Upload failed", e);
+          updateTask({ status: 'error', error: e.message || "Upload Failed" });
+          notify("Upload failed", "error");
+      }
+  };
+
+  const removeUploadTask = (id: string) => {
+      setUploadTasks(prev => prev.filter(t => t.id !== id));
   };
 
   const fetchCloudData = useCallback(async (userOverride?: User) => {
@@ -368,6 +573,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             notify={notify}
             restrictedAssetId={view.restrictedAssetId}
             isMockMode={isMockMode}
+            onUploadAsset={handleUploadAsset} // Pass the global upload handler
           />
         )}
         {view.type === 'PLAYER' && currentProject && currentAsset && (
@@ -383,7 +589,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             isMockMode={isMockMode}
           />
         )}
+        
+        {/* GLOBAL COMPONENTS */}
+        <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        
         {isMockMode && (
             <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] pointer-events-none">
                 PREVIEW MODE: Local Data Only

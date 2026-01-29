@@ -67,3 +67,12 @@ export interface Project {
   orgId?: string; 
   isLocked?: boolean; 
 }
+
+export interface UploadTask {
+  id: string;
+  file: File;
+  projectName: string;
+  progress: number;
+  status: 'uploading' | 'processing' | 'done' | 'error';
+  error?: string;
+}
