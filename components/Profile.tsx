@@ -57,6 +57,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                   setBackendHasToken(true);
               } else {
                   console.warn("Profile: Backend missing Drive token despite frontend status");
+                  const errData = await res.json();
+                  console.debug("Debug Info:", errData);
                   setBackendHasToken(false);
               }
           } catch (e) {
@@ -83,16 +85,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
 
           if (googleAccount) {
               // FORCE Re-Authorization
+              // Using origin as redirectUrl cleans up URL parameters which can cause auth loops
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
-                  redirectUrl: window.location.href
+                  redirectUrl: window.location.origin 
               });
               // After reauth, re-check backend
               setBackendHasToken(null); // Reset to loading state
           } else {
               await user.createExternalAccount({
                   strategy: 'oauth_google',
-                  redirectUrl: window.location.href,
+                  redirectUrl: window.location.origin,
                   additionalScopes: [DRIVE_SCOPE]
               });
           }
