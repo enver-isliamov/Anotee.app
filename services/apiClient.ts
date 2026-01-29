@@ -81,13 +81,13 @@ export const api = {
         }
     },
 
-    syncProjects: async (projects: Project[], user: User | null, explicitToken?: string | null): Promise<void> => {
+    syncProjects: async (projects: Project[], user: User | null, explicitToken?: string | null): Promise<any[]> => {
         if (IS_MOCK_MODE) {
             setLocalData(projects);
-            return;
+            return [];
         }
 
-        if (!user) return;
+        if (!user) return [];
 
         try {
             const token = explicitToken || await getAuthToken();
@@ -112,9 +112,20 @@ export const api = {
                 body: JSON.stringify(cleanData)
             });
 
+            if (res.status === 409) {
+                const errData = await res.json();
+                const e: any = new Error("Version Conflict");
+                e.code = "CONFLICT";
+                e.details = errData;
+                throw e;
+            }
+
             if (!res.ok) {
                 throw new Error(`Sync failed: ${res.statusText}`);
             }
+
+            const data = await res.json();
+            return data.updates || []; // Return updated versions info
         } catch (e) {
             console.error("API Sync Error", e);
             throw e; // Propagate error to UI

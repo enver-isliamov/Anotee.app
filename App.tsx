@@ -169,9 +169,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
       const taskId = generateId();
       
-      // Get FRESH project reference from current state or API, but we use state here for speed
-      // Using functional state access inside setProjects is safer for consistency
-      
       const newTask: UploadTask = {
           id: taskId,
           file,
@@ -301,11 +298,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
               
               updatedProject.updatedAt = 'Just now';
               
-              // 3.3 Trigger Sync (Outside logic, but inside closure scope we need the obj)
-              // We execute the API call safely here without blocking the UI render
+              // 3.3 Trigger Sync
               setTimeout(() => {
-                  api.syncProjects([updatedProject], currentUser, null).catch(console.error);
-                  lastLocalUpdateRef.current = Date.now(); // Reset block to allow polling after a moment
+                  forceSync([updatedProject]); // Use forceSync to handle errors
               }, 0);
 
               const newAllProjects = [...currentProjects];
@@ -333,9 +328,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
       
-      // --- STABILITY FIX: Don't fetch if we just modified data locally ---
+      // Don't fetch if we just modified data locally to prevent flickering
       if (Date.now() - lastLocalUpdateRef.current < 2000) {
-          // console.log("Skipping poll due to recent local update");
           return;
       }
 
@@ -348,8 +342,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
          setIsSyncing(true);
          const data = await api.getProjects(userToUse, token);
          if (data && Array.isArray(data)) {
-            // Merge strategy: Only update if server has newer data, or just replace
-            // For simplicity, we replace, but relying on `lastLocalUpdateRef` to prevent overwriting user actions
             setProjects(data);
          }
       } catch (e) {
@@ -362,7 +354,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
       
-      // Update timestamp to prevent immediate overwrite by polling
       lastLocalUpdateRef.current = Date.now();
 
       let token: string | null = null;
@@ -370,10 +361,29 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
       try {
           setIsSyncing(true);
-          await api.syncProjects(projectsData, currentUser, token);
-      } catch (e) {
+          const updates = await api.syncProjects(projectsData, currentUser, token);
+          
+          // Apply returned versions to local state for Optimistic Locking
+          if (updates && updates.length > 0) {
+              setProjects(current => current.map(p => {
+                  const update = updates.find((u: any) => u.id === p.id);
+                  if (update) {
+                      return { ...p, _version: update._version };
+                  }
+                  return p;
+              }));
+          }
+      } catch (e: any) {
           console.error("Sync failed", e);
-          notify("Failed to save changes to cloud. Check internet.", "error");
+          
+          if (e.code === 'CONFLICT') {
+              notify("Conflict detected. Another user modified this project. Reloading...", "warning");
+              // Force reload from server to resolve conflict
+              lastLocalUpdateRef.current = 0; // Allow immediate poll
+              fetchCloudData(); 
+          } else {
+              notify("Failed to save changes. Check internet.", "error");
+          }
       } finally {
           setIsSyncing(false);
       }
@@ -452,22 +462,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     setProjects(newProjects);
     
     if (!skipSync) {
-        forceSync(newProjects);
+        forceSync(newProjects); // Changed to use forceSync to handle conflicts
     }
   };
   
   const handleEditProject = (projectId: string, data: Partial<Project>) => {
       const updated = projects.map(p => p.id === projectId ? { ...p, ...data, updatedAt: 'Just now' } : p);
       setProjects(updated);
-      forceSync(updated);
+      forceSync(updated); // Changed to use forceSync
       notify("Project updated", "success");
   };
 
   const handleAddProject = (newProject: Project) => {
-    const newProjects = [newProject, ...projects];
+    // Initialize new project version
+    const projectWithVersion = { ...newProject, _version: 0 };
+    const newProjects = [projectWithVersion, ...projects];
     setProjects(newProjects);
     notify("Project created successfully", "success");
-    forceSync(newProjects);
+    forceSync([projectWithVersion]); // Sync only the new project to reduce payload
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -626,76 +638,87 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 };
 
-const ClerkAuthWrapper = () => {
+const ClerkWrapper: React.FC = () => {
     const { user, isLoaded, isSignedIn } = useUser();
-    const { signOut } = useClerk();
-    const { getToken } = useAuth();
-    
-    return (
-        <>
-            <ThemeCloudSync />
-            <LanguageCloudSync />
-            <AppLayout 
-                clerkUser={user} 
-                isLoaded={isLoaded} 
-                isSignedIn={isSignedIn || false} 
-                getToken={getToken} 
-                signOut={signOut}
-                authMode="clerk"
-            />
-        </>
-    );
-};
-
-const MockAuthWrapper = () => {
-    const [mockUser, setMockUser] = useState<any>(() => {
-        return sessionStorage.getItem('mock_auth_user') ? JSON.parse(sessionStorage.getItem('mock_auth_user')!) : null;
-    });
-
-    const mockSignIn = () => {
-        const user = { id: 'mock-dev', fullName: 'Developer', imageUrl: '' };
-        sessionStorage.setItem('mock_auth_user', JSON.stringify(user));
-        setMockUser(user);
-    };
-
-    const mockSignOut = async () => {
-        sessionStorage.removeItem('mock_auth_user');
-        setMockUser(null);
-    };
-
-    const mockGetToken = async () => null;
+    const { getToken, signOut } = useAuth();
+    const { openSignIn } = useClerk();
 
     return (
         <AppLayout 
-            clerkUser={mockUser} 
-            isLoaded={true} 
-            isSignedIn={!!mockUser} 
-            getToken={mockGetToken} 
-            signOut={mockSignOut}
-            mockSignIn={mockSignIn}
-            authMode="mock"
+            clerkUser={user}
+            isLoaded={isLoaded}
+            isSignedIn={isSignedIn || false}
+            getToken={getToken}
+            signOut={async () => { await signOut(); }}
+            mockSignIn={() => openSignIn()}
+            authMode="clerk"
         />
     );
-};
+}
 
 const App: React.FC = () => {
-  const env = (import.meta as any).env || {};
-  const PUBLISHABLE_KEY = env.VITE_CLERK_PUBLISHABLE_KEY || "";
-  const isValidKey = PUBLISHABLE_KEY && !PUBLISHABLE_KEY.includes("placeholder");
+    const env = (import.meta as any).env || {};
+    const clerkKey = env.VITE_CLERK_PUBLISHABLE_KEY;
+    const isMock = !clerkKey || clerkKey.includes('placeholder');
 
-  return (
-    <ThemeProvider>
-      <LanguageProvider>
-          {isValidKey ? (
-              <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-                 <ClerkAuthWrapper />
-              </ClerkProvider>
-          ) : (
-              <MockAuthWrapper />
-          )}
-      </LanguageProvider>
-    </ThemeProvider>
-  );
+    // Mock Mode Wrapper to simulate auth state if needed
+    const MockAppWrapper = () => {
+        // In mock mode we can start signed out or signed in. 
+        // For simplicity, let's start signed out but allow "logging in"
+        // Note: AppLayout resets currentUser if isSignedIn is false.
+        const [isMockSignedIn, setIsMockSignedIn] = useState(false);
+        const [mockUser, setMockUser] = useState<any | null>(null);
+
+        const handleMockSignIn = () => {
+            setIsMockSignedIn(true);
+            setMockUser({
+                id: 'mock-user-1',
+                fullName: 'Mock Developer',
+                imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock',
+                primaryEmailAddressId: 'email-1',
+                emailAddresses: [{ id: 'email-1', emailAddress: 'mock@example.com' }]
+            });
+        };
+
+        const handleMockSignOut = async () => {
+            setIsMockSignedIn(false);
+            setMockUser(null);
+        };
+
+        return (
+            <AppLayout 
+                clerkUser={mockUser}
+                isLoaded={true}
+                isSignedIn={isMockSignedIn}
+                getToken={async () => 'mock-token'}
+                signOut={handleMockSignOut}
+                mockSignIn={handleMockSignIn}
+                authMode="mock"
+            />
+        );
+    };
+
+    if (isMock) {
+        return (
+            <LanguageProvider>
+                <ThemeProvider>
+                    <MockAppWrapper />
+                </ThemeProvider>
+            </LanguageProvider>
+        );
+    }
+
+    return (
+        <ClerkProvider publishableKey={clerkKey}>
+            <LanguageProvider>
+                <ThemeProvider>
+                    <LanguageCloudSync />
+                    <ThemeCloudSync />
+                    <ClerkWrapper />
+                </ThemeProvider>
+            </LanguageProvider>
+        </ClerkProvider>
+    );
 };
 
 export default App;

@@ -87,7 +87,7 @@ export default async function handler(req, res) {
         }
       } 
       
-      // POST: Sync Projects (Upsert)
+      // POST: Sync Projects (Upsert with Optimistic Locking)
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
@@ -104,6 +104,8 @@ export default async function handler(req, res) {
             } catch (e) {}
         }
 
+        const updatesResults = [];
+
         for (const project of projectsToSync) {
             if (!project.id) continue;
 
@@ -111,39 +113,74 @@ export default async function handler(req, res) {
             const isTeam = project.team && Array.isArray(project.team) && project.team.some(m => m.id === user.id);
             const isOrgMember = project.orgId && orgIds.includes(project.orgId);
             
-            // Allow creation if user is authenticated (they become owner effectively)
+            // Allow creation/update if user is authenticated (they become owner effectively)
             if (isOwner || isTeam || isOrgMember || !project.ownerId) {
+                const clientVersion = project._version || 0;
+                const newVersion = clientVersion + 1;
+                project._version = newVersion; // Inject new version into JSON
+
                 const projectJson = JSON.stringify(project);
                 const orgId = project.orgId || null;
                 const ownerId = project.ownerId || user.id; // Enforce owner if missing
                 
                 try {
-                    await sql`
-                        INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
-                        VALUES (
-                            ${project.id}, 
-                            ${ownerId}, 
-                            ${orgId},
-                            ${projectJson}::jsonb, 
-                            ${Date.now()}, 
-                            ${project.createdAt || Date.now()}
-                        )
-                        ON CONFLICT (id) 
-                        DO UPDATE SET 
+                    // 1. Try UPDATE with Version Check
+                    const updateResult = await sql`
+                        UPDATE projects 
+                        SET 
                             data = ${projectJson}::jsonb,
                             org_id = ${orgId},
-                            updated_at = ${Date.now()};
+                            updated_at = ${Date.now()}
+                        WHERE id = ${project.id} 
+                        AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
+
+                    if (updateResult.rowCount > 0) {
+                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    } else {
+                        // 2. If Update failed, check if it's an INSERT (id doesn't exist)
+                        // OR a Conflict (id exists but version mismatch)
+                        
+                        const checkExists = await sql`SELECT data->>'_version' as ver FROM projects WHERE id = ${project.id}`;
+                        
+                        if (checkExists.rowCount === 0) {
+                            // Does not exist -> INSERT
+                            await sql`
+                                INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
+                                VALUES (
+                                    ${project.id}, 
+                                    ${ownerId}, 
+                                    ${orgId},
+                                    ${projectJson}::jsonb, 
+                                    ${Date.now()}, 
+                                    ${project.createdAt || Date.now()}
+                                );
+                            `;
+                            updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
+                        } else {
+                            // Exists but version mismatched -> CONFLICT
+                            const dbVer = parseInt(checkExists.rows[0].ver || '0');
+                            console.warn(`Conflict for ${project.id}: Client ${clientVersion} vs DB ${dbVer}`);
+                            
+                            // We return 409 immediately on first conflict to prevent partial state corruption
+                            return res.status(409).json({ 
+                                error: "Version Conflict", 
+                                projectId: project.id,
+                                serverVersion: dbVer,
+                                clientVersion: clientVersion
+                            });
+                        }
+                    }
                 } catch (dbError) {
                     if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline" });
-                    if (dbError.code === '42P01') {
-                        throw dbError;
-                    } 
+                    console.error("DB Sync Error", dbError);
                     throw dbError;
                 }
             }
         }
-        return res.status(200).json({ success: true });
+        
+        // Return successful updates so client can sync local versions
+        return res.status(200).json({ success: true, updates: updatesResults });
       }
 
       return res.status(405).send("Method not allowed");

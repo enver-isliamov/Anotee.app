@@ -66,6 +66,7 @@ export interface Project {
   ownerId?: string;
   orgId?: string; 
   isLocked?: boolean; 
+  _version?: number; // Optimistic locking version
 }
 
 export interface UploadTask {
