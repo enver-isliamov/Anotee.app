@@ -35,15 +35,10 @@ export default async function handler(req, res) {
         // 3. Return Token or 404
         if (oauthTokens.data && oauthTokens.data.length > 0) {
             const tokenData = oauthTokens.data[0];
-            
-            // Check if scopes are granted (basic check)
-            const scopes = tokenData.scopes || [];
-            // Note: Clerk sometimes returns scopes as a single string or array.
-            // We just pass the token to frontend; frontend handles scope validation logic via Profile.tsx
-            
             return res.status(200).json({ token: tokenData.token });
         } else {
             console.warn(`DriveToken: User ${user.userId} has no Google OAuth tokens.`);
+            // Important: Return 404 with specific code so frontend can show "Connect Drive" button
             return res.status(404).json({ 
                 error: "Drive Not Connected", 
                 code: "NO_DRIVE_TOKEN" 

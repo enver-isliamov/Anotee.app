@@ -23,8 +23,10 @@ export async function verifyUser(req) {
     const token = authHeader.split(' ')[1].trim();
 
     // 3. Determine Token Type
-    const isGuestToken = token.includes('.') && token.split('.').length === 2;
-    const isClerkToken = token.startsWith('eyJ');
+    // JWT has 3 parts (header.payload.signature), our Guest token has 2 (payload.signature)
+    const parts = token.split('.');
+    const isGuestToken = parts.length === 2;
+    const isClerkToken = parts.length === 3;
 
     if (isGuestToken) {
         return verifyGuestToken(token, secretKey);
@@ -32,7 +34,7 @@ export async function verifyUser(req) {
         return await verifyClerkToken(token, secretKey);
     }
 
-    console.warn("⚠️ Auth: Unknown token format");
+    console.warn("⚠️ Auth: Unknown token format (parts length: " + parts.length + ")");
     return null;
 }
 
@@ -93,13 +95,15 @@ async function verifyClerkToken(token, secretKey) {
 
     } catch (e) {
         console.error(`⛔ Auth: Clerk Token Verification Failed. Reason: ${e.message}`);
-        // If debug needed: console.log("Token was:", token.substring(0, 10) + "...");
         return null;
     }
 }
 
 // Export a getter for the client if needed elsewhere
 export function getClerkClient() {
-    if (!process.env.CLERK_SECRET_KEY) throw new Error("Missing CLERK_SECRET_KEY");
+    if (!process.env.CLERK_SECRET_KEY) {
+        console.error("❌ getClerkClient: CLERK_SECRET_KEY is missing");
+        throw new Error("Missing CLERK_SECRET_KEY");
+    }
     return createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 }

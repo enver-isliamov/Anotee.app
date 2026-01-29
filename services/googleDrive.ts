@@ -93,7 +93,11 @@ export const GoogleDriveService = {
 
   ensureFolder: async (folderName: string, parentId?: string): Promise<string> => {
       const accessToken = await GoogleDriveService.getToken();
-      if (!accessToken) throw new Error("Google Drive Access Token is missing. Please reconnect Drive in Profile.");
+      
+      // CRITICAL: Explicit check
+      if (!accessToken) {
+          throw new Error("Google Drive Access Token is missing. Please reconnect Drive in Profile.");
+      }
 
       const safeName = folderName.replace(/'/g, "\\'");
       let query = `mimeType='application/vnd.google-apps.folder' and name='${safeName}' and trashed=false`;
@@ -159,7 +163,7 @@ export const GoogleDriveService = {
 
   uploadFile: async (file: File, folderId: string, onProgress?: (percent: number) => void, customName?: string): Promise<{ id: string, name: string }> => {
      const accessToken = await GoogleDriveService.getToken();
-     if (!accessToken) throw new Error("No access token. Please reconnect Drive.");
+     if (!accessToken) throw new Error("Google Drive Access Token is missing. Please reconnect Drive in Profile.");
 
      const metadata = {
          name: customName || file.name,
