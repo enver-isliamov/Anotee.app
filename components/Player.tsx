@@ -471,26 +471,38 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleTimeUpdate = () => { if (!isScrubbing) setCurrentTime(videoRef.current?.currentTime || 0); };
   
-  const handleVideoError = () => {
+  const handleVideoError = async () => {
       if (loadingDrive) return;
 
-      if (!localFileSrc && !driveFileMissing && !isMockMode) {
-          if (version.storageType === 'drive' && version.googleDriveId && !driveUrlRetried) {
-              console.warn("Primary API link failed (likely CORS). Switching to UC fallback link...");
+      const currentSrc = videoRef.current?.currentSrc;
+      console.warn("Video Error for:", currentSrc);
+
+      // Handle Drive URL Expiry / CORS issues
+      if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) {
+          // If we haven't tried the backup link yet
+          if (!driveUrlRetried) {
+              console.warn("Retrying with fallback Drive link...");
               setDriveUrlRetried(true);
-              setDriveUrl(`https://drive.google.com/uc?export=download&id=${version.googleDriveId}`);
               
-              setTimeout(() => {
-                if (videoRef.current) {
-                    videoRef.current.load();
-                    if (isPlaying) videoRef.current.play().catch(() => {});
-                }
-              }, 100);
-          } else {
-              setVideoError(true);
+              // Use direct export link with timestamp to bust cache
+              // This often fixes 403s on the API link
+              const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`;
+              setDriveUrl(fallbackUrl);
+              return;
           }
-      } else if (!localFileSrc && !driveFileMissing && isMockMode) {
-          // If in mock mode and local blob URL expired or is missing
+
+          // If fallback also failed, check if file actually exists
+          setLoadingDrive(true);
+          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId);
+          setLoadingDrive(false);
+
+          if (status !== 'ok') {
+              setDriveFileMissing(true);
+          } else {
+              setVideoError(true); // File exists but player can't play it
+          }
+      } else {
+          // Local file or Vercel Blob error
           setVideoError(true);
       }
   };
