@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, XCircle } from 'lucide-react';
+import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, XCircle, RefreshCcw } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useUser, useAuth } from '@clerk/clerk-react';
@@ -24,7 +24,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Function to check backend status with optional retry
-  const checkBackend = useCallback(async (retries = 0) => {
+  // Default: Try 1 time (0 retries)
+  const checkBackend = useCallback(async (maxRetries = 0, delayMs = 1500) => {
       if (!user || isGuest) return false;
       
       try {
@@ -35,21 +36,30 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           });
           
           if (res.ok) {
+              console.log("Profile: Backend token confirmed.");
               setBackendHasToken(true);
-              return true; // Success
+              // Clear the aggressive retry flag if it exists
+              sessionStorage.removeItem('smotree_oauth_in_progress');
+              return true; 
           } else {
-              if (retries > 0) {
-                  console.log(`Profile: Backend check pending... (${retries} retries left)`);
-                  setBackendHasToken(null); // Keep in loading state
-                  await new Promise(r => setTimeout(r, 2000)); // Wait 2s
-                  return checkBackend(retries - 1);
+              if (maxRetries > 0) {
+                  console.log(`Profile: Token not ready (Status ${res.status}). Retrying in ${delayMs}ms... (${maxRetries} left)`);
+                  // Keep loading state visible if we are retrying
+                  setBackendHasToken(null); 
+                  await new Promise(r => setTimeout(r, delayMs));
+                  return checkBackend(maxRetries - 1, delayMs);
+              } else {
+                  console.warn("Profile: Backend missing Drive token (Final)");
+                  setBackendHasToken(false);
+                  return false;
               }
-              console.warn("Profile: Backend missing Drive token (Final)");
-              setBackendHasToken(false);
-              return false;
           }
       } catch (e) {
           console.error("Profile: Failed to check backend status", e);
+          if (maxRetries > 0) {
+             await new Promise(r => setTimeout(r, delayMs));
+             return checkBackend(maxRetries - 1, delayMs);
+          }
           setBackendHasToken(false);
           return false;
       }
@@ -57,24 +67,25 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
 
   // Initial Check - Handles Page Reloads after OAuth
   useEffect(() => {
-      // Check if we are returning from an OAuth flow
-      const isSyncing = sessionStorage.getItem('smotree_drive_sync') === 'pending';
+      // Check if we are returning from an OAuth flow (flag set in handleConnectDrive)
+      const isPostAuth = sessionStorage.getItem('smotree_oauth_in_progress') === 'true';
       
-      // If syncing, be aggressive (10 retries = ~20s). Otherwise, standard single check.
-      const retries = isSyncing ? 10 : 0; 
+      // If we just came from Auth, be very aggressive (10 retries = ~20s). 
+      // Even if normal load, try 2 times (retry count 2 = 3 total attempts) to handle network jitters.
+      const retries = isPostAuth ? 15 : 2; 
+      const delay = isPostAuth ? 1500 : 1000;
       
-      console.log(`Profile: Mounting. Sync mode: ${isSyncing}. Retries: ${retries}`);
+      console.log(`Profile: Mounting. Post-Auth Mode: ${isPostAuth}. Plan: ${retries} retries.`);
 
-      checkBackend(retries).then((success) => {
-          if (success && isSyncing) {
-              sessionStorage.removeItem('smotree_drive_sync');
-              console.log("Profile: Sync successful, flag cleared.");
-          } else if (!success && isSyncing) {
-              // Optionally keep flag to try again next mount, or clear it to stop nagging
-              console.warn("Profile: Sync failed after retries.");
-              sessionStorage.removeItem('smotree_drive_sync');
-          }
-      });
+      checkBackend(retries, delay);
+
+      // Safety cleanup: remove flag after 60s so we don't retry aggressively forever on future reloads
+      if (isPostAuth) {
+          const timer = setTimeout(() => {
+              sessionStorage.removeItem('smotree_oauth_in_progress');
+          }, 60000);
+          return () => clearTimeout(timer);
+      }
   }, [checkBackend]);
 
   const handleConnectDrive = async () => {
@@ -83,7 +94,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       setBackendHasToken(null); 
       
       // Set flag so if the page reloads (redirect), we know to retry aggressively on mount
-      sessionStorage.setItem('smotree_drive_sync', 'pending');
+      sessionStorage.setItem('smotree_oauth_in_progress', 'true');
       
       try {
           const googleAccount = user.externalAccounts.find(
@@ -109,19 +120,21 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           console.log("Profile: OAuth finished (Client-side), waiting for propagation...");
           await new Promise(r => setTimeout(r, 2000)); 
           
-          const success = await checkBackend(5);
-          if (success) {
-              sessionStorage.removeItem('smotree_drive_sync');
-          }
+          await checkBackend(10, 1500);
 
       } catch (e) {
           console.error("Failed to authorize Drive scope", e);
           alert("Failed to connect Google Drive. Please check popup blocker or try again.");
           setBackendHasToken(false);
-          sessionStorage.removeItem('smotree_drive_sync');
+          sessionStorage.removeItem('smotree_oauth_in_progress');
       } finally {
           setIsProcessing(false);
       }
+  };
+
+  const handleManualCheck = () => {
+      setBackendHasToken(null);
+      checkBackend(3, 1000); // Quick check
   };
 
   const renderDriveStatus = () => {
@@ -129,7 +142,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           return (
             <button 
                 onClick={handleConnectDrive}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full md:w-auto justify-center bg-indigo-600 text-white hover:bg-indigo-500"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full md:w-auto justify-center bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm"
             >
                 <HardDrive size={14} /> Link Google Account
             </button>
@@ -138,9 +151,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
 
       if (isProcessing || backendHasToken === null) {
           return (
-            <div className="flex items-center gap-2 text-zinc-500 text-xs">
+            <div className="flex items-center gap-2 text-zinc-500 text-xs bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full">
                 <RefreshCw size={14} className="animate-spin"/> 
-                {isProcessing ? 'Verifying connection...' : 'Checking status...'}
+                <span>{isProcessing ? 'Verifying connection...' : 'Checking status...'}</span>
             </div>
           );
       }
@@ -149,7 +162,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       if (backendHasToken === true) {
           return (
             <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-500 text-xs font-bold bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
+                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 text-xs font-bold bg-green-100 dark:bg-green-900/30 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
                     <CheckCircle size={12} /> Active
                 </div>
                 <button 
@@ -165,8 +178,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       // Case B: Token Missing/Broken
       if (backendHasToken === false) {
           return (
-            <div className="flex flex-col md:flex-row gap-2 items-center">
-                <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 text-xs font-bold bg-red-100 dark:bg-red-900/20 px-3 py-1.5 rounded-full border border-red-200 dark:border-red-500/20 whitespace-nowrap">
+            <div className="flex flex-col sm:flex-row gap-2 items-center">
+                <div 
+                    onClick={handleManualCheck}
+                    className="cursor-pointer flex items-center gap-1.5 text-red-600 dark:text-red-400 text-xs font-bold bg-red-100 dark:bg-red-900/20 px-3 py-1.5 rounded-full border border-red-200 dark:border-red-500/20 whitespace-nowrap hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors"
+                    title="Click to re-check status"
+                >
                     <XCircle size={12} /> Sync Error
                 </div>
                 <button 
