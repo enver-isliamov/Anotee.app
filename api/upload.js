@@ -19,9 +19,10 @@ export default async function handler(req, res) {
              throw new Error("Unauthorized: Invalid Token");
         }
 
-        // 2. Allow Upload
+        // 2. Allow Upload with Limits
         return {
           allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska'],
+          maximumSizeInBytes: 450 * 1024 * 1024, // 450MB Limit (Vercel Serverless limit buffer)
           tokenPayload: JSON.stringify({
              user: user.id
           }),
@@ -29,6 +30,7 @@ export default async function handler(req, res) {
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         // Optional: Log upload success
+        console.log(`Blob uploaded: ${blob.url} by user`);
       },
     });
 

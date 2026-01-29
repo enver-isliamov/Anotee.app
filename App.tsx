@@ -30,7 +30,7 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'LIVE_DEMO' };
 
-const POLLING_INTERVAL_MS = 5000;
+const POLLING_INTERVAL_MS = 10000; // Increased to 10s for stability and quota savings
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
@@ -373,6 +373,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           await api.syncProjects(projectsData, currentUser, token);
       } catch (e) {
           console.error("Sync failed", e);
+          notify("Failed to save changes to cloud. Check internet.", "error");
       } finally {
           setIsSyncing(false);
       }

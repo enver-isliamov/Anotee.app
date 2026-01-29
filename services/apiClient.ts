@@ -106,13 +106,18 @@ export const api = {
                 }))
             }));
 
-            await fetch('/api/data', {
+            const res = await fetch('/api/data', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(cleanData)
             });
+
+            if (!res.ok) {
+                throw new Error(`Sync failed: ${res.statusText}`);
+            }
         } catch (e) {
             console.error("API Sync Error", e);
+            throw e; // Propagate error to UI
         }
     },
 
