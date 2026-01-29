@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -15,6 +16,7 @@ import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
+import { Loader2 } from 'lucide-react';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -167,7 +169,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
-  // Deep Linking for Navigation (Not Joining)
+  // Deep Linking for Navigation
   useEffect(() => {
     if (!currentUser) return;
 
@@ -176,7 +178,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const aId = params.get('assetId');
 
     if (pId) {
+      // Optimistic check in current list
       const projectExists = projects.find(p => p.id === pId);
+      
       if (projectExists) {
             if (aId) {
                 const assetExists = projectExists.assets.find(a => a.id === aId);
@@ -186,7 +190,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 setView({ type: 'PROJECT_VIEW', projectId: pId });
             }
       }
-      // Note: If project doesn't exist in fetched list, it means no access (not in Org/Team)
     }
   }, [currentUser, projects]); 
 
@@ -261,6 +264,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
+  // --- PREVENT FLICKERING (LOADING STATE) ---
+  if (!isLoaded) {
+      return (
+          <div className="h-screen w-screen bg-zinc-950 flex items-center justify-center">
+              <Loader2 size={32} className="text-indigo-500 animate-spin" />
+          </div>
+      );
+  }
+
   if (view.type === 'LIVE_DEMO') {
       return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
   }
@@ -296,7 +308,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return (
         <>
             <Login 
-                onLogin={() => {}} // Deprecated prop
+                onLogin={() => {}} 
                 onNavigate={handleNavigate} 
             />
             {isMockMode && (

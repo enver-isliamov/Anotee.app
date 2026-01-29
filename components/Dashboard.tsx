@@ -52,13 +52,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const activeOrgId = organization?.id;
 
   const displayedProjects = projects.filter(p => {
-      // 1. If Org is selected, show projects belonging to that Org
+      // 1. If Org is selected, show projects matching THAT Org
       if (activeOrgId) {
           return p.orgId === activeOrgId;
       }
+      
       // 2. If Personal Workspace (no Org selected):
-      // Show projects where orgId is missing/null AND (user is owner OR user is in team)
-      const isPersonal = !p.orgId || p.orgId === 'null';
+      // Show projects where orgId is missing, null, empty string OR 'null' string (legacy)
+      // AND user has access (Owner or Team)
+      const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
       const hasAccess = p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id);
       
       return isPersonal && hasAccess;
@@ -87,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
         updatedAt: 'Just now',
         team: [currentUser],
         ownerId: currentUser.id,
-        orgId: activeOrgId, // Bind to current Org
+        orgId: activeOrgId || null, // Explicitly set null if personal
         assets: [],
         isLocked: false
       };
@@ -195,7 +197,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                   <div className="flex flex-col items-center justify-center h-[20vh] text-zinc-500 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-900/30">
                         <Lock size={32} className="mb-2 opacity-50" />
                         <h3 className="text-base font-medium text-zinc-400">{t('dash.no_projects')}</h3>
-                        {activeOrgId && <p className="text-xs text-zinc-500 mt-1">Switch to Personal Workspace to see your private projects.</p>}
+                        {activeOrgId ? (
+                            <p className="text-xs text-zinc-500 mt-1 max-w-xs text-center">
+                                No projects in <strong>{organization.name}</strong>. Create one or switch to Personal Workspace.
+                            </p>
+                        ) : (
+                            <p className="text-xs text-zinc-500 mt-1">Switch to Personal Workspace to see your private projects.</p>
+                        )}
                  </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
