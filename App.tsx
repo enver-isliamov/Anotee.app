@@ -38,22 +38,18 @@ interface AppLayoutProps {
     isSignedIn: boolean;
     getToken: () => Promise<string | null>;
     signOut: () => Promise<void>;
-    mockSignIn?: () => void; // Added for Mock Mode
+    mockSignIn?: () => void;
     authMode: 'clerk' | 'guest' | 'mock';
 }
 
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode }) => {
-  // Local Guest User State
   const [guestUser, setGuestUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(GUEST_STORAGE_KEY);
     return saved ? JSON.parse(saved) : null;
   });
 
   const isMockMode = authMode === 'mock';
-
-  // Derived Current User
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-
   const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
@@ -61,9 +57,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   const isRemoteUpdate = useRef(false);
   const isJoiningFlow = useRef(false);
+  // CRITICAL: Track processed invites to prevent infinite loops
   const processedInvites = useRef<Set<string>>(new Set()); 
 
-  // TOAST HANDLER
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -78,7 +74,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (!isLoaded) return;
 
     if (isSignedIn && clerkUser) {
-        // Authenticated via Clerk or Mock Admin
         setCurrentUser({
             id: clerkUser.id,
             name: clerkUser.fullName || clerkUser.firstName || 'Developer',
@@ -91,38 +86,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             localStorage.removeItem(GUEST_TOKEN_KEY);
         }
     } else if (guestUser) {
-        // Fallback to Guest
         setCurrentUser(guestUser);
     } else {
         setCurrentUser(null);
     }
   }, [isLoaded, isSignedIn, clerkUser, guestUser]);
 
-  // Notify if running in Mock/Guest Mode
-  useEffect(() => {
-      if (authMode === 'guest' && !localStorage.getItem('smotree_guest_warned')) {
-          setTimeout(() => {
-             notify("Running in Offline Guest Mode", "warning");
-             localStorage.setItem('smotree_guest_warned', 'true');
-          }, 1000);
-      }
-  }, [authMode]);
-
   // --- CONFIGURE API & DRIVE SERVICES ---
   useEffect(() => {
-    // 1. Configure Main API
     api.setTokenProvider(getToken);
 
-    // 2. Configure Google Drive Service
     if (isSignedIn && !isMockMode) {
         GoogleDriveService.setTokenProvider(async () => {
             try {
-                // This is the CRITICAL integration point
                 const clerkToken = await getToken();
-                if (!clerkToken) {
-                    console.warn("⚠️ App: No Clerk Token available for Drive request");
-                    return null;
-                }
+                if (!clerkToken) return null;
                 
                 const res = await fetch('/api/driveToken', {
                     headers: { 'Authorization': `Bearer ${clerkToken}` }
@@ -130,15 +108,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 
                 if (res.ok) {
                     const data = await res.json();
-                    // Fire an event to notify components that token is ready
                     window.dispatchEvent(new Event('drive-token-updated'));
                     return data.token; 
                 } else {
-                    // console.error(`❌ App: Drive Token Fetch Failed. Status: ${res.status}`);
                     return null;
                 }
             } catch (e) {
-                console.error("❌ App: Network Error fetching drive token", e);
+                console.error("Token fetch error", e);
                 return null;
             }
         });
@@ -162,21 +138,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
       
-      // EXPLICIT TOKEN FETCH: Fixes race condition where api.setTokenProvider hasn't run yet.
       let token: string | null = null;
       if (authMode === 'clerk') {
-          try {
-              token = await getToken();
-          } catch (e) {
-              console.warn("Failed to fetch fresh token during data sync", e);
-          }
+          try { token = await getToken(); } catch (e) {}
       }
 
       try {
          setIsSyncing(true);
-         // Pass explicit token to API
          const data = await api.getProjects(userToUse, token);
-         
          if (data && Array.isArray(data)) {
             isRemoteUpdate.current = true;
             setProjects(data);
@@ -190,11 +159,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
-      
       let token: string | null = null;
-      if (authMode === 'clerk') {
-          try { token = await getToken(); } catch(e) {}
-      }
+      if (authMode === 'clerk') try { token = await getToken(); } catch(e) {}
 
       try {
           setIsSyncing(true);
@@ -213,7 +179,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   useEffect(() => {
     if (!currentUser || isMockMode) return;
-    
     const shouldPoll = ['DASHBOARD', 'PROJECT_VIEW', 'PLAYER'].includes(view.type);
     if (!shouldPoll) return;
 
@@ -225,15 +190,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
   const processInviteLink = async (user: User, projectId: string, assetId?: string | null) => {
-      if (processedInvites.current.has(projectId)) return; 
+      // PREVENT INFINITE LOOP: If we already tried this project ID, stop.
+      if (processedInvites.current.has(projectId)) {
+          return; 
+      }
       
       isJoiningFlow.current = true;
       notify("Accepting invitation...", "info");
 
       let token: string | null = null;
-      if (authMode === 'clerk') {
-          try { token = await getToken(); } catch(e) {}
-      }
+      if (authMode === 'clerk') try { token = await getToken(); } catch(e) {}
 
       try {
           const result = await api.joinProject(projectId, user, token);
@@ -254,14 +220,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   setView({ type: 'PROJECT_VIEW', projectId: projectId });
               }
               
-              // Clean URL
               const url = new URL(window.location.href);
               url.searchParams.delete('projectId');
               if (assetId) url.searchParams.delete('assetId');
               window.history.replaceState({}, '', url.toString());
           } else {
                notify("Failed to join project.", "error");
-               // CRITICAL FIX: Mark as processed even on failure to prevent infinite loops
+               // CRITICAL: Mark as processed even on failure
                processedInvites.current.add(projectId);
           }
       } catch (e) {
@@ -362,10 +327,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  // Called when user clicks "Login" in Clerk (handled by Clerk) OR "Guest Login"
-  // Also called when "Mock Login" is triggered
   const handleGuestLogin = async (user: User, token?: string) => {
-    // If we are in mock mode, this might be triggered by the manual guest form
     setGuestUser(user);
     localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(user));
     if (token) {
@@ -395,10 +357,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   if (!currentUser) {
       const isPublicView = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
-      
       if (isPublicView) {
           return (
-            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans selection:bg-indigo-500/30 transition-colors">
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
                 <MainLayout 
                     currentUser={null} 
                     currentView={view.type} 
@@ -419,7 +380,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             </div>
           );
       }
-      
       return (
         <>
             <Login 
@@ -427,8 +387,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 onNavigate={handleNavigate} 
             />
             {isMockMode && (
-                <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm">
-                    PREVIEW MODE: Login to test (No real backend)
+                <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100]">
+                    PREVIEW MODE: Login to test
                 </div>
             )}
         </>
@@ -438,7 +398,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans selection:bg-indigo-500/30 transition-colors">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
       <main className="h-full">
         {isPlatformView && (
             <MainLayout 
@@ -500,7 +460,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         )}
         <ToastContainer toasts={toasts} removeToast={removeToast} />
         {isMockMode && (
-            <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm pointer-events-none">
+            <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] pointer-events-none">
                 PREVIEW MODE: Local Data Only
             </div>
         )}
@@ -508,8 +468,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     </div>
   );
 };
-
-// --- AUTH WRAPPERS ---
 
 const ClerkAuthWrapper = () => {
     const { user, isLoaded, isSignedIn } = useUser();
@@ -529,7 +487,6 @@ const ClerkAuthWrapper = () => {
 };
 
 const MockAuthWrapper = () => {
-    // Manually manage mock login state
     const [mockUser, setMockUser] = useState<any>(() => {
         return sessionStorage.getItem('mock_auth_user') ? JSON.parse(sessionStorage.getItem('mock_auth_user')!) : null;
     });
@@ -561,7 +518,6 @@ const MockAuthWrapper = () => {
 };
 
 const App: React.FC = () => {
-  // Check for Valid Clerk Key
   const env = (import.meta as any).env || {};
   const PUBLISHABLE_KEY = env.VITE_CLERK_PUBLISHABLE_KEY || "";
   const isValidKey = PUBLISHABLE_KEY && !PUBLISHABLE_KEY.includes("placeholder");
@@ -574,7 +530,6 @@ const App: React.FC = () => {
                  <ClerkAuthWrapper />
               </ClerkProvider>
           ) : (
-              // If Key is missing, use MockWrapper (dev/preview)
               <MockAuthWrapper />
           )}
       </LanguageProvider>

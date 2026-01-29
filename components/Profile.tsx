@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, Link as LinkIcon, XCircle } from 'lucide-react';
+import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, XCircle } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useUser, useAuth } from '@clerk/clerk-react';
@@ -20,31 +20,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
   
-  // Frontend scope check
-  const [hasScope, setHasScope] = useState(false);
-  // Backend token check
   const [backendHasToken, setBackendHasToken] = useState<boolean | null>(null);
-  
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. Check Frontend Scopes
-  useEffect(() => {
-      if (!user) {
-          setHasScope(false);
-          return;
-      }
-      const googleAccount = user.externalAccounts.find(
-          a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
-      );
-      if (!googleAccount) {
-          setHasScope(false);
-          return;
-      }
-      const scopes = googleAccount.approvedScopes || "";
-      setHasScope(scopes.includes(DRIVE_SCOPE));
-  }, [user]);
-
-  // 2. Check Backend Token Availability (The real truth)
+  // Check Backend Token Availability (The real truth)
   useEffect(() => {
       const checkBackend = async () => {
           if (!user || isGuest) return;
@@ -56,9 +35,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
               if (res.ok) {
                   setBackendHasToken(true);
               } else {
-                  console.warn("Profile: Backend missing Drive token despite frontend status");
-                  const errData = await res.json();
-                  console.debug("Debug Info:", errData);
+                  console.warn("Profile: Backend missing Drive token");
                   setBackendHasToken(false);
               }
           } catch (e) {
@@ -67,12 +44,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           }
       };
       
-      if (hasScope) {
-          checkBackend();
-      } else {
-          setBackendHasToken(false);
-      }
-  }, [user, hasScope, isGuest, getToken]);
+      checkBackend();
+  }, [user, isGuest, getToken]);
 
   const handleConnectDrive = async () => {
       if (!user) return;
@@ -83,15 +56,13 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
              a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
           );
 
+          // Force re-authorization to ensure token is fresh and has scopes
           if (googleAccount) {
-              // FORCE Re-Authorization
-              // Using origin as redirectUrl cleans up URL parameters which can cause auth loops
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
                   redirectUrl: window.location.origin 
               });
-              // After reauth, re-check backend
-              setBackendHasToken(null); // Reset to loading state
+              setBackendHasToken(null); // Reset to loading state to trigger re-check
           } else {
               await user.createExternalAccount({
                   strategy: 'oauth_google',
@@ -128,7 +99,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       }
 
       // Case A: Everything Good
-      if (hasScope && backendHasToken === true) {
+      if (backendHasToken === true) {
           return (
             <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 text-green-600 dark:text-green-500 text-xs font-bold bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
@@ -144,8 +115,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           );
       }
 
-      // Case B: Frontend says yes, Backend says no (Ghost Token)
-      if (hasScope && backendHasToken === false) {
+      // Case B: Token Missing/Broken
+      if (backendHasToken === false) {
           return (
             <div className="flex flex-col md:flex-row gap-2 items-center">
                 <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 text-xs font-bold bg-red-100 dark:bg-red-900/20 px-3 py-1.5 rounded-full border border-red-200 dark:border-red-500/20 whitespace-nowrap">
@@ -161,15 +132,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           );
       }
 
-      // Case C: No Scope
-      return (
-        <button 
-            onClick={handleConnectDrive}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full md:w-auto justify-center bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-        >
-            <AlertTriangle size={14} className="text-orange-500"/> Grant Permissions
-        </button>
-      );
+      return <div className="text-xs text-zinc-500">Checking status...</div>;
   };
 
   return (
