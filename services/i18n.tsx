@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useUser } from '@clerk/clerk-react';
 
 export type Language = 'en' | 'ru' | 'es' | 'ja' | 'ko' | 'pt';
 
@@ -672,11 +673,15 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isSignedIn } = useUser();
+
   const [language, setLanguage] = useState<Language>(() => {
+    // 1. LocalStorage
     const saved = localStorage.getItem('smotree_lang');
     if (saved && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(saved)) {
         return saved as Language;
     }
+    // 2. Browser
     const browserLang = navigator.language.split('-')[0];
     if (['ru', 'es', 'ja', 'ko', 'pt'].includes(browserLang)) {
         return browserLang as Language;
@@ -684,9 +689,45 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return 'en';
   });
 
+  // Sync from Cloud
+  useEffect(() => {
+      if (isSignedIn && user) {
+          const cloudLang = user.unsafeMetadata?.settings as any;
+          if (cloudLang?.language && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(cloudLang.language)) {
+              if (cloudLang.language !== language) {
+                  setLanguage(cloudLang.language as Language);
+              }
+          }
+      }
+  }, [isSignedIn, user]);
+
+  // Save to Cloud & Local
   useEffect(() => {
     localStorage.setItem('smotree_lang', language);
-  }, [language]);
+    
+    if (isSignedIn && user) {
+        // Debounce or just fire? Firing is okay for language change events (rare)
+        const updateCloud = async () => {
+            const currentCloudLang = (user.unsafeMetadata?.settings as any)?.language;
+            if (currentCloudLang !== language) {
+                try {
+                    await user.update({
+                        unsafeMetadata: {
+                            ...user.unsafeMetadata,
+                            settings: {
+                                ...(user.unsafeMetadata.settings as any),
+                                language: language
+                            }
+                        }
+                    });
+                } catch(e) {
+                    console.error("Cloud sync failed for lang", e);
+                }
+            }
+        };
+        updateCloud();
+    }
+  }, [language, isSignedIn, user]);
 
   const t = (key: string) => t_fallback(language, key);
 
