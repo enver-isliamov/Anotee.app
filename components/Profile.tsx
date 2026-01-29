@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle } from 'lucide-react';
+import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useUser } from '@clerk/clerk-react';
@@ -26,14 +26,21 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           setIsDriveConnected(false);
           return;
       }
+      
+      // Find the Google account connection
       const googleAccount = user.externalAccounts.find(
           a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
       );
+
       if (!googleAccount) {
           setIsDriveConnected(false);
           return;
       }
+
+      // Debugging Scopes: Check console to see what permissions we actually have
       const scopes = googleAccount.approvedScopes || "";
+      console.log("🔍 Current Google Scopes:", scopes);
+
       const hasScope = scopes.includes(DRIVE_SCOPE);
       setIsDriveConnected(hasScope);
   }, [user]);
@@ -48,13 +55,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           );
 
           if (googleAccount) {
-              // Force Re-Authorization to ensure we get the Scope
+              // FORCE Re-Authorization to ensure we get the Scope and a fresh Refresh Token
+              // We pass 'force' to ensure the consent screen appears if needed
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
                   redirectUrl: window.location.href
               });
           } else {
-              // Create new connection
+              // Create new connection if none exists
               await user.createExternalAccount({
                   strategy: 'oauth_google',
                   redirectUrl: window.location.href,
@@ -63,7 +71,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           }
       } catch (e) {
           console.error("Failed to authorize Drive scope", e);
-          alert("Failed to connect Google Drive. Please allow popups.");
+          alert("Failed to connect Google Drive. Please check popup blocker.");
       } finally {
           setIsProcessing(false);
       }
@@ -128,8 +136,20 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                     
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         {isDriveConnected ? (
-                            <div className="flex items-center gap-1.5 text-green-600 dark:text-green-500 text-xs font-bold bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
-                                <CheckCircle size={12} /> Active
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-500 text-xs font-bold bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
+                                    <CheckCircle size={12} /> Active
+                                </div>
+                                {/* NEW: Reconnect button even if active, to fix broken tokens */}
+                                <button 
+                                    onClick={handleConnectDrive}
+                                    disabled={isProcessing}
+                                    className="text-xs text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 flex items-center gap-1 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                                    title="Reconnect Drive if you are experiencing issues"
+                                >
+                                    <RefreshCw size={12} className={isProcessing ? "animate-spin" : ""} />
+                                    {isProcessing ? 'Fixing...' : 'Reconnect'}
+                                </button>
                             </div>
                         ) : (
                             <button 
