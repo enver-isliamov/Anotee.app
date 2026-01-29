@@ -27,8 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const { t } = useLanguage();
   
   // CLERK ORG CONTEXT
-  const { organization, isLoaded: isOrgLoaded } = useOrganization();
-  const { user } = useUser();
+  const { organization } = useOrganization();
 
   // Edit State
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -49,11 +48,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const [client, setClient] = useState('');
   const [description, setDescription] = useState('');
 
-  // Role Checks
-  const isGuest = currentUser.role === UserRole.GUEST;
-  // If we are in an Org, check if user has permissions (simplification: all org members can edit for now in V1)
-  const canCreateProject = !isGuest; 
-
   // --- FILTERING LOGIC (ORGANIZATION AWARE) ---
   const activeOrgId = organization?.id;
 
@@ -66,10 +60,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       //    OR projects where they are explicitly in the team (legacy shared projects) AND no orgId
       return (!p.orgId && (p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id)));
   });
-
-  // Split into "My/Org Projects" vs "Shared with Me" is less relevant in Org view, 
-  // but for Personal view we might still want to separate own vs shared.
-  // For Org view, everything is "Team Projects".
   
   const sectionTitle = activeOrgId 
     ? (organization?.name || 'Organization') + ' Projects' 
@@ -347,26 +337,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
              {/* Spacer for alignment on mobile where header controls are */}
             <div className="lg:hidden"></div>
 
-            {canCreateProject && (
-              <button 
-                onClick={() => setIsModalOpen(true)}
-                className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-bold shadow-lg shadow-indigo-900/20"
-              >
-                <Plus size={16} />
-                {t('dash.new_project')}
-              </button>
-            )}
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-bold shadow-lg shadow-indigo-900/20"
+            >
+              <Plus size={16} />
+              {t('dash.new_project')}
+            </button>
       </div>
-
-      {displayedProjects.length === 0 && isGuest && !activeOrgId && (
-             <div className="flex flex-col items-center justify-center h-[30vh] text-zinc-500 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-900/30">
-                <Lock size={48} className="mb-4 opacity-50" />
-                <h3 className="text-lg font-bold text-zinc-700 dark:text-zinc-300">{t('dash.no_projects')}</h3>
-                <p className="max-w-xs text-center mt-2 text-sm text-zinc-500">
-                   {t('dash.no_access')}
-                </p>
-             </div>
-      )}
 
       {renderProjectGrid(
           displayedProjects, 

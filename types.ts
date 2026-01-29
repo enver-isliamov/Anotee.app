@@ -1,8 +1,7 @@
 
 export enum UserRole {
   ADMIN = 'Admin',
-  CREATOR = 'Creator',
-  GUEST = 'Guest'
+  CREATOR = 'Creator'
 }
 
 export enum CommentStatus {
@@ -20,9 +19,9 @@ export interface User {
 export interface Comment {
   id: string;
   userId: string;
-  authorName?: string; // New: Persist name to handle removed users
-  timestamp: number; // in seconds (Start time)
-  duration?: number; // Optional duration in seconds
+  authorName?: string; 
+  timestamp: number; 
+  duration?: number; 
   text: string;
   status: CommentStatus;
   createdAt: string;
@@ -38,13 +37,11 @@ export interface VideoVersion {
   uploadedAt: string;
   filename: string;
   comments: Comment[];
-  isLocked?: boolean; // Prevents new comments
+  isLocked?: boolean; 
   
-  // Storage Info
   storageType?: StorageType; 
-  googleDriveId?: string; // If storageType is 'drive'
+  googleDriveId?: string; 
 
-  // Temporary fields for local session playback
   localFileUrl?: string; 
   localFileName?: string;
 }
@@ -62,11 +59,11 @@ export interface Project {
   name: string;
   description: string;
   client: string;
-  createdAt: number; // Timestamp for 7-day expiration logic
+  createdAt: number; 
   updatedAt: string;
   assets: ProjectAsset[];
-  team: User[]; // Deprecated in favor of orgId, but kept for legacy/guest support
+  team: User[]; 
   ownerId?: string;
-  orgId?: string; // NEW: Clerk Organization ID
-  isLocked?: boolean; // Project-level lock
+  orgId?: string; 
+  isLocked?: boolean; 
 }

@@ -1,7 +1,7 @@
 
 import { Project, UserRole, CommentStatus, User } from './types';
 
-// Internal mocks for initial project data, but not exported for Login UI anymore
+// Internal mocks for initial project data
 const INTERNAL_MOCK_USERS: User[] = [
   {
     id: 'u1',
@@ -11,9 +11,9 @@ const INTERNAL_MOCK_USERS: User[] = [
   },
   {
     id: 'u2',
-    name: 'Olga (Guest)',
+    name: 'Olga (Editor)',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50&h=50&fit=crop&crop=faces',
-    role: UserRole.GUEST
+    role: UserRole.CREATOR
   },
   {
     id: 'u3',

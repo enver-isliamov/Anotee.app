@@ -1,5 +1,6 @@
 
 import { sql } from '@vercel/postgres';
+import { verifyUser } from './_auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -7,95 +8,73 @@ export default async function handler(req, res) {
   }
 
   try {
-    let body = req.body;
-    if (typeof body === 'string') {
-        try { body = JSON.parse(body); } catch(e) {}
+    // 1. Authenticate Request
+    const user = await verifyUser(req);
+    if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { guestId, googleToken } = body || {};
+    console.log(`🚀 Starting Migration for User: ${user.email} (${user.id})`);
 
-    if (!guestId || !googleToken) {
-        return res.status(400).json({ error: "Missing guestId or googleToken" });
-    }
-
-    // 1. Verify Google Token
-    let googleUser;
-    try {
-        const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${googleToken}`);
-        if (!response.ok) throw new Error("Invalid Token");
-        const payload = await response.json();
-        googleUser = {
-            id: payload.email,
-            email: payload.email,
-            name: payload.name,
-            avatar: payload.picture,
-            role: 'Admin' // Upgraded role
-        };
-    } catch (e) {
-        return res.status(401).json({ error: "Invalid Google Credential" });
-    }
-
-    if (googleUser.id === guestId) {
-        return res.status(200).json({ success: true, message: "Already same user" });
-    }
-
-    console.log(`🚀 Migrating Guest [${guestId}] to Google User [${googleUser.id}]`);
-
-    // 2. Fetch ALL projects (To find where guest is involved)
-    // In a massive production app, we would query differently, but for V1 filtering in JS is safer/easier than complex JSONB queries.
+    // 2. Fetch ALL projects to scan for legacy data
+    // In V1 this is acceptable. For V2 we'd use WHERE clauses, but legacy data is unstructured.
     const { rows } = await sql`SELECT id, data FROM projects;`;
     
     let updatedCount = 0;
+    let claimedCount = 0;
 
     for (const row of rows) {
         let project = row.data;
         let needsUpdate = false;
 
-        // A. Migrate Team Membership
+        // A. Backfill org_id column (Optimization)
+        // If the JSON has orgId but the DB column is likely empty (handled by query update later), 
+        // we prepare the data.
+        // Actually, we just ensure the JSON is consistent.
+        
+        // B. Claim Legacy Projects (Fix User IDs)
+        // If the user's email exists in the team but the ID is different (legacy ID), update it.
         if (project.team && Array.isArray(project.team)) {
-            const guestIndex = project.team.findIndex(m => m.id === guestId);
-            if (guestIndex !== -1) {
-                // Check if Google user is ALREADY in the team to avoid duplicates
-                const existingGoogleIndex = project.team.findIndex(m => m.id === googleUser.id);
-                
-                if (existingGoogleIndex !== -1) {
-                    // Remove guest, Google user remains
-                    project.team.splice(guestIndex, 1);
-                } else {
-                    // Replace guest with Google user
-                    project.team[guestIndex] = {
-                        ...googleUser,
-                        role: 'Creator' // Or Admin, depending on logic. Let's start with Creator (Collaborator)
-                    };
+            const memberIndex = project.team.findIndex(m => m.email === user.email || m.name === user.name); // Email match is safer
+            
+            if (memberIndex !== -1) {
+                const member = project.team[memberIndex];
+                if (member.id !== user.id) {
+                    console.log(`Found legacy membership in project ${project.id}. Updating ID.`);
+                    project.team[memberIndex].id = user.id; // Swap legacy ID with Clerk ID
+                    project.team[memberIndex].avatar = user.avatar; // Update avatar
+                    needsUpdate = true;
+                    claimedCount++;
                 }
-                needsUpdate = true;
             }
         }
 
-        // B. Migrate Comments Ownership
-        if (project.assets && Array.isArray(project.assets)) {
+        // C. Update Comments ownership
+        if (project.assets) {
             project.assets.forEach(asset => {
-                if (asset.versions && Array.isArray(asset.versions)) {
-                    asset.versions.forEach(version => {
-                        if (version.comments && Array.isArray(version.comments)) {
-                            version.comments.forEach(comment => {
-                                if (comment.userId === guestId) {
-                                    comment.userId = googleUser.id;
-                                    comment.authorName = googleUser.name; // Update display name
-                                    needsUpdate = true;
-                                }
-                            });
-                        }
-                    });
-                }
+                asset.versions.forEach(version => {
+                    if (version.comments) {
+                        version.comments.forEach(comment => {
+                            // If we knew the old ID, we'd replace it. 
+                            // Since we don't strictly know it without mapping, we skip blindly replacing comments
+                            // unless we matched the team member above.
+                            // For V1, we will skip comment migration to avoid theft, 
+                            // assuming key users are Owners/Team members first.
+                        });
+                    }
+                });
             });
         }
 
-        // C. Save if changed
-        if (needsUpdate) {
+        // D. Save to DB (Update JSON + Columns)
+        if (needsUpdate || project.orgId) {
+            // Even if no team change, we might want to backfill org_id column if it exists in JSON
+            const orgId = project.orgId || null;
+            
             await sql`
                 UPDATE projects 
                 SET data = ${JSON.stringify(project)}::jsonb, 
+                    org_id = ${orgId},
                     updated_at = ${Date.now()}
                 WHERE id = ${project.id};
             `;
@@ -103,12 +82,13 @@ export default async function handler(req, res) {
         }
     }
 
-    console.log(`✅ Migration complete. Updated ${updatedCount} projects.`);
+    console.log(`✅ Migration complete. Updated ${updatedCount} projects. Claimed ${claimedCount} memberships.`);
 
     return res.status(200).json({ 
         success: true, 
-        user: googleUser,
-        updatedProjects: updatedCount 
+        updatedProjects: updatedCount,
+        claimedMemberships: claimedCount,
+        message: `Migration successful. Optimized ${updatedCount} projects.`
     });
 
   } catch (error) {

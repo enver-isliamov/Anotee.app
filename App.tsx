@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -222,7 +221,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const newProjects = projects.map(p => p.id === updatedProject.id ? updatedProject : p);
     setProjects(newProjects);
     
-    if (!skipSync && currentUser?.role !== UserRole.GUEST) {
+    if (!skipSync) {
         forceSync(newProjects);
     }
   };

@@ -54,14 +54,19 @@ export default async function handler(req, res) {
       );
     `;
     
-    // 3. Index
+    // 3. Schema Updates (Migration V2)
+    // Add org_id column for faster organization filtering
+    await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
+
+    // 4. Indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_owner_id ON projects (owner_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
 
     console.log("✅ Setup Complete.");
 
     return res.status(200).json({ 
         success: true, 
-        message: "Database connected and initialized successfully." 
+        message: "Database connected, tables ensured, and schema updated (org_id)." 
     });
 
   } catch (error) {

@@ -35,10 +35,11 @@ export default async function handler(req, res) {
       let projectData = rows[0].data;
       const ownerId = rows[0].owner_id;
 
-      // 2. Security Check
+      // 2. Security Check (Basic Team Access)
       const isOwner = ownerId === user.id;
       const isInTeam = projectData.team && projectData.team.some(m => m.id === user.id);
 
+      // TODO: Add refined permission check for Viewer vs Editor roles later
       if (!isOwner && !isInTeam) return res.status(403).json({ error: "Access denied" });
 
       // 3. Logic
@@ -56,21 +57,11 @@ export default async function handler(req, res) {
           case 'update':
               const uIdx = version.comments.findIndex(c => c.id === payload.id);
               if (uIdx !== -1) {
-                  // GUEST RESTRICTIONS
-                  if (!user.isVerified) {
-                      // Guest can only update their own comment
-                      if (version.comments[uIdx].userId !== user.id) {
-                          return res.status(403).json({ error: "Forbidden: Cannot edit others' comments" });
-                      }
-                      // Guest CANNOT change status (Resolve/Open)
-                      if (payload.status && payload.status !== version.comments[uIdx].status) {
-                          delete payload.status; 
-                      }
-                  }
+                  // Permission: Can only edit own comment unless Admin/Owner
+                  const isCommentOwner = version.comments[uIdx].userId === user.id;
                   
-                  // Allow Admins/Owners to edit anyone (moderation), or users to edit own
-                  if (version.comments[uIdx].userId !== user.id && !user.isVerified) {
-                       return res.status(403).json({ error: "Forbidden" });
+                  if (!isCommentOwner && !isOwner) {
+                       return res.status(403).json({ error: "Forbidden: Cannot edit others' comments" });
                   }
 
                   version.comments[uIdx] = { ...version.comments[uIdx], ...payload };
@@ -79,8 +70,10 @@ export default async function handler(req, res) {
           case 'delete':
               const dIdx = version.comments.findIndex(c => c.id === payload.id);
               if (dIdx !== -1) {
-                  // Guest can only delete own
-                  if (version.comments[dIdx].userId !== user.id && !user.isVerified) {
+                  // Permission: Can only delete own comment unless Admin/Owner
+                  const isCommentOwner = version.comments[dIdx].userId === user.id;
+                  
+                  if (!isCommentOwner && !isOwner) {
                       return res.status(403).json({ error: "Forbidden: Cannot delete others' comments" });
                   }
                   version.comments.splice(dIdx, 1);

@@ -98,12 +98,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
   
-  const isGuest = currentUser.role === UserRole.GUEST;
   const isProjectMember = project.team.some(m => m.id === currentUser.id);
   const isProjectOwner = project.ownerId === currentUser.id;
   
-  // Can Upload/Delete? Owner OR Team Member (Non-Guest)
-  const canEditProject = !isGuest && (isProjectOwner || isProjectMember) && !restrictedAssetId;
+  // Can Upload/Delete? Owner OR Team Member
+  const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
   const isLocked = project.isLocked;
 
   // Filter Assets for Restricted Mode
@@ -155,11 +154,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   const handleRealUpload = async (file: File) => {
-    if (isGuest) {
-        notify("Guests cannot upload files", "error");
-        return;
-    }
-
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -232,9 +226,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 assetUrl = newBlob.url;
             } catch (uploadError: any) {
                 console.warn("Cloud upload failed", uploadError);
-                if (uploadError.message?.includes('Forbidden')) {
-                    throw new Error("Upload Forbidden: Guest Access");
-                }
                 throw new Error("Upload failed. Please try again.");
             }
         }
@@ -487,7 +478,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const getDisplayRole = (member: User) => {
       if (member.id === project.ownerId) return t('pv.role.owner');
-      if (member.role === UserRole.GUEST) return t('pv.role.guest');
       return t('pv.role.creator');
   };
 
@@ -502,19 +492,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </button>
           <div className="flex flex-col truncate">
             <span className="font-bold text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                SmoTree <span className="text-zinc-600">/</span> {isGuest ? t('dash.shared_projects') : <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>}
+                SmoTree <span className="text-zinc-600">/</span> <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>
             </span>
             <div className="flex items-center gap-2 font-semibold text-sm md:text-base leading-tight text-zinc-100 truncate">
                <span className="truncate">{project.name}</span>
                {isLocked && <Lock size={12} className="text-red-500" />}
-               
-               {/* Guest Badge */}
-               {isGuest && (
-                   <div className="hidden sm:flex items-center gap-1 bg-orange-900/30 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
-                       <Eye size={10} />
-                       Read Only
-                   </div>
-               )}
             </div>
           </div>
         </div>
@@ -535,7 +517,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               </div>
             </div>
           )}
-          {!isGuest && !isLocked && !restrictedAssetId && (
+          {!isLocked && !restrictedAssetId && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
               <button 
@@ -786,7 +768,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                     {member.name}
                                     {member.id === currentUser.id && <span className="text-[10px] text-zinc-500">(You)</span>}
                                 </div>
-                                <div className={`text-[10px] uppercase font-bold ${getDisplayRole(member) === t('pv.role.guest') ? 'text-orange-400' : 'text-indigo-400'}`}>
+                                <div className={`text-[10px] uppercase font-bold text-indigo-400`}>
                                     {getDisplayRole(member)}
                                 </div>
                               </div>
