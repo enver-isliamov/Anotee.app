@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, User, UserRole, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -38,6 +38,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [isCopied, setIsCopied] = useState(false);
   const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
   
+  // Drag & Drop State
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
   
@@ -67,6 +71,51 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     
     return () => window.removeEventListener('drive-token-updated', handleDriveUpdate);
   }, []);
+
+  // --- DRAG & DROP HANDLERS ---
+  const handleDragEnter = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current++;
+      if (e.dataTransfer.items && e.dataTransfer.items.length > 0 && canEditProject && !isLocked) {
+          setIsDragging(true);
+      }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current--;
+      if (dragCounterRef.current === 0) {
+          setIsDragging(false);
+      }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      dragCounterRef.current = 0;
+
+      if (!canEditProject || isLocked) return;
+
+      const files = Array.from(e.dataTransfer.files);
+      // Filter video files
+      const videoFiles = files.filter(f => f.type.startsWith('video/'));
+      
+      if (videoFiles.length === 0) {
+          if (files.length > 0) notify("Only video files supported", "warning");
+          return;
+      }
+
+      // Handle upload for first file (multi-upload could be added later)
+      onUploadAsset(videoFiles[0], project.id, useDriveStorage);
+  };
 
   const toggleStorage = () => {
       if (isMockMode) {
@@ -188,7 +237,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950">
+    <div 
+        className="flex flex-col h-screen bg-zinc-950 relative"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+    >
       <header className="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-hidden flex-1">
           <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-white shrink-0 p-1 mr-1">
@@ -251,6 +306,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             <Info size={12} />
             Viewing restricted asset. Full project access limited.
         </div>
+      )}
+
+      {/* DROP OVERLAY */}
+      {isDragging && !isLocked && (
+          <div className="absolute inset-0 z-50 bg-indigo-600/90 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-200 border-4 border-white/20 border-dashed m-4 rounded-3xl">
+              <FileVideo size={64} className="mb-4 animate-bounce" />
+              <h2 className="text-3xl font-bold mb-2">Drop Video to Upload</h2>
+              <p className="text-white/80">Releasing will upload to {useDriveStorage ? 'Google Drive' : 'Cloud Storage'}</p>
+          </div>
       )}
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">

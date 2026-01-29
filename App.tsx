@@ -18,6 +18,7 @@ import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
 import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -110,6 +111,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
+
+  // --- PREVENT BROWSER DEFAULT DRAG DROP ---
+  useEffect(() => {
+      const handleGlobalDrag = (e: DragEvent) => {
+          e.preventDefault();
+      };
+      window.addEventListener('dragover', handleGlobalDrag);
+      window.addEventListener('drop', handleGlobalDrag);
+      return () => {
+          window.removeEventListener('dragover', handleGlobalDrag);
+          window.removeEventListener('drop', handleGlobalDrag);
+      };
+  }, []);
 
   // --- SYNC AUTH STATE ---
   useEffect(() => {
@@ -598,30 +612,34 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         )}
 
         {view.type === 'PROJECT_VIEW' && currentProject && (
-          <ProjectView 
-            project={currentProject} 
-            currentUser={currentUser}
-            onBack={handleBackToDashboard}
-            onSelectAsset={handleSelectAsset}
-            onUpdateProject={handleUpdateProject}
-            notify={notify}
-            restrictedAssetId={view.restrictedAssetId}
-            isMockMode={isMockMode}
-            onUploadAsset={handleUploadAsset} 
-          />
+          <ErrorBoundary>
+            <ProjectView 
+                project={currentProject} 
+                currentUser={currentUser}
+                onBack={handleBackToDashboard}
+                onSelectAsset={handleSelectAsset}
+                onUpdateProject={handleUpdateProject}
+                notify={notify}
+                restrictedAssetId={view.restrictedAssetId}
+                isMockMode={isMockMode}
+                onUploadAsset={handleUploadAsset} 
+            />
+          </ErrorBoundary>
         )}
         {view.type === 'PLAYER' && currentProject && currentAsset && (
-          <Player 
-            asset={currentAsset} 
-            project={currentProject}
-            currentUser={currentUser}
-            onBack={handleBackToProject}
-            users={currentProject.team}
-            onUpdateProject={(p, skipSync) => handleUpdateProject(p, skipSync)}
-            isSyncing={isSyncing}
-            notify={notify}
-            isMockMode={isMockMode}
-          />
+          <ErrorBoundary>
+            <Player 
+                asset={currentAsset} 
+                project={currentProject}
+                currentUser={currentUser}
+                onBack={handleBackToProject}
+                users={currentProject.team}
+                onUpdateProject={(p, skipSync) => handleUpdateProject(p, skipSync)}
+                isSyncing={isSyncing}
+                notify={notify}
+                isMockMode={isMockMode}
+            />
+          </ErrorBoundary>
         )}
         
         {/* GLOBAL COMPONENTS */}
