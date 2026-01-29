@@ -1,5 +1,5 @@
 
-import { verifyUser, clerkClient } from './_auth.js';
+import { verifyUser, getClerkClient } from './_auth.js';
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
@@ -7,44 +7,51 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 1. Verify User (Must be Clerk/Google user, not Guest)
+        // 1. Verify Authentication
         const user = await verifyUser(req);
         
         if (!user) {
-            console.warn("DriveToken: No user found from token.");
-            return res.status(401).json({ error: "Unauthorized" });
+            console.warn("DriveToken: 401 - User verification failed.");
+            return res.status(401).json({ error: "Unauthorized. Please re-login." });
         }
 
         if (!user.isVerified) {
-            return res.status(403).json({ error: "Guests cannot access Drive." });
+            // Guest user trying to access Drive
+            return res.status(403).json({ error: "Guest accounts cannot access Google Drive." });
         }
 
         // 2. Fetch OAuth Token from Clerk
-        // We explicitly look for 'oauth_google' provider
-        let response;
-        try {
-            response = await clerkClient.users.getUserOauthAccessToken(user.userId, 'oauth_google');
-        } catch (clerkErr) {
-            console.error("DriveToken: Clerk API error", clerkErr);
-            return res.status(500).json({ error: "Failed to communicate with Auth provider" });
-        }
+        // We need the 'oauth_google' token specifically
+        const clerk = getClerkClient();
         
-        // 3. Check for Token existence
-        if (response.data && response.data.length > 0) {
-            const tokenData = response.data[0];
+        let oauthTokens;
+        try {
+            oauthTokens = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
+        } catch (clerkApiError) {
+            console.error("DriveToken: Clerk API Error:", clerkApiError);
+            return res.status(502).json({ error: "Upstream Auth Provider Error" });
+        }
+
+        // 3. Return Token or 404
+        if (oauthTokens.data && oauthTokens.data.length > 0) {
+            const tokenData = oauthTokens.data[0];
             
-            // Optional: Check scopes if Clerk returns them, but usually simply having the token is enough here.
-            // The frontend handles the scope verification logic.
+            // Check if scopes are granted (basic check)
+            const scopes = tokenData.scopes || [];
+            // Note: Clerk sometimes returns scopes as a single string or array.
+            // We just pass the token to frontend; frontend handles scope validation logic via Profile.tsx
             
             return res.status(200).json({ token: tokenData.token });
         } else {
-            // Valid user, but no Google connection found in Clerk
-            console.log(`DriveToken: User ${user.userId} has no Google OAuth tokens.`);
-            return res.status(404).json({ error: "Google Drive not connected" });
+            console.warn(`DriveToken: User ${user.userId} has no Google OAuth tokens.`);
+            return res.status(404).json({ 
+                error: "Drive Not Connected", 
+                code: "NO_DRIVE_TOKEN" 
+            });
         }
 
     } catch (error) {
-        console.error("DriveToken Critical Error:", error);
-        return res.status(500).json({ error: error.message });
+        console.error("❌ DriveToken Fatal Error:", error);
+        return res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 }

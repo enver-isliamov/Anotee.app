@@ -2,59 +2,82 @@
 import { createClerkClient } from '@clerk/backend';
 import { createHmac } from 'crypto';
 
-// 1. Initialize Client Explicitly
-const secretKey = process.env.CLERK_SECRET_KEY;
-if (!secretKey) {
-    console.error("CRITICAL: CLERK_SECRET_KEY is missing in environment variables.");
+/**
+ * Validates the auth token from the request headers.
+ * Supports both Clerk JWTs (Standard Users) and Custom HMAC Tokens (Guests).
+ */
+export async function verifyUser(req) {
+    // 1. Critical Environment Check
+    const secretKey = process.env.CLERK_SECRET_KEY;
+    if (!secretKey) {
+        console.error("❌ CRITICAL: CLERK_SECRET_KEY is missing in Vercel Environment Variables.");
+        return null;
+    }
+
+    // 2. Extract Token
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+    }
+
+    const token = authHeader.split(' ')[1].trim();
+
+    // 3. Determine Token Type
+    const isGuestToken = token.includes('.') && token.split('.').length === 2;
+    const isClerkToken = token.startsWith('eyJ');
+
+    if (isGuestToken) {
+        return verifyGuestToken(token, secretKey);
+    } else if (isClerkToken) {
+        return await verifyClerkToken(token, secretKey);
+    }
+
+    console.warn("⚠️ Auth: Unknown token format");
+    return null;
 }
 
-const clerkClient = createClerkClient({ secretKey });
+// --- HELPER FUNCTIONS ---
 
-/**
- * Validates a Guest Token (HMAC SHA256)
- * Format: payloadBase64.signature
- */
-function verifyGuestToken(token) {
+function verifyGuestToken(token, secret) {
     try {
-        const parts = token.split('.');
-        if (parts.length !== 2) return null;
-
-        const [payloadStr, signature] = parts;
-        // Use a fallback secret only if env is missing (development only)
-        const secret = process.env.CLERK_SECRET_KEY || 'dev-fallback-secret';
+        const [payloadStr, signature] = token.split('.');
         
+        // Re-create signature
         const expectedSignature = createHmac('sha256', secret)
             .update(payloadStr)
             .digest('base64url');
 
         if (signature !== expectedSignature) {
-            console.warn("Auth: Guest token signature mismatch.");
+            console.warn("⛔ Auth: Guest signature mismatch");
             return null;
         }
 
         const user = JSON.parse(Buffer.from(payloadStr, 'base64url').toString());
-        // Enforce Guest Role
-        return { ...user, role: 'Guest', isVerified: false };
+        // Enforce guest structure
+        return { 
+            ...user, 
+            role: 'Guest', 
+            isVerified: false // Guests are never "verified" for external API usage like Drive
+        };
     } catch (e) {
-        console.error("Auth: Guest token parsing failed", e.message);
+        console.error("❌ Auth: Guest token parse error", e.message);
         return null;
     }
 }
 
-/**
- * Validates a Clerk JWT
- * Uses @clerk/backend verifyToken
- */
-async function verifyClerkToken(token) {
+async function verifyClerkToken(token, secretKey) {
     try {
-        const verifiedToken = await clerkClient.verifyToken(token, {
-            secretKey: process.env.CLERK_SECRET_KEY,
-            // Add leeway for clock skew between Vercel and Clerk servers
-            clockSkewInMs: 10 * 1000, 
+        // Initialize client locally to ensure Env vars are picked up
+        const clerk = createClerkClient({ secretKey });
+
+        const verified = await clerk.verifyToken(token, {
+            secretKey: secretKey,
+            // Allow 60s clock skew to prevent 401s on slight server time diffs
+            clockSkewInMs: 60000 
         });
 
-        const userId = verifiedToken.sub;
-        const user = await clerkClient.users.getUser(userId);
+        // Token is valid, now fetch full user details for roles/email
+        const user = await clerk.users.getUser(verified.sub);
         
         const primaryEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress;
 
@@ -63,39 +86,20 @@ async function verifyClerkToken(token) {
             userId: user.id,
             email: primaryEmail,
             name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User',
-            role: 'Admin', // In this app, any authenticated Google user is an Admin/Creator
+            avatar: user.imageUrl,
+            role: 'Admin', // In this app, all Google-auth users are Admins/Creators
             isVerified: true
         };
+
     } catch (e) {
-        console.error(`Auth: Clerk Verification Failed. Reason: ${e.message || e}`);
+        console.error(`⛔ Auth: Clerk Token Verification Failed. Reason: ${e.message}`);
+        // If debug needed: console.log("Token was:", token.substring(0, 10) + "...");
         return null;
     }
 }
 
-export async function verifyUser(req) {
-    const authHeader = req.headers['authorization'];
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        // console.warn("Auth: No Bearer token found in header.");
-        return null;
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    // DECISION TREE
-    
-    // 1. Is it a JWT? (Starts with eyJ and has 3 parts)
-    if (token.startsWith('eyJ') && token.split('.').length === 3) {
-        return await verifyClerkToken(token);
-    }
-
-    // 2. Is it a custom Guest Token? (Has 2 parts)
-    if (token.split('.').length === 2) {
-        return verifyGuestToken(token);
-    }
-
-    console.warn("Auth: Token format unrecognized.");
-    return null;
+// Export a getter for the client if needed elsewhere
+export function getClerkClient() {
+    if (!process.env.CLERK_SECRET_KEY) throw new Error("Missing CLERK_SECRET_KEY");
+    return createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 }
-
-export { clerkClient };

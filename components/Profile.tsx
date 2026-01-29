@@ -17,37 +17,25 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const { t } = useLanguage();
   const { user } = useUser();
   
-  // CONSTANTS
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-
-  // STATE
   const [isDriveConnected, setIsDriveConnected] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // LOGIC: Check if user has the specific scope granted
   useEffect(() => {
       if (!user) {
           setIsDriveConnected(false);
           return;
       }
-
-      // 1. Find the Google Account
       const googleAccount = user.externalAccounts.find(
           a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
       );
-
       if (!googleAccount) {
           setIsDriveConnected(false);
           return;
       }
-
-      // 2. Check Scopes
-      // approvedScopes is a string like "email profile https://www.googleapis.com/auth/drive.file"
       const scopes = googleAccount.approvedScopes || "";
       const hasScope = scopes.includes(DRIVE_SCOPE);
-
       setIsDriveConnected(hasScope);
-
   }, [user]);
 
   const handleConnectDrive = async () => {
@@ -55,22 +43,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       setIsProcessing(true);
       
       try {
-          // Find existing Google account
           const googleAccount = user.externalAccounts.find(
              a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
           );
 
           if (googleAccount) {
-              // SCENARIO A: User logged in with Google, but lacks Drive permission.
-              // We must RE-AUTHORIZE the existing account.
-              console.log("Re-authorizing existing Google account for Drive scope...");
+              // Force Re-Authorization to ensure we get the Scope
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
                   redirectUrl: window.location.href
               });
           } else {
-              // SCENARIO B: User logged in via Email/Guest, needs to LINK Google.
-              console.log("Linking new Google account...");
+              // Create new connection
               await user.createExternalAccount({
                   strategy: 'oauth_google',
                   redirectUrl: window.location.href,
@@ -79,7 +63,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           }
       } catch (e) {
           console.error("Failed to authorize Drive scope", e);
-          alert("Failed to connect Google Drive. Please ensure popups are allowed and try again.");
+          alert("Failed to connect Google Drive. Please allow popups.");
       } finally {
           setIsProcessing(false);
       }
@@ -87,7 +71,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
 
   return (
         <div className="max-w-4xl mx-auto space-y-8 py-8">
-            
             <div className="flex justify-between items-center">
                  <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">{t('profile.title')}</h2>
                  <button onClick={onLogout} className="text-zinc-500 hover:text-red-400 flex items-center gap-2 text-sm px-4 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-medium">
@@ -96,7 +79,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                 </button>
             </div>
             
-            {/* Profile Card */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 flex flex-col md:flex-row items-center md:items-start gap-6 shadow-sm relative overflow-hidden">
                 <img 
                     src={currentUser.avatar} 
@@ -116,7 +98,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                             <ShieldCheck size={14} /> {currentUser.role}
                         </span>
                     </div>
-                    
                     {isFounder && (
                         <p className="text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/20 p-3 rounded-lg inline-block">
                             {t('profile.founder_msg')}
@@ -125,17 +106,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                 </div>
             </div>
 
-            {/* STORAGE CONNECTIONS */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 relative overflow-hidden">
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
                     <HardDrive size={18} className="text-indigo-600 dark:text-indigo-400" /> Connected Storage
                 </h3>
                 
-                {/* Google Drive Status Block */}
                 <div className="bg-zinc-50 dark:bg-black/40 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between border border-zinc-200 dark:border-zinc-800 gap-4">
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shrink-0 border border-zinc-200 dark:border-transparent shadow-sm">
-                            {/* Google Drive Logo SVG */}
                             <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/><path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/><path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/><path d="m43.65 25 13.75 23.8 13.751 23.8 9.55-16.55 3.85-6.65c.8-1.4 1.2-2.95 1.2-4.5h-55.852z" fill="#ffba00"/></svg>
                         </div>
                         <div>
@@ -167,12 +145,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                 </div>
             </div>
 
-            {/* Roadmap Info for User */}
             <div>
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 px-1">{t('profile.tiers')}</h3>
                 <RoadmapBlock />
             </div>
-
         </div>
   );
 };

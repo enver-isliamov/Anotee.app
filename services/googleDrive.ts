@@ -11,7 +11,6 @@ export const GoogleDriveService = {
   
   /**
    * Initialize with a function that returns a valid Google Access Token.
-   * This allows us to use Clerk (or any auth provider) to manage the session.
    */
   setTokenProvider: (getTokenFn: () => Promise<string | null>) => {
       tokenGetter = getTokenFn;
@@ -21,32 +20,27 @@ export const GoogleDriveService = {
    * Gets a fresh token using the provider.
    */
   getToken: async (): Promise<string | null> => {
-      if (!tokenGetter) return null;
+      if (!tokenGetter) {
+          console.warn("DriveService: No token provider set.");
+          return null;
+      }
       try {
-          return await tokenGetter();
+          const t = await tokenGetter();
+          if (!t) console.warn("DriveService: Token provider returned null.");
+          return t;
       } catch (e) {
-          console.error("Failed to get token from provider", e);
+          console.error("DriveService: Failed to get token", e);
           return null;
       }
   },
 
-  /**
-   * Checks if we have a valid configuration to attempt API calls.
-   * Note: This doesn't guarantee the token is valid, just that we can try to get one.
-   */
   isAuthenticated: (): boolean => {
     return !!tokenGetter;
   },
-  
-  // Legacy stub - can be removed, keeping for safety if called elsewhere temporarily
-  init: (clientId: string) => { /* No-op */ },
 
-  /**
-   * Check if a file exists and is not trashed.
-   */
   checkFileStatus: async (fileId: string): Promise<'ok' | 'trashed' | 'missing'> => {
       const accessToken = await GoogleDriveService.getToken();
-      if (!accessToken) return 'ok'; // Cannot check without token
+      if (!accessToken) return 'ok'; 
 
       try {
           const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=trashed,explicitlyTrashed`, {
@@ -54,32 +48,23 @@ export const GoogleDriveService = {
           });
           
           if (res.status === 404) return 'missing';
-          if (!res.ok) {
-              return 'ok'; // Fallback on error
-          }
+          if (!res.ok) return 'ok'; 
 
           const data = await res.json();
           if (data.trashed || data.explicitlyTrashed) return 'trashed';
           return 'ok';
       } catch (e) {
-          console.error("Check status failed", e);
           return 'ok';
       }
   },
 
-  /**
-   * Renames a project folder (finds it by old name inside App folder).
-   */
   renameProjectFolder: async (oldName: string, newName: string): Promise<boolean> => {
       const accessToken = await GoogleDriveService.getToken();
       if (!accessToken) return false;
 
       try {
           const appFolderId = await GoogleDriveService.ensureAppFolder();
-          
-          // Escape single quotes for the query
           const safeOldName = oldName.replace(/'/g, "\\'");
-          
           const query = `mimeType='application/vnd.google-apps.folder' and name='${safeOldName}' and '${appFolderId}' in parents and trashed=false`;
           
           const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`, {
@@ -89,7 +74,6 @@ export const GoogleDriveService = {
 
           if (data.files && data.files.length > 0) {
               const folderId = data.files[0].id;
-              
               const patchRes = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}`, {
                   method: 'PATCH',
                   headers: {
@@ -98,22 +82,18 @@ export const GoogleDriveService = {
                   },
                   body: JSON.stringify({ name: newName })
               });
-              
               return patchRes.ok;
           }
           return false;
       } catch (e) {
-          console.error("Rename folder failed exception", e);
+          console.error("Rename folder failed", e);
           return false;
       }
   },
 
-  /**
-   * Helper to find or create a folder inside a parent folder.
-   */
   ensureFolder: async (folderName: string, parentId?: string): Promise<string> => {
       const accessToken = await GoogleDriveService.getToken();
-      if (!accessToken) throw new Error("No access token");
+      if (!accessToken) throw new Error("Google Drive Access Token is missing. Please reconnect Drive in Profile.");
 
       const safeName = folderName.replace(/'/g, "\\'");
       let query = `mimeType='application/vnd.google-apps.folder' and name='${safeName}' and trashed=false`;
@@ -146,20 +126,19 @@ export const GoogleDriveService = {
           },
           body: JSON.stringify(metadata)
       });
+      
+      if (!createRes.ok) {
+          throw new Error(`Failed to create folder: ${createRes.statusText}`);
+      }
+      
       const createData = await createRes.json();
       return createData.id;
   },
 
-  /**
-   * Finds the SmoTree.App folder or creates it.
-   */
   ensureAppFolder: async (): Promise<string> => {
     return GoogleDriveService.ensureFolder(APP_FOLDER_NAME);
   },
 
-  /**
-   * Deletes (trashes) a file from Google Drive.
-   */
   deleteFile: async (fileId: string): Promise<void> => {
       const accessToken = await GoogleDriveService.getToken();
       if (!accessToken) return;
@@ -178,12 +157,9 @@ export const GoogleDriveService = {
       }
   },
 
-  /**
-   * Uploads a file using the Resumable Upload protocol.
-   */
   uploadFile: async (file: File, folderId: string, onProgress?: (percent: number) => void, customName?: string): Promise<{ id: string, name: string }> => {
      const accessToken = await GoogleDriveService.getToken();
-     if (!accessToken) throw new Error("No access token");
+     if (!accessToken) throw new Error("No access token. Please reconnect Drive.");
 
      const metadata = {
          name: customName || file.name,
@@ -195,18 +171,17 @@ export const GoogleDriveService = {
          headers: {
              'Authorization': `Bearer ${accessToken}`,
              'Content-Type': 'application/json',
-             'X-Upload-Content-Type': file.type || 'application/octet-stream',
-             'X-Upload-Content-Length': file.size.toString()
+             'X-Upload-Content-Type': file.type || 'application/octet-stream'
          },
          body: JSON.stringify(metadata)
      });
 
      if (!initResponse.ok) {
-         throw new Error(`Drive Init Failed: ${initResponse.status}`);
+         throw new Error(`Drive Init Failed: ${initResponse.status} ${initResponse.statusText}`);
      }
 
      const sessionUri = initResponse.headers.get('Location');
-     if (!sessionUri) throw new Error("No session URI");
+     if (!sessionUri) throw new Error("No session URI received from Google.");
 
      return new Promise((resolve, reject) => {
          const xhr = new XMLHttpRequest();
@@ -224,8 +199,7 @@ export const GoogleDriveService = {
              if (xhr.status === 200 || xhr.status === 201) {
                  try {
                      const response = JSON.parse(xhr.responseText);
-                     
-                     // Make public for guests (optional)
+                     // Set public permission
                      try {
                         await fetch(`https://www.googleapis.com/drive/v3/files/${response.id}/permissions`, {
                             method: 'POST',
@@ -235,33 +209,28 @@ export const GoogleDriveService = {
                             },
                             body: JSON.stringify({ role: 'reader', type: 'anyone' })
                         });
-                     } catch (e) {}
-
+                     } catch (e) {
+                         console.warn("Failed to set public permission", e);
+                     }
                      resolve(response);
                  } catch (e) {
-                     reject(new Error("Invalid JSON"));
+                     reject(new Error("Invalid JSON response from Drive"));
                  }
              } else {
-                 reject(new Error(`Upload failed: ${xhr.status}`));
+                 reject(new Error(`Upload failed with status: ${xhr.status}`));
              }
          };
-         xhr.onerror = () => reject(new Error("Network error"));
+         xhr.onerror = () => reject(new Error("Network error during upload"));
          xhr.send(file);
      });
   },
 
-  /**
-   * Returns a streaming URL for the file.
-   */
   getVideoStreamUrl: (fileId: string): string => {
-      // Prioritize API key for unauthenticated stream if available (better performance usually)
       const env = (import.meta as any).env || {};
       const apiKey = env.VITE_GOOGLE_API_KEY;
       if (apiKey) {
          return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
       }
-
-      // Fallback to simple export link (often redirects to a temp link)
       return `https://drive.google.com/uc?export=download&id=${fileId}`;
   }
 };
