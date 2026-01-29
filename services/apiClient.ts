@@ -167,7 +167,7 @@ export const api = {
         }
     },
 
-    deleteAssets: async (urls: string[], explicitToken?: string | null): Promise<void> => {
+    deleteAssets: async (urls: string[], projectId: string, explicitToken?: string | null): Promise<void> => {
         if (IS_MOCK_MODE) {
             return; // Nothing to delete on server
         }
@@ -180,7 +180,7 @@ export const api = {
                     'Content-Type': 'application/json',
                     'Authorization': token ? `Bearer ${token}` : ''
                 },
-                body: JSON.stringify({ urls })
+                body: JSON.stringify({ urls, projectId })
             });
         } catch (e) {
             console.error("Delete API Error", e);

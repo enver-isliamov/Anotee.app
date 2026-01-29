@@ -42,8 +42,8 @@ export async function verifyUser(req) {
             email: primaryEmail,
             name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User',
             avatar: user.imageUrl,
-            role: 'Admin', // In this app, all Authenticated users are Admins/Creators of their own scope
             isVerified: true
+            // Role is removed. Permissions should be checked against Project resources.
         };
 
     } catch (e) {

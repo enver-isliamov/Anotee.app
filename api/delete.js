@@ -1,6 +1,7 @@
 
 import { del } from '@vercel/blob';
 import { verifyUser } from './_auth.js';
+import { sql } from '@vercel/postgres';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -23,13 +24,31 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { urls } = req.body;
+    const { urls, projectId } = req.body;
     
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
         return res.status(400).json({ error: "No URLs provided for deletion" });
     }
+
+    if (!projectId) {
+        return res.status(400).json({ error: "ProjectId is required to verify ownership" });
+    }
+
+    // 2. Verify Project Ownership
+    // Only the Owner can delete physical files to prevent malicious deletes
+    const { rows } = await sql`
+        SELECT owner_id FROM projects WHERE id = ${projectId}
+    `;
+
+    if (rows.length === 0) {
+        return res.status(404).json({ error: "Project not found" });
+    }
+
+    if (rows[0].owner_id !== user.id) {
+        return res.status(403).json({ error: "Forbidden: You are not the owner of this project." });
+    }
     
-    console.log("Deleting blobs:", urls);
+    console.log(`User ${user.id} deleting blobs for project ${projectId}:`, urls);
     await del(urls);
 
     return res.status(200).json({ success: true });

@@ -3,19 +3,11 @@ import { Comment } from '../types';
 
 /**
  * Generates an EDL optimized for DaVinci Resolve Markers.
- * Format:
- * TITLE: ...
- * FCM: NON-DROP FRAME
- * 
- * 001  001      V     C        00:00:00:00 00:00:00:01 00:00:00:00 00:00:00:01
- * Comment Text |C:Color |M:Name |D:Duration
  */
-export const generateEDL = (projectName: string, version: number, comments: Comment[]): string => {
+export const generateEDL = (projectName: string, version: number, comments: Comment[], fps: number = 24): string => {
   let edl = `TITLE: ${projectName}_v${version} Markers\nFCM: NON-DROP FRAME\n\n`;
 
   comments.forEach((comment, index) => {
-    // Standardize FPS to 24 for export calculation
-    const fps = 24;
     
     // Calculate IN point
     const inFramesTotal = Math.floor(comment.timestamp * fps);
@@ -83,9 +75,8 @@ export const generateCSV = (comments: Comment[]): string => {
  * Generates an FCP7 XML (xmeml) compatible with DaVinci Resolve Timeline Import.
  * This allows importing markers with colors and specific timecodes directly.
  */
-export const generateResolveXML = (projectName: string, version: number, comments: Comment[]): string => {
-  const fps = 24;
-  const timebase = 24;
+export const generateResolveXML = (projectName: string, version: number, comments: Comment[], fps: number = 24): string => {
+  const timebase = Math.round(fps);
   
   // Helper to get frame count
   const getFrames = (seconds: number) => Math.floor(seconds * fps);

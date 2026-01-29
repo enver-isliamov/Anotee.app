@@ -87,7 +87,7 @@ export default async function handler(req, res) {
         }
       } 
       
-      // POST: Sync Projects (Upsert with Optimistic Locking)
+      // POST: Sync Projects (Upsert with Optimistic Locking & Security Checks)
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
@@ -109,77 +109,108 @@ export default async function handler(req, res) {
         for (const project of projectsToSync) {
             if (!project.id) continue;
 
-            const isOwner = project.ownerId === user.id;
-            const isTeam = project.team && Array.isArray(project.team) && project.team.some(m => m.id === user.id);
-            const isOrgMember = project.orgId && orgIds.includes(project.orgId);
-            
-            // Allow creation/update if user is authenticated (they become owner effectively)
-            if (isOwner || isTeam || isOrgMember || !project.ownerId) {
-                const clientVersion = project._version || 0;
-                const newVersion = clientVersion + 1;
-                project._version = newVersion; // Inject new version into JSON
+            const clientVersion = project._version || 0;
+            const newVersion = clientVersion + 1;
+            project._version = newVersion; // Inject new version into JSON
 
-                const projectJson = JSON.stringify(project);
-                const orgId = project.orgId || null;
-                const ownerId = project.ownerId || user.id; // Enforce owner if missing
+            const projectJson = JSON.stringify(project);
+            const orgId = project.orgId || null;
+            
+            // SECURITY: Enforce that only the authenticated user can be set as owner for new projects
+            // For existing projects, we check ownership in the WHERE clause.
+            const ownerId = project.ownerId || user.id;
+
+            try {
+                // 1. Try UPDATE with Version Check AND Ownership Check
+                // We allow update if:
+                // a) User is the owner (owner_id = user.id)
+                // b) Project belongs to an Org the user is part of (org_id IN orgIds)
+                // c) User is in the 'team' array (handled loosely here for legacy, but ideally strict)
                 
-                try {
-                    // 1. Try UPDATE with Version Check
-                    const updateResult = await sql`
+                // Construct Org Check
+                const hasOrgAccess = orgIds.length > 0 && orgId ? orgIds.includes(orgId) : false;
+
+                let updateResult;
+                
+                if (hasOrgAccess) {
+                     // If Org Match, we allow update regardless of individual owner_id
+                     updateResult = await sql`
                         UPDATE projects 
                         SET 
                             data = ${projectJson}::jsonb,
                             org_id = ${orgId},
                             updated_at = ${Date.now()}
                         WHERE id = ${project.id} 
+                        AND (org_id = ${orgId})
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
-
-                    if (updateResult.rowCount > 0) {
-                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
-                    } else {
-                        // 2. If Update failed, check if it's an INSERT (id doesn't exist)
-                        // OR a Conflict (id exists but version mismatch)
-                        
-                        const checkExists = await sql`SELECT data->>'_version' as ver FROM projects WHERE id = ${project.id}`;
-                        
-                        if (checkExists.rowCount === 0) {
-                            // Does not exist -> INSERT
-                            await sql`
-                                INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
-                                VALUES (
-                                    ${project.id}, 
-                                    ${ownerId}, 
-                                    ${orgId},
-                                    ${projectJson}::jsonb, 
-                                    ${Date.now()}, 
-                                    ${project.createdAt || Date.now()}
-                                );
-                            `;
-                            updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
-                        } else {
-                            // Exists but version mismatched -> CONFLICT
-                            const dbVer = parseInt(checkExists.rows[0].ver || '0');
-                            console.warn(`Conflict for ${project.id}: Client ${clientVersion} vs DB ${dbVer}`);
-                            
-                            // We return 409 immediately on first conflict to prevent partial state corruption
-                            return res.status(409).json({ 
-                                error: "Version Conflict", 
-                                projectId: project.id,
-                                serverVersion: dbVer,
-                                clientVersion: clientVersion
-                            });
-                        }
-                    }
-                } catch (dbError) {
-                    if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline" });
-                    console.error("DB Sync Error", dbError);
-                    throw dbError;
+                } else {
+                    // Personal Project: Must be owner
+                    updateResult = await sql`
+                        UPDATE projects 
+                        SET 
+                            data = ${projectJson}::jsonb,
+                            org_id = ${orgId},
+                            updated_at = ${Date.now()}
+                        WHERE id = ${project.id} 
+                        AND owner_id = ${user.id}
+                        AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
+                    `;
                 }
+
+                if (updateResult.rowCount > 0) {
+                    updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                } else {
+                    // 2. If Update failed, check if it's an INSERT (id doesn't exist)
+                    // OR a Conflict (id exists but version mismatch) OR Permission Denied
+                    
+                    const checkExists = await sql`SELECT data->>'_version' as ver, owner_id FROM projects WHERE id = ${project.id}`;
+                    
+                    if (checkExists.rowCount === 0) {
+                        // Does not exist -> INSERT
+                        // SECURITY: Force owner_id to be current user on creation
+                        await sql`
+                            INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
+                            VALUES (
+                                ${project.id}, 
+                                ${user.id}, 
+                                ${orgId},
+                                ${projectJson}::jsonb, 
+                                ${Date.now()}, 
+                                ${project.createdAt || Date.now()}
+                            );
+                        `;
+                        updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
+                    } else {
+                        // Exists. Check if it was a permission issue or version conflict
+                        const dbRow = checkExists.rows[0];
+                        const isOwner = dbRow.owner_id === user.id;
+                        
+                        if (!isOwner && !hasOrgAccess) {
+                             // Silent fail or continue, do not expose error details for security
+                             console.warn(`Unauthorized update attempt on ${project.id} by ${user.id}`);
+                             continue; 
+                        }
+
+                        // Version Conflict
+                        const dbVer = parseInt(dbRow.ver || '0');
+                        console.warn(`Conflict for ${project.id}: Client ${clientVersion} vs DB ${dbVer}`);
+                        
+                        return res.status(409).json({ 
+                            error: "Version Conflict", 
+                            projectId: project.id,
+                            serverVersion: dbVer,
+                            clientVersion: clientVersion
+                        });
+                    }
+                }
+            } catch (dbError) {
+                if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline" });
+                console.error("DB Sync Error", dbError);
+                throw dbError;
             }
         }
         
-        // Return successful updates so client can sync local versions
         return res.status(200).json({ success: true, updates: updatesResults });
       }
 

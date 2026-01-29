@@ -169,7 +169,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             });
 
             if (urlsToDelete.length > 0) {
-                await api.deleteAssets(urlsToDelete);
+                // Pass project.id to validate ownership server-side
+                await api.deleteAssets(urlsToDelete, project.id);
             }
         }
 

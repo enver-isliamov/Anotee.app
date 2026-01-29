@@ -175,7 +175,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       });
 
       if (urlsToDelete.length > 0) {
-          await api.deleteAssets(urlsToDelete);
+          await api.deleteAssets(urlsToDelete, project.id);
       }
 
       onDeleteProject(project.id);

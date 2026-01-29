@@ -141,7 +141,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const sidebarInputRef = useRef<HTMLInputElement>(null);
   
-  const animationFrameRef = useRef<number | null>(null);
   const fpsDetectionRef = useRef<{ frames: number[], lastTime: number, active: boolean }>({ frames: [], lastTime: 0, active: false });
 
   const isManager = canManageProject(currentUser, project);
@@ -436,32 +435,38 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const startFpsDetection = () => { if (isFpsDetected) return; fpsDetectionRef.current = { frames: [], lastTime: performance.now(), active: true }; };
 
-  const updateTimeLoop = useCallback(() => { 
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      if (fpsDetectionRef.current.active) {
-          const now = performance.now(); const delta = now - fpsDetectionRef.current.lastTime;
-          fpsDetectionRef.current.lastTime = now;
-          if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta);
-          if (fpsDetectionRef.current.frames.length > 30) {
-              const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length;
-              const est = 1000 / avg;
-              const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p);
-              setVideoFps(closest); setIsFpsDetected(true); fpsDetectionRef.current.active = false;
-          }
-      }
-      if (viewMode === 'side-by-side' && compareVideoRef.current) {
-         if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) compareVideoRef.current.currentTime = videoRef.current.currentTime;
-      }
-    }
-    animationFrameRef.current = requestAnimationFrame(updateTimeLoop);
-  }, [isFpsDetected, viewMode]);
-
+  // Use requestAnimationFrame ONLY for FPS detection logic, NOT for UI updates
+  // to prevent heavy re-renders. Use onTimeUpdate for UI.
   useEffect(() => {
-    if (isPlaying) { animationFrameRef.current = requestAnimationFrame(updateTimeLoop); if (!isFpsDetected) startFpsDetection(); } 
-    else { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); fpsDetectionRef.current.active = false; }
-    return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
-  }, [isPlaying, updateTimeLoop, isFpsDetected]);
+    let handle: number;
+    const detectLoop = () => {
+        if (fpsDetectionRef.current.active && isPlaying) {
+            const now = performance.now(); 
+            const delta = now - fpsDetectionRef.current.lastTime;
+            fpsDetectionRef.current.lastTime = now;
+            
+            if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta);
+            
+            if (fpsDetectionRef.current.frames.length > 30) {
+                const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length;
+                const est = 1000 / avg;
+                const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p);
+                setVideoFps(closest); 
+                setIsFpsDetected(true); 
+                fpsDetectionRef.current.active = false;
+            } else {
+                handle = requestAnimationFrame(detectLoop);
+            }
+        }
+    };
+
+    if (isPlaying && !isFpsDetected) {
+        startFpsDetection();
+        handle = requestAnimationFrame(detectLoop);
+    }
+
+    return () => cancelAnimationFrame(handle);
+  }, [isPlaying, isFpsDetected]);
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
       const t = parseFloat(e.target.value); setCurrentTime(t);
@@ -469,7 +474,18 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       if (compareVideoRef.current) compareVideoRef.current.currentTime = t;
   };
 
-  const handleTimeUpdate = () => { if (!isScrubbing) setCurrentTime(videoRef.current?.currentTime || 0); };
+  const handleTimeUpdate = () => { 
+      if (!isScrubbing && videoRef.current) {
+          setCurrentTime(videoRef.current.currentTime);
+          
+          // Sync compare video if in side-by-side mode
+          if (viewMode === 'side-by-side' && compareVideoRef.current) {
+             if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) {
+                 compareVideoRef.current.currentTime = videoRef.current.currentTime;
+             }
+          }
+      }
+  };
   
   const handleVideoError = async () => {
       if (loadingDrive) return;
@@ -639,9 +655,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleExport = (format: 'xml' | 'csv' | 'edl') => {
       let content = ''; let mime = 'text/plain'; let ext = '';
-      if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments); mime = 'application/xml'; ext = 'xml'; }
+      // Pass videoFps to export functions
+      if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; }
       else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; }
-      else { content = generateEDL(project.name, version.versionNumber, comments); mime = 'text/plain'; ext = 'edl'; }
+      else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; }
       downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime);
       setShowExportMenu(false);
   };

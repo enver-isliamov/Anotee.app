@@ -20,7 +20,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: "Missing required fields" });
       }
 
-      // 1. Fetch Project
+      // 1. Fetch Project with Version
       let rows = [];
       try {
         const result = await sql`SELECT data, owner_id FROM projects WHERE id = ${projectId};`;
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
 
       let projectData = rows[0].data;
       const ownerId = rows[0].owner_id;
+      const currentVersion = projectData._version || 0; // Get current version for Optimistic Lock
 
       // 2. Security Check (Basic Team Access)
       const isOwner = ownerId === user.id;
@@ -81,14 +82,23 @@ export default async function handler(req, res) {
               break;
       }
 
-      // 4. Save
-      await sql`
+      // Increment Version
+      const newVersion = currentVersion + 1;
+      projectData._version = newVersion;
+
+      // 4. Save with Optimistic Locking
+      const updateResult = await sql`
           UPDATE projects 
           SET data = ${JSON.stringify(projectData)}::jsonb, updated_at = ${Date.now()}
-          WHERE id = ${projectId};
+          WHERE id = ${projectId} 
+          AND ((data->>'_version')::int = ${currentVersion} OR data->>'_version' IS NULL);
       `;
 
-      return res.status(200).json({ success: true });
+      if (updateResult.rowCount === 0) {
+          return res.status(409).json({ error: "Conflict: Data modified by another user. Please refresh." });
+      }
+
+      return res.status(200).json({ success: true, _version: newVersion });
 
   } catch (error) {
     console.error("Comment API Error:", error);
