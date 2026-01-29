@@ -1,11 +1,13 @@
+
 import React, { useState } from 'react';
 import { Project, User, UserRole } from '../types';
-import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight } from 'lucide-react';
+import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
+import { useOrganization, useUser } from '@clerk/clerk-react';
 
 interface DashboardProps {
   projects: Project[];
@@ -24,6 +26,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
   
+  // CLERK ORG CONTEXT
+  const { organization, isLoaded: isOrgLoaded } = useOrganization();
+  const { user } = useUser();
+
   // Edit State
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editName, setEditName] = useState('');
@@ -45,16 +51,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
   // Role Checks
   const isGuest = currentUser.role === UserRole.GUEST;
-  // Admin in global scope means "Registered User" (Potential Founder). 
-  const isFounder = currentUser.role === UserRole.ADMIN;
-  const canCreateProject = isFounder;
+  // If we are in an Org, check if user has permissions (simplification: all org members can edit for now in V1)
+  const canCreateProject = !isGuest; 
 
-  // --- FILTERING LOGIC ---
-  const myProjects = projects.filter(p => p.ownerId === currentUser.id);
-  const sharedProjects = projects.filter(p => p.ownerId !== currentUser.id && p.team.some(member => member.id === currentUser.id));
+  // --- FILTERING LOGIC (ORGANIZATION AWARE) ---
+  const activeOrgId = organization?.id;
+
+  const displayedProjects = projects.filter(p => {
+      // 1. If Org is selected, show projects belonging to that Org
+      if (activeOrgId) {
+          return p.orgId === activeOrgId;
+      }
+      // 2. If Personal Workspace (no Org selected), show projects where user is owner AND no orgId is set
+      //    OR projects where they are explicitly in the team (legacy shared projects) AND no orgId
+      return (!p.orgId && (p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id)));
+  });
+
+  // Split into "My/Org Projects" vs "Shared with Me" is less relevant in Org view, 
+  // but for Personal view we might still want to separate own vs shared.
+  // For Org view, everything is "Team Projects".
+  
+  const sectionTitle = activeOrgId 
+    ? (organization?.name || 'Organization') + ' Projects' 
+    : t('dash.my_projects');
 
   // PERMISSION CHECKS
-  const isOwner = (project: Project) => project.ownerId === currentUser.id;
+  const isOwner = (project: Project) => project.ownerId === currentUser.id || (activeOrgId && project.orgId === activeOrgId);
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +94,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
         updatedAt: 'Just now',
         team: [currentUser],
         ownerId: currentUser.id,
+        orgId: activeOrgId, // Bind to current Org
         assets: [],
         isLocked: false
       };
@@ -164,22 +187,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       setIsDeleting(null);
   };
 
-  const renderProjectGrid = (projectList: Project[], title: string, showEmptyMessage = false) => {
-      if (projectList.length === 0 && !showEmptyMessage) return null;
-
+  const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode) => {
       return (
           <div className="mb-8">
               <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4">
+                  {icon}
                   {title}
                   <span className="text-xs font-normal text-zinc-600 dark:text-zinc-500 bg-zinc-200/50 dark:bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-800">
                       {projectList.length}
                   </span>
               </h2>
               
-              {projectList.length === 0 && showEmptyMessage ? (
+              {projectList.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-[20vh] text-zinc-500 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-900/30">
                         <Lock size={32} className="mb-2 opacity-50" />
                         <h3 className="text-base font-medium text-zinc-400">{t('dash.no_projects')}</h3>
+                        {activeOrgId && <p className="text-xs text-zinc-500 mt-1">Switch to Personal Workspace to see your private projects.</p>}
                  </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -243,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
                             <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
                                 <div className="flex -space-x-2">
-                                    {project.team.slice(0, 4).map((member) => (
+                                    {project.team && project.team.slice(0, 4).map((member) => (
                                         <img 
                                         key={member.id} 
                                         src={member.avatar} 
@@ -252,7 +275,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                                         className="w-6 h-6 rounded-full border border-white dark:border-zinc-900 object-cover"
                                         />
                                     ))}
-                                    {project.team.length > 4 && (
+                                    {project.team && project.team.length > 4 && (
                                         <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-white dark:border-zinc-900 flex items-center justify-center text-[9px] text-zinc-500 dark:text-zinc-400 font-medium">
                                         +{project.team.length - 4}
                                         </div>
@@ -310,7 +333,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   return (
     <>
       <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight hidden lg:block">{t('nav.dashboard')}</h2>
+            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight hidden lg:block">
+                {activeOrgId ? (
+                    <span className="flex items-center gap-2">
+                        <Building2 size={24} className="text-indigo-600 dark:text-indigo-400" />
+                        {organization.name}
+                    </span>
+                ) : (
+                    t('nav.dashboard')
+                )}
+            </h2>
              
              {/* Spacer for alignment on mobile where header controls are */}
             <div className="lg:hidden"></div>
@@ -326,7 +358,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
             )}
       </div>
 
-      {myProjects.length === 0 && sharedProjects.length === 0 && isGuest && (
+      {displayedProjects.length === 0 && isGuest && !activeOrgId && (
              <div className="flex flex-col items-center justify-center h-[30vh] text-zinc-500 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-900/30">
                 <Lock size={48} className="mb-4 opacity-50" />
                 <h3 className="text-lg font-bold text-zinc-700 dark:text-zinc-300">{t('dash.no_projects')}</h3>
@@ -336,8 +368,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
              </div>
       )}
 
-      {renderProjectGrid(myProjects, t('dash.my_projects'))}
-      {renderProjectGrid(sharedProjects, t('dash.shared_projects'))}
+      {renderProjectGrid(
+          displayedProjects, 
+          sectionTitle, 
+          activeOrgId ? <Building2 size={18} className="text-indigo-500"/> : <UserIcon size={18} className="text-indigo-500"/>
+      )}
       
       {/* UPSELL BLOCK */}
       <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
@@ -398,6 +433,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
             
             <form onSubmit={handleCreateProject} className="p-6">
               <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6">{t('dash.new_project')}</h2>
+              
+              {activeOrgId && (
+                  <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 rounded-lg flex items-center gap-2 text-xs text-indigo-700 dark:text-indigo-300">
+                      <Building2 size={16} />
+                      Creating in <strong>{organization.name}</strong>
+                  </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.name')}</label>

@@ -65,7 +65,8 @@ export interface Project {
   createdAt: number; // Timestamp for 7-day expiration logic
   updatedAt: string;
   assets: ProjectAsset[];
-  team: User[];
+  team: User[]; // Deprecated in favor of orgId, but kept for legacy/guest support
   ownerId?: string;
+  orgId?: string; // NEW: Clerk Organization ID
   isLocked?: boolean; // Project-level lock
 }

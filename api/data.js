@@ -1,6 +1,6 @@
 
 import { sql } from '@vercel/postgres';
-import { verifyUser } from './_auth.js';
+import { verifyUser, getClerkClient } from './_auth.js';
 
 // Helper to identify fatal DB connection errors
 const isDbConnectionError = (err) => {
@@ -46,19 +46,60 @@ export default async function handler(req, res) {
       // GET: Retrieve Projects
       if (req.method === 'GET') {
         try {
-          const { rows } = await sql`
-            SELECT data FROM projects 
-            WHERE owner_id = ${user.id} 
-            OR (
-                jsonb_typeof(data->'team') = 'array' 
-                AND EXISTS (
-                    SELECT 1 
-                    FROM jsonb_array_elements(data->'team') AS member 
-                    WHERE member->>'id' = ${user.id}
-                )
-            );
-          `;
-          const projects = rows.map(r => r.data);
+          // 1. If user is Clerk verified, fetch their Organization Memberships
+          let orgIds = [];
+          if (user.isVerified && user.userId) {
+              try {
+                  const clerk = getClerkClient();
+                  const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
+                  orgIds = memberships.data.map(m => m.organization.id);
+              } catch (e) {
+                  console.warn("Failed to fetch org memberships", e.message);
+              }
+          }
+
+          // 2. Query projects
+          // Logic: 
+          // - Owned by user (owner_id)
+          // - OR Belong to an Org the user is member of (data->>'orgId' in orgIds)
+          // - OR Legacy team array access (data->'team' contains user.id)
+          
+          let query;
+          
+          if (orgIds.length > 0) {
+              // Use ANY for array matching in Postgres
+              const { rows } = await sql`
+                SELECT data FROM projects 
+                WHERE owner_id = ${user.id} 
+                OR data->>'orgId' = ANY(${orgIds})
+                OR (
+                    jsonb_typeof(data->'team') = 'array' 
+                    AND EXISTS (
+                        SELECT 1 
+                        FROM jsonb_array_elements(data->'team') AS member 
+                        WHERE member->>'id' = ${user.id}
+                    )
+                );
+              `;
+              query = rows;
+          } else {
+              // Simple query without orgs
+              const { rows } = await sql`
+                SELECT data FROM projects 
+                WHERE owner_id = ${user.id} 
+                OR (
+                    jsonb_typeof(data->'team') = 'array' 
+                    AND EXISTS (
+                        SELECT 1 
+                        FROM jsonb_array_elements(data->'team') AS member 
+                        WHERE member->>'id' = ${user.id}
+                    )
+                );
+              `;
+              query = rows;
+          }
+
+          const projects = query.map(r => r.data);
           return res.status(200).json(projects);
 
         } catch (dbError) {
@@ -76,8 +117,6 @@ export default async function handler(req, res) {
       
       // POST: Sync Projects (Upsert)
       if (req.method === 'POST') {
-        // Allow write if verified user OR if guest (basic guest write permission for their own data context usually handled by frontend logic, strictly blocked here if needed)
-        // For SmoTree, Guests need to write (join projects), so we allow if user exists.
         
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') {
@@ -88,13 +127,27 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: "Expected array of projects" });
         }
 
+        // Fetch Orgs again for Write permission check (security)
+        let orgIds = [];
+        if (user.isVerified && user.userId) {
+            try {
+                const clerk = getClerkClient();
+                const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
+                orgIds = memberships.data.map(m => m.organization.id);
+            } catch (e) {
+                console.warn("Failed to fetch org memberships for write", e.message);
+            }
+        }
+
         for (const project of projectsToSync) {
             if (!project.id) continue;
 
+            // Security: Can write if Owner OR Team Member OR Org Member
             const isOwner = project.ownerId === user.id;
             const isTeam = project.team && Array.isArray(project.team) && project.team.some(m => m.id === user.id);
+            const isOrgMember = project.orgId && orgIds.includes(project.orgId);
             
-            if (isOwner || isTeam) {
+            if (isOwner || isTeam || isOrgMember) {
                 const projectJson = JSON.stringify(project);
                 
                 try {
@@ -121,6 +174,7 @@ export default async function handler(req, res) {
                         console.warn("Table missing, attempting creation...");
                         try {
                             await ensureProjectsTable();
+                            // Retry insert
                             await sql`
                                 INSERT INTO projects (id, owner_id, data, updated_at, created_at)
                                 VALUES (

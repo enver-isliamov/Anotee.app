@@ -5,6 +5,7 @@ import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { ThemeToggle } from './ThemeToggle';
 import { User } from '../types';
+import { OrganizationSwitcher } from '@clerk/clerk-react';
 
 interface AppHeaderProps {
   currentUser: User | null;
@@ -91,13 +92,32 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             
             {/* Right Side */}
             <div className="flex items-center gap-3 md:gap-5">
+                
+                {/* Organization Switcher */}
+                {currentUser && !hideNav && (
+                    <div className="hidden md:block">
+                        <OrganizationSwitcher 
+                            hidePersonal={false}
+                            afterCreateOrganizationUrl="#"
+                            appearance={{
+                                elements: {
+                                    rootBox: "flex items-center",
+                                    organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-medium text-zinc-700 dark:text-zinc-200 bg-transparent",
+                                    organizationPreviewTextContainer: "hidden lg:block",
+                                    organizationPreviewAvatarContainer: "shrink-0",
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+
                 {/* User Profile Chip (If Logged In) */}
                 {currentUser && (
                     <div 
                         onClick={() => onNavigate('PROFILE')}
                         className="hidden md:flex items-center gap-3 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 py-1.5 px-2 rounded-lg transition-colors group"
                     >
-                        <div className="text-right">
+                        <div className="text-right hidden lg:block">
                             <div className="text-xs font-semibold text-zinc-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{currentUser.name}</div>
                             <div className="text-[10px] text-zinc-500">{currentUser.role}</div>
                         </div>
@@ -118,7 +138,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <ThemeToggle />
                 <LanguageSelector />
 
-                {/* Mobile Menu Toggle - Hide if nav is hidden (e.g. invite mode) AND user is logged out, but usually we want menu for Theme/Lang */}
+                {/* Mobile Menu Toggle */}
                 {!hideNav && (
                     <button 
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -152,16 +172,20 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     );
                 })}
                 
-                {!currentUser && (
-                    <button 
-                        onClick={() => {
-                            setIsMobileMenuOpen(false);
-                            onNavigate('LIVE_DEMO');
-                        }}
-                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
-                    >
-                        <PlayCircle size={16} /> {t('nav.demo')}
-                    </button>
+                {currentUser && (
+                    <div className="px-4 py-3">
+                        <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Organization</div>
+                        <OrganizationSwitcher 
+                            hidePersonal={false}
+                            afterCreateOrganizationUrl="#"
+                            appearance={{
+                                elements: {
+                                    rootBox: "w-full",
+                                    organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900",
+                                }
+                            }}
+                        />
+                    </div>
                 )}
 
                 <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>
