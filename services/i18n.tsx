@@ -672,9 +672,8 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+// 1. Pure Provider (No Clerk Dependency)
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isSignedIn } = useUser();
-
   const [language, setLanguage] = useState<Language>(() => {
     // 1. LocalStorage
     const saved = localStorage.getItem('smotree_lang');
@@ -689,45 +688,10 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return 'en';
   });
 
-  // Sync from Cloud
-  useEffect(() => {
-      if (isSignedIn && user) {
-          const cloudLang = user.unsafeMetadata?.settings as any;
-          if (cloudLang?.language && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(cloudLang.language)) {
-              if (cloudLang.language !== language) {
-                  setLanguage(cloudLang.language as Language);
-              }
-          }
-      }
-  }, [isSignedIn, user]);
-
-  // Save to Cloud & Local
+  // Save to Local
   useEffect(() => {
     localStorage.setItem('smotree_lang', language);
-    
-    if (isSignedIn && user) {
-        // Debounce or just fire? Firing is okay for language change events (rare)
-        const updateCloud = async () => {
-            const currentCloudLang = (user.unsafeMetadata?.settings as any)?.language;
-            if (currentCloudLang !== language) {
-                try {
-                    await user.update({
-                        unsafeMetadata: {
-                            ...user.unsafeMetadata,
-                            settings: {
-                                ...(user.unsafeMetadata.settings as any),
-                                language: language
-                            }
-                        }
-                    });
-                } catch(e) {
-                    console.error("Cloud sync failed for lang", e);
-                }
-            }
-        };
-        updateCloud();
-    }
-  }, [language, isSignedIn, user]);
+  }, [language]);
 
   const t = (key: string) => t_fallback(language, key);
 
@@ -736,6 +700,51 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       {children}
     </LanguageContext.Provider>
   );
+};
+
+// 2. Cloud Sync Component (Render inside ClerkProvider)
+export const LanguageCloudSync: React.FC = () => {
+    const { user, isSignedIn } = useUser();
+    const { language, setLanguage } = useLanguage();
+
+    // Sync from Cloud
+    useEffect(() => {
+        if (isSignedIn && user) {
+            const cloudLang = user.unsafeMetadata?.settings as any;
+            if (cloudLang?.language && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(cloudLang.language)) {
+                if (cloudLang.language !== language) {
+                    setLanguage(cloudLang.language as Language);
+                }
+            }
+        }
+    }, [isSignedIn, user, setLanguage]); // Added setLanguage to deps
+
+    // Save to Cloud
+    useEffect(() => {
+        if (isSignedIn && user) {
+            const updateCloud = async () => {
+                const currentCloudLang = (user.unsafeMetadata?.settings as any)?.language;
+                if (currentCloudLang !== language) {
+                    try {
+                        await user.update({
+                            unsafeMetadata: {
+                                ...user.unsafeMetadata,
+                                settings: {
+                                    ...(user.unsafeMetadata.settings as any),
+                                    language: language
+                                }
+                            }
+                        });
+                    } catch(e) {
+                        console.error("Cloud sync failed for lang", e);
+                    }
+                }
+            };
+            updateCloud();
+        }
+    }, [language, isSignedIn, user]);
+
+    return null;
 };
 
 export const useLanguage = () => {

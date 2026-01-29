@@ -7,13 +7,13 @@ type Theme = 'light' | 'dark';
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+// 1. Pure Provider (No Clerk Dependency)
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isSignedIn } = useUser();
-  
   const [theme, setTheme] = useState<Theme>(() => {
     // 1. Try localStorage first for instant load
     const saved = localStorage.getItem('smotree_theme');
@@ -21,18 +21,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 2. Default
     return 'dark'; 
   });
-
-  // Sync from Cloud (Clerk) on load
-  useEffect(() => {
-      if (isSignedIn && user) {
-          const cloudTheme = user.unsafeMetadata?.settings as any;
-          if (cloudTheme?.theme && (cloudTheme.theme === 'light' || cloudTheme.theme === 'dark')) {
-              if (cloudTheme.theme !== theme) {
-                  setTheme(cloudTheme.theme);
-              }
-          }
-      }
-  }, [isSignedIn, user]);
 
   // Apply to DOM
   useEffect(() => {
@@ -45,33 +33,62 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('smotree_theme', theme);
   }, [theme]);
 
-  const toggleTheme = async () => {
+  const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
-    
-    // Sync to Cloud
-    if (isSignedIn && user) {
-        try {
-            await user.update({
-                unsafeMetadata: {
-                    ...user.unsafeMetadata,
-                    settings: {
-                        ...(user.unsafeMetadata.settings as any),
-                        theme: newTheme
-                    }
-                }
-            });
-        } catch (e) {
-            console.error("Failed to sync theme to cloud", e);
-        }
-    }
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
+};
+
+// 2. Cloud Sync Component (Must be rendered inside ClerkProvider)
+export const ThemeCloudSync: React.FC = () => {
+    const { user, isSignedIn } = useUser();
+    const { theme, setTheme } = useTheme();
+
+    // Sync from Cloud (Clerk) on load
+    useEffect(() => {
+        if (isSignedIn && user) {
+            const cloudTheme = user.unsafeMetadata?.settings as any;
+            if (cloudTheme?.theme && (cloudTheme.theme === 'light' || cloudTheme.theme === 'dark')) {
+                if (cloudTheme.theme !== theme) {
+                    setTheme(cloudTheme.theme);
+                }
+            }
+        }
+    }, [isSignedIn, user, setTheme]); // Added setTheme to deps, loop safe if setState is stable
+
+    // Sync to Cloud on change
+    useEffect(() => {
+        if (isSignedIn && user) {
+            const updateCloud = async () => {
+                const currentCloudTheme = (user.unsafeMetadata?.settings as any)?.theme;
+                if (currentCloudTheme !== theme) {
+                    try {
+                        await user.update({
+                            unsafeMetadata: {
+                                ...user.unsafeMetadata,
+                                settings: {
+                                    ...(user.unsafeMetadata.settings as any),
+                                    theme: theme
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Failed to sync theme to cloud", e);
+                    }
+                }
+            };
+            // Debounce could be added here if rapid toggling is expected
+            updateCloud();
+        }
+    }, [theme, isSignedIn, user]);
+
+    return null; // Invisible component
 };
 
 export const useTheme = () => {

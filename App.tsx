@@ -10,8 +10,8 @@ import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, UserRole } from './types';
 import { generateId } from './services/utils';
-import { LanguageProvider } from './services/i18n';
-import { ThemeProvider } from './services/theme';
+import { LanguageProvider, LanguageCloudSync } from './services/i18n';
+import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
@@ -389,14 +389,18 @@ const ClerkAuthWrapper = () => {
     const { getToken } = useAuth();
     
     return (
-        <AppLayout 
-            clerkUser={user} 
-            isLoaded={isLoaded} 
-            isSignedIn={isSignedIn || false} 
-            getToken={getToken} 
-            signOut={signOut}
-            authMode="clerk"
-        />
+        <>
+            <ThemeCloudSync />
+            <LanguageCloudSync />
+            <AppLayout 
+                clerkUser={user} 
+                isLoaded={isLoaded} 
+                isSignedIn={isSignedIn || false} 
+                getToken={getToken} 
+                signOut={signOut}
+                authMode="clerk"
+            />
+        </>
     );
 };
 
