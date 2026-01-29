@@ -22,6 +22,7 @@ interface ProjectViewProps {
 }
 
 // Helper to generate a thumbnail from a video file client-side
+// OPTIMIZED: Reduced dimensions and quality to keep payload small for DB sync
 const generateVideoThumbnail = (file: File): Promise<string> => {
   return new Promise((resolve) => {
     const video = document.createElement('video');
@@ -42,13 +43,15 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
     video.onseeked = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = 480;
-        canvas.height = 270;
+        // Reduced from 480 to 320 to save DB space (base64 string length)
+        canvas.width = 320;
+        canvas.height = 180;
         
         const ctx = canvas.getContext('2d');
         if (ctx) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            // Reduced quality from 0.7 to 0.5
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
             resolve(dataUrl);
         } else {
             resolve(fallback);
@@ -193,8 +196,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 
                 googleDriveId = result.id;
                 storageType = 'drive';
-                assetUrl = ''; // Drive uses ID
-                finalFileName = niceName; // Store the nice name we used!
+                // Important: Keep assetUrl empty for Drive files, player handles ID
+                assetUrl = ''; 
+                finalFileName = niceName; 
             } catch (driveErr) {
                 console.error("Drive upload failed", driveErr);
                 notify("Drive upload failed. Falling back to local.", "error");

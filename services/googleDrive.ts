@@ -207,9 +207,11 @@ export const GoogleDriveService = {
              if (xhr.status === 200 || xhr.status === 201) {
                  try {
                      const response = JSON.parse(xhr.responseText);
-                     // Set public permission
+                     
+                     // --- IMPORTANT: Set Public Permission ---
+                     // Required for <video> playback via 'drive.google.com/uc' without auth headers
                      try {
-                        await fetch(`https://www.googleapis.com/drive/v3/files/${response.id}/permissions`, {
+                        const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${response.id}/permissions`, {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Bearer ${accessToken}`,
@@ -217,9 +219,11 @@ export const GoogleDriveService = {
                             },
                             body: JSON.stringify({ role: 'reader', type: 'anyone' })
                         });
+                        if (!permRes.ok) console.warn("Permission setting warning:", await permRes.text());
                      } catch (e) {
                          console.warn("Failed to set public permission", e);
                      }
+                     
                      resolve(response);
                  } catch (e) {
                      reject(new Error("Invalid JSON response from Drive"));
@@ -236,9 +240,15 @@ export const GoogleDriveService = {
   getVideoStreamUrl: (fileId: string): string => {
       const env = (import.meta as any).env || {};
       const apiKey = env.VITE_GOOGLE_API_KEY;
+      
+      // If we have an API Key, use the official API method
       if (apiKey) {
          return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
       }
-      return `https://drive.google.com/uc?export=download&id=${fileId}`;
+      
+      // Fallback: The 'uc' export link.
+      // &confirm=t is CRITICAL to bypass the "Google cannot scan for viruses" interstitial page 
+      // for large files, which breaks <video> tags.
+      return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`;
   }
 };
