@@ -25,7 +25,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
 
   // Function to check backend status with optional retry
   const checkBackend = useCallback(async (retries = 0) => {
-      if (!user || isGuest) return;
+      if (!user || isGuest) return false;
       
       try {
           const token = await getToken();
@@ -39,7 +39,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
               return true; // Success
           } else {
               if (retries > 0) {
-                  console.warn(`Profile: Backend check failed, retrying... (${retries} left)`);
+                  console.log(`Profile: Backend check pending... (${retries} retries left)`);
+                  setBackendHasToken(null); // Keep in loading state
                   await new Promise(r => setTimeout(r, 2000)); // Wait 2s
                   return checkBackend(retries - 1);
               }
@@ -54,15 +55,35 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       }
   }, [user, isGuest, getToken]);
 
-  // Initial Check
+  // Initial Check - Handles Page Reloads after OAuth
   useEffect(() => {
-      checkBackend();
+      // Check if we are returning from an OAuth flow
+      const isSyncing = sessionStorage.getItem('smotree_drive_sync') === 'pending';
+      
+      // If syncing, be aggressive (10 retries = ~20s). Otherwise, standard single check.
+      const retries = isSyncing ? 10 : 0; 
+      
+      console.log(`Profile: Mounting. Sync mode: ${isSyncing}. Retries: ${retries}`);
+
+      checkBackend(retries).then((success) => {
+          if (success && isSyncing) {
+              sessionStorage.removeItem('smotree_drive_sync');
+              console.log("Profile: Sync successful, flag cleared.");
+          } else if (!success && isSyncing) {
+              // Optionally keep flag to try again next mount, or clear it to stop nagging
+              console.warn("Profile: Sync failed after retries.");
+              sessionStorage.removeItem('smotree_drive_sync');
+          }
+      });
   }, [checkBackend]);
 
   const handleConnectDrive = async () => {
       if (!user) return;
       setIsProcessing(true);
-      setBackendHasToken(null); // Set to loading UI
+      setBackendHasToken(null); 
+      
+      // Set flag so if the page reloads (redirect), we know to retry aggressively on mount
+      sessionStorage.setItem('smotree_drive_sync', 'pending');
       
       try {
           const googleAccount = user.externalAccounts.find(
@@ -83,18 +104,21 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
               });
           }
 
-          // CRITICAL FIX: Clerk Backend API has latency. 
-          // We must wait for the token to propagate to the server before checking.
-          console.log("Profile: OAuth finished, waiting for propagation...");
-          await new Promise(r => setTimeout(r, 2500)); 
+          // IF we are here, it means the auth happened in a popup (no reload) 
+          // OR it was super fast. We still perform the wait/retry logic manually.
+          console.log("Profile: OAuth finished (Client-side), waiting for propagation...");
+          await new Promise(r => setTimeout(r, 2000)); 
           
-          // Check with retries (3 attempts)
-          await checkBackend(3);
+          const success = await checkBackend(5);
+          if (success) {
+              sessionStorage.removeItem('smotree_drive_sync');
+          }
 
       } catch (e) {
           console.error("Failed to authorize Drive scope", e);
           alert("Failed to connect Google Drive. Please check popup blocker or try again.");
           setBackendHasToken(false);
+          sessionStorage.removeItem('smotree_drive_sync');
       } finally {
           setIsProcessing(false);
       }
@@ -159,7 +183,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   };
 
   return (
-        <div className="max-w-4xl mx-auto space-y-8 py-8">
+        <div className="max-w-4xl mx-auto space-y-8 py-8 animate-in fade-in duration-500">
             <div className="flex justify-between items-center">
                  <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">{t('profile.title')}</h2>
                  <button onClick={onLogout} className="text-zinc-500 hover:text-red-400 flex items-center gap-2 text-sm px-4 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-medium">
