@@ -1,11 +1,10 @@
 
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, Crown, Database, Check, AlertCircle } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
-import { UserProfile, useClerk, useAuth } from '@clerk/clerk-react';
-import { api } from '../services/apiClient';
+import { UserProfile, useAuth } from '@clerk/clerk-react';
 
 interface ProfileProps {
   currentUser: User;
@@ -17,10 +16,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const { getToken } = useAuth();
   
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
   const [migratedCount, setMigratedCount] = useState(0);
 
   const handleMigrate = async () => {
       setMigrationStatus('loading');
+      setErrorMessage('');
       try {
           const token = await getToken();
           // Call the migration endpoint
@@ -31,13 +32,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
               }
           });
 
-          if (!res.ok) throw new Error("Migration failed");
-          
           const data = await res.json();
+
+          if (!res.ok) {
+              throw new Error(data.details || data.error || "Migration failed");
+          }
+          
           setMigratedCount(data.updatedProjects || 0);
           setMigrationStatus('success');
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
+          setErrorMessage(e.message);
           setMigrationStatus('error');
       }
   };
@@ -93,8 +98,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                                 <Check size={16} /> Optimization Complete ({migratedCount} projects scanned)
                             </div>
                         ) : migrationStatus === 'error' ? (
-                            <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm font-bold bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
-                                <AlertCircle size={16} /> Error during migration. Try again.
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm font-bold bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                                    <AlertCircle size={16} /> Error: {errorMessage || "Unknown error"}
+                                </div>
+                                <button onClick={handleMigrate} className="text-xs text-indigo-500 hover:underline text-left mt-1">Try again</button>
                             </div>
                         ) : (
                             <button 

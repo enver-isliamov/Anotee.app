@@ -16,10 +16,24 @@ export default async function handler(req, res) {
 
     console.log(`🚀 Starting Migration for User: ${user.email} (${user.id})`);
 
-    // 2. Fetch ALL projects to scan for legacy data
-    // In V1 this is acceptable. For V2 we'd use WHERE clauses, but legacy data is unstructured.
+    // 2. SELF-HEALING: Ensure Schema Exists
+    // This fixes the 500 error if the table or column doesn't exist yet.
+    try {
+        await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
+        await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
+        await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
+    } catch (schemaError) {
+        console.error("Schema repair failed:", schemaError);
+        // Continue anyway, maybe it exists
+    }
+
+    // 3. Fetch ALL projects
     const { rows } = await sql`SELECT id, data FROM projects;`;
     
+    if (rows.length === 0) {
+        return res.status(200).json({ success: true, message: "Database is empty. Nothing to migrate.", updatedProjects: 0 });
+    }
+
     let updatedCount = 0;
     let claimedCount = 0;
 
@@ -27,15 +41,10 @@ export default async function handler(req, res) {
         let project = row.data;
         let needsUpdate = false;
 
-        // A. Backfill org_id column (Optimization)
-        // If the JSON has orgId but the DB column is likely empty (handled by query update later), 
-        // we prepare the data.
-        // Actually, we just ensure the JSON is consistent.
-        
-        // B. Claim Legacy Projects (Fix User IDs)
+        // A. Claim Legacy Projects (Fix User IDs)
         // If the user's email exists in the team but the ID is different (legacy ID), update it.
         if (project.team && Array.isArray(project.team)) {
-            const memberIndex = project.team.findIndex(m => m.email === user.email || m.name === user.name); // Email match is safer
+            const memberIndex = project.team.findIndex(m => m.email === user.email || m.name === user.name); 
             
             if (memberIndex !== -1) {
                 const member = project.team[memberIndex];
@@ -49,40 +58,33 @@ export default async function handler(req, res) {
             }
         }
 
-        // C. Update Comments ownership
-        if (project.assets) {
-            project.assets.forEach(asset => {
-                asset.versions.forEach(version => {
-                    if (version.comments) {
-                        version.comments.forEach(comment => {
-                            // If we knew the old ID, we'd replace it. 
-                            // Since we don't strictly know it without mapping, we skip blindly replacing comments
-                            // unless we matched the team member above.
-                            // For V1, we will skip comment migration to avoid theft, 
-                            // assuming key users are Owners/Team members first.
-                        });
-                    }
-                });
-            });
+        // B. Ensure Owner ID is consistent
+        // If I am the creator in the JSON data, but my ID changed
+        if (project.ownerId && project.team.some(m => m.id === user.id && m.role === 'Admin')) {
+             // Logic to claim ownership if previously unassigned or matched by name could go here
         }
 
-        // D. Save to DB (Update JSON + Columns)
-        if (needsUpdate || project.orgId) {
-            // Even if no team change, we might want to backfill org_id column if it exists in JSON
-            const orgId = project.orgId || null;
-            
+        // C. Save to DB (Update JSON + Columns)
+        // We update if we changed the JSON (needsUpdate) OR if we need to backfill the org_id column
+        // Check if org_id in DB needs backfill from JSON
+        const jsonOrgId = project.orgId || null;
+        
+        // Always run update to ensure org_id column is populated from JSON data
+        try {
             await sql`
                 UPDATE projects 
                 SET data = ${JSON.stringify(project)}::jsonb, 
-                    org_id = ${orgId},
+                    org_id = ${jsonOrgId},
                     updated_at = ${Date.now()}
                 WHERE id = ${project.id};
             `;
             updatedCount++;
+        } catch (updateErr) {
+            console.error(`Failed to update project ${project.id}`, updateErr);
         }
     }
 
-    console.log(`✅ Migration complete. Updated ${updatedCount} projects. Claimed ${claimedCount} memberships.`);
+    console.log(`✅ Migration complete. Updated ${updatedCount} projects.`);
 
     return res.status(200).json({ 
         success: true, 
@@ -92,7 +94,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Migration error:", error);
-    return res.status(500).json({ error: error.message });
+    console.error("Migration Fatal Error:", error);
+    return res.status(500).json({ 
+        error: "Internal Server Error", 
+        details: error.message 
+    });
   }
 }
