@@ -99,7 +99,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
-  const isRemoteUpdate = useRef(false);
+  // Track the last local modification to prevent server overwrites
+  const lastLocalUpdateRef = useRef<number>(0);
 
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
@@ -167,14 +168,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // --- GLOBAL UPLOAD HANDLER ---
   const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
       const taskId = generateId();
-      const project = projects.find(p => p.id === projectId);
       
-      if (!project || !currentUser) return;
-
+      // Get FRESH project reference from current state or API, but we use state here for speed
+      // Using functional state access inside setProjects is safer for consistency
+      
       const newTask: UploadTask = {
           id: taskId,
           file,
-          projectName: project.name,
+          projectName: 'Uploading...', // Placeholder
           progress: 0,
           status: 'uploading'
       };
@@ -186,11 +187,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       };
 
       try {
+          // Block server polling to prevent overwriting
+          lastLocalUpdateRef.current = Date.now() + 60000; // Block for 1 min or until done
+
           // 1. Generate Thumbnail
           updateTask({ status: 'processing' });
           const thumbnailDataUrl = await generateVideoThumbnail(file);
           const assetTitle = file.name.replace(/\.[^/.]+$/, "");
           
+          // Find Project Name for UI
+          const project = projects.find(p => p.id === projectId);
+          if (project) updateTask({ projectName: project.name });
+
           updateTask({ status: 'uploading' });
 
           let assetUrl = '';
@@ -201,7 +209,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
           // 2. Upload Process
           if (isMockMode) {
-              // Simulating slow upload
               for (let i = 0; i <= 100; i+=10) {
                   updateTask({ progress: i });
                   await new Promise(r => setTimeout(r, 200));
@@ -213,17 +220,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   const isDriveReady = GoogleDriveService.isAuthenticated();
                   if (!isDriveReady) throw new Error("Google Drive not connected");
 
+                  // Re-fetch project name if needed to ensure folders
+                  const safeProjectName = project ? project.name : "Unknown Project";
+
                   const appFolder = await GoogleDriveService.ensureAppFolder();
-                  const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-                  
-                  // For versioning, we might want a subfolder per asset, but simpler for now
-                  const assetFolder = targetAssetId 
-                        ? await GoogleDriveService.ensureFolder(assetTitle, projectFolder) // Use existing logic if cleaner
-                        : await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
+                  const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+                  const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
 
                   const ext = file.name.split('.').pop();
                   const niceName = targetAssetId 
-                        ? `${assetTitle}_vNEW.${ext}` // Could improve version logic
+                        ? `${assetTitle}_vNEW.${ext}`
                         : `${assetTitle}_v1.${ext}`;
 
                   const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateTask({ progress: p }), niceName);
@@ -235,42 +241,44 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   const newBlob = await upload(file.name, file, {
                       access: 'public',
                       handleUploadUrl: '/api/upload',
-                      clientPayload: JSON.stringify({ token: token, user: currentUser.id }),
+                      clientPayload: JSON.stringify({ token: token, user: currentUser?.id || 'anon' }),
                       onUploadProgress: (p) => updateTask({ progress: Math.round((p.loaded / p.total) * 100) })
                   });
                   assetUrl = newBlob.url;
               }
           }
 
-          // 3. Construct Data Objects
-          const newVersion = {
-              id: generateId(),
-              versionNumber: 1, // Will be updated if appending
-              filename: finalFileName,
-              url: assetUrl,
-              storageType,
-              googleDriveId,
-              uploadedAt: 'Just now',
-              comments: [],
-              localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
-              localFileName: isMockMode ? file.name : undefined
-          };
-
-          // 4. Update Project State safely (using functional update to get fresh state)
+          // 3. Update State & DB
           setProjects(currentProjects => {
               const projIndex = currentProjects.findIndex(p => p.id === projectId);
               if (projIndex === -1) return currentProjects;
 
               const updatedProject = { ...currentProjects[projIndex] };
               
+              // 3.1 Construct New Version Object
+              const newVersion = {
+                  id: generateId(),
+                  versionNumber: 1, 
+                  filename: finalFileName,
+                  url: assetUrl,
+                  storageType,
+                  googleDriveId,
+                  uploadedAt: 'Just now',
+                  comments: [],
+                  localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
+                  localFileName: isMockMode ? file.name : undefined
+              };
+
+              // 3.2 Insert into Assets
               if (targetAssetId) {
                   // Adding Version
                   const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
                   if (assetIdx !== -1) {
                       const asset = { ...updatedProject.assets[assetIdx] };
                       newVersion.versionNumber = asset.versions.length + 1;
+                      
+                      // Fix name for non-mock drive uploads if needed
                       if (!isMockMode && useDrive) {
-                          // Simple version name fix for Drive if needed
                           newVersion.filename = `${asset.title}_v${newVersion.versionNumber}.${file.name.split('.').pop()}`;
                       }
                       
@@ -293,15 +301,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
               
               updatedProject.updatedAt = 'Just now';
               
-              // Trigger sync in background
-              forceSync([updatedProject]); // Assuming forceSync handles array of 1 properly, or pass full list if needed. 
-              // Better: forceSync needs full list usually, so let's refactor forceSync usage.
-              // Actually forceSync below takes a list.
-              
+              // 3.3 Trigger Sync (Outside logic, but inside closure scope we need the obj)
+              // We execute the API call safely here without blocking the UI render
+              setTimeout(() => {
+                  api.syncProjects([updatedProject], currentUser, null).catch(console.error);
+                  lastLocalUpdateRef.current = Date.now(); // Reset block to allow polling after a moment
+              }, 0);
+
               const newAllProjects = [...currentProjects];
               newAllProjects[projIndex] = updatedProject;
-              api.syncProjects([updatedProject], currentUser, null).catch(console.error);
-
+              
               return newAllProjects;
           });
 
@@ -312,6 +321,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           console.error("Upload failed", e);
           updateTask({ status: 'error', error: e.message || "Upload Failed" });
           notify("Upload failed", "error");
+          lastLocalUpdateRef.current = Date.now(); // Unblock polling
       }
   };
 
@@ -323,6 +333,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
       
+      // --- STABILITY FIX: Don't fetch if we just modified data locally ---
+      if (Date.now() - lastLocalUpdateRef.current < 2000) {
+          // console.log("Skipping poll due to recent local update");
+          return;
+      }
+
       let token: string | null = null;
       if (authMode === 'clerk') {
           try { token = await getToken(); } catch (e) {}
@@ -332,7 +348,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
          setIsSyncing(true);
          const data = await api.getProjects(userToUse, token);
          if (data && Array.isArray(data)) {
-            isRemoteUpdate.current = true;
+            // Merge strategy: Only update if server has newer data, or just replace
+            // For simplicity, we replace, but relying on `lastLocalUpdateRef` to prevent overwriting user actions
             setProjects(data);
          }
       } catch (e) {
@@ -344,6 +361,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
+      
+      // Update timestamp to prevent immediate overwrite by polling
+      lastLocalUpdateRef.current = Date.now();
+
       let token: string | null = null;
       if (authMode === 'clerk') try { token = await getToken(); } catch(e) {}
 
@@ -573,7 +594,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             notify={notify}
             restrictedAssetId={view.restrictedAssetId}
             isMockMode={isMockMode}
-            onUploadAsset={handleUploadAsset} // Pass the global upload handler
+            onUploadAsset={handleUploadAsset} 
           />
         )}
         {view.type === 'PLAYER' && currentProject && currentAsset && (
