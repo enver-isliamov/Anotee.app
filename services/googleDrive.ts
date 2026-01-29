@@ -132,7 +132,9 @@ export const GoogleDriveService = {
       });
       
       if (!createRes.ok) {
-          throw new Error(`Failed to create folder: ${createRes.statusText}`);
+          const errText = await createRes.text();
+          console.error("Drive Folder Create Error:", errText);
+          throw new Error(`Failed to create folder: ${createRes.status} ${createRes.statusText}`);
       }
       
       const createData = await createRes.json();
@@ -181,6 +183,8 @@ export const GoogleDriveService = {
      });
 
      if (!initResponse.ok) {
+         const errText = await initResponse.text();
+         console.error("Drive Upload Init Error:", errText);
          throw new Error(`Drive Init Failed: ${initResponse.status} ${initResponse.statusText}`);
      }
 

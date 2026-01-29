@@ -117,17 +117,30 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (isSignedIn && !isMockMode) {
         GoogleDriveService.setTokenProvider(async () => {
             try {
+                // This is the CRITICAL integration point
                 const clerkToken = await getToken();
-                if (!clerkToken) return null;
+                if (!clerkToken) {
+                    console.warn("⚠️ App: No Clerk Token available for Drive request");
+                    return null;
+                }
+                
                 const res = await fetch('/api/driveToken', {
                     headers: { 'Authorization': `Bearer ${clerkToken}` }
                 });
+                
                 if (res.ok) {
                     const data = await res.json();
+                    // Fire an event to notify components that token is ready
+                    window.dispatchEvent(new Event('drive-token-updated'));
                     return data.token; 
+                } else {
+                    console.error(`❌ App: Drive Token Fetch Failed. Status: ${res.status}`);
+                    const errText = await res.text();
+                    console.error("❌ App: Error Body:", errText);
+                    return null;
                 }
-                return null;
             } catch (e) {
+                console.error("❌ App: Network Error fetching drive token", e);
                 return null;
             }
         });
