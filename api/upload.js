@@ -14,17 +14,13 @@ export default async function handler(req, res) {
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         // 1. Auth Check using Clerk
+        // Guests are no longer supported, so if verifyUser returns a user, they are allowed.
         const user = await verifyUser(req);
         if (!user) {
              throw new Error("Unauthorized: Invalid Token");
         }
 
-        // 2. Role Check: Guests cannot upload
-        if (!user.isVerified) {
-            throw new Error("Forbidden: Guests cannot upload files. Please sign in with Google.");
-        }
-
-        // 3. Allow Upload
+        // 2. Allow Upload
         return {
           allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska'],
           tokenPayload: JSON.stringify({

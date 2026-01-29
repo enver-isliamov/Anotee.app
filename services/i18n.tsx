@@ -57,8 +57,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'auth.card.login': 'Account Login',
     'auth.card.desc_join': 'You\'ve been invited to collaborate.',
     'auth.card.desc_login': 'Manage your video projects.',
-    'auth.manual': 'Or as Guest',
-    'auth.placeholder.guest': 'Your Name (Guest)',
+    'auth.manual': 'Or manually',
+    'auth.placeholder.guest': 'Your Name',
     'auth.placeholder.admin': 'Admin Name',
     'auth.btn.join': 'Join',
     'auth.btn.login': 'Enter',
@@ -116,11 +116,11 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.team': 'Project Team',
     'pv.role.owner': 'Owner',
     'pv.role.creator': 'Creator',
-    'pv.role.guest': 'Guest',
+    'pv.role.guest': 'Viewer',
     'pv.share.title': 'Invite to Review',
-    'pv.share.desc': 'Share this link with your client or team. They will join as a Guest and can comment on this asset.',
+    'pv.share.desc': 'Share this link with your client or team. They can access the project instantly.',
     'pv.share.link': 'Review Link',
-    'pv.share.info': 'Guests cannot delete files or create new projects.',
+    'pv.share.info': 'Viewers cannot delete files or create new projects.',
     'pv.locked_banner': 'Project is locked. Editing and sharing are disabled.',
     'pv.remove_user': 'Remove User',
     'pv.remove_confirm': 'Are you sure you want to remove this user from the team?',
@@ -158,10 +158,10 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     // Upsell
     'upsell.title': 'Why Upgrade?',
     'upsell.subtitle': 'Support independent software and unlock professional workflows.',
-    'upsell.free.title': 'Guest / Free',
+    'upsell.free.title': 'Starter / Personal',
     'upsell.free.feat1': 'View & Comment',
-    'upsell.free.feat2': 'No Project Creation',
-    'upsell.free.feat3': 'No Export Tools',
+    'upsell.free.feat2': 'Personal Projects',
+    'upsell.free.feat3': 'Basic Tools',
     'upsell.founder.title': 'Founder Club',
     'upsell.founder.feat1': 'Unlimited Projects',
     'upsell.founder.feat2': 'DaVinci/Premiere Export',
@@ -174,7 +174,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.workflow.step1': 'Upload',
     'page.workflow.step1.desc': 'Drag & drop video files. We create instant proxies and thumbnails.',
     'page.workflow.step2': 'Invite',
-    'page.workflow.step2.desc': 'Send a link to your client or team. They join instantly as guests, no registration needed.',
+    'page.workflow.step2.desc': 'Send a link to your client or team. They join instantly via Clerk.',
     'page.workflow.step3': 'Review',
     'page.workflow.step3.desc': 'Frame-accurate commenting. Draw on screen (coming soon). Real-time sync.',
     'page.workflow.step4': 'Export',
@@ -304,8 +304,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'auth.card.login': 'Вход в аккаунт',
     'auth.card.desc_join': 'Вас пригласили к сотрудничеству.',
     'auth.card.desc_login': 'Управляйте своими видео проектами.',
-    'auth.manual': 'Или как гость',
-    'auth.placeholder.guest': 'Ваше Имя (Гость)',
+    'auth.manual': 'Или вручную',
+    'auth.placeholder.guest': 'Ваше Имя',
     'auth.placeholder.admin': 'Имя Админа',
     'auth.btn.join': 'Присоединиться',
     'auth.btn.login': 'Войти',
@@ -360,11 +360,11 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.team': 'Команда проекта',
     'pv.role.owner': 'Владелец',
     'pv.role.creator': 'Редактор',
-    'pv.role.guest': 'Гость',
+    'pv.role.guest': 'Наблюдатель',
     'pv.share.title': 'Пригласить на ревью',
-    'pv.share.desc': 'Отправьте эту ссылку клиенту. Они зайдут как Гость и смогут оставлять комментарии.',
+    'pv.share.desc': 'Отправьте эту ссылку клиенту. Они получат доступ к просмотру.',
     'pv.share.link': 'Ссылка для ревью',
-    'pv.share.info': 'Гости не могут удалять файлы или создавать проекты.',
+    'pv.share.info': 'Наблюдатели не могут удалять файлы или создавать проекты.',
     'pv.locked_banner': 'Проект заблокирован. Редактирование и шеринг отключены.',
     'pv.remove_user': 'Удалить участника',
     'pv.remove_confirm': 'Вы уверены, что хотите удалить пользователя из команды?',
@@ -427,10 +427,10 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     // Others
     'upsell.title': 'Почему стоит обновиться?',
     'upsell.subtitle': 'Поддержите независимую разработку и откройте профессиональные функции.',
-    'upsell.free.title': 'Гость / Free',
+    'upsell.free.title': 'Стартер / Личный',
     'upsell.free.feat1': 'Просмотр и комментарии',
-    'upsell.free.feat2': 'Нельзя создавать проекты',
-    'upsell.free.feat3': 'Нет экспорта монтажа',
+    'upsell.free.feat2': 'Личные проекты',
+    'upsell.free.feat3': 'Базовые инструменты',
     'upsell.founder.title': 'Клуб Основателей',
     'upsell.founder.feat1': 'Безлимит проектов',
     'upsell.founder.feat2': 'Экспорт в DaVinci/Premiere',
@@ -441,7 +441,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.workflow.step1': 'Загрузка',
     'page.workflow.step1.desc': 'Перетащите видео. Мы создадим прокси и превью мгновенно.',
     'page.workflow.step2': 'Приглашение',
-    'page.workflow.step2.desc': 'Отправьте ссылку клиенту. Они заходят как гости, регистрация не нужна.',
+    'page.workflow.step2.desc': 'Отправьте ссылку клиенту. Они заходят через Clerk, регистрация мгновенная.',
     'page.workflow.step3': 'Ревью',
     'page.workflow.step3.desc': 'Комментарии с точностью до кадра. Рисование (скоро). Синхронизация.',
     'page.workflow.step4': 'Экспорт',
@@ -542,6 +542,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.share.title': 'Invitar a Revisar',
     'pv.share.link': 'Enlace de Revisión',
     'land.integrations.title': 'Funciona con tu editor favorito',
+    'upsell.free.title': 'Inicial / Personal',
   },
   ja: {
     'app.name': 'SmoTree',
@@ -580,6 +581,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.share.title': 'レビューに招待',
     'pv.share.link': 'レビューリンク',
     'land.integrations.title': 'お気に入りのエディタと連携',
+    'upsell.free.title': 'スターター / 個人',
   },
   ko: {
     'app.name': 'SmoTree',
@@ -618,6 +620,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.share.title': '리뷰 초대',
     'pv.share.link': '리뷰 링크',
     'land.integrations.title': '즐겨 사용하는 편집기와 호환',
+    'upsell.free.title': '스타터 / 개인',
   },
   pt: {
     'app.name': 'SmoTree',
@@ -656,6 +659,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.share.title': 'Convidar para Revisão',
     'pv.share.link': 'Link de Revisão',
     'land.integrations.title': 'Funciona com seu editor favorito',
+    'upsell.free.title': 'Iniciante / Pessoal',
   }
 };
 
@@ -717,7 +721,7 @@ export const LanguageCloudSync: React.FC = () => {
                 }
             }
         }
-    }, [isSignedIn, user, setLanguage]); // Added setLanguage to deps
+    }, [isSignedIn, user, setLanguage]);
 
     // Save to Cloud
     useEffect(() => {
