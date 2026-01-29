@@ -22,16 +22,24 @@ export default async function handler(req, res) {
         // 2. Fetch OAuth Token from Clerk
         const clerk = getClerkClient();
         
-        // Request token for 'oauth_google'
-        // In Clerk v5, this returns a paginated response object: { data: [...], totalCount: ... }
-        const response = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
-        
-        // Handle both v5 (response.data) and older potential formats safely
-        const tokens = response.data || response || [];
+        let tokens = [];
+        try {
+            // First try standard ID
+            const response = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
+            tokens = response.data || response || [];
+        } catch(e) {
+            console.warn("Standard oauth_google failed, trying google...");
+            try {
+                // Fallback for some legacy setups
+                const response = await clerk.users.getUserOauthAccessToken(user.userId, 'google');
+                tokens = response.data || response || [];
+            } catch(e2) {
+                console.error("Both token fetch attempts failed");
+            }
+        }
 
         if (Array.isArray(tokens) && tokens.length > 0) {
             const tokenData = tokens[0];
-            // Check if token has the required scope (if exposed)
             const hasDriveScope = tokenData.scopes ? tokenData.scopes.includes('drive.file') : true;
             
             if (hasDriveScope) {
@@ -40,8 +48,7 @@ export default async function handler(req, res) {
             console.warn("⚠️ [DriveToken] Token found but might lack scope:", tokenData.scopes);
         }
 
-        // 3. Fallback: Detailed Debugging for Frontend
-        // If we are here, we have no token. Let's find out why.
+        // 3. Fallback
         const fullUser = await clerk.users.getUser(user.userId);
         const googleAccount = fullUser.externalAccounts.find(a => a.provider === 'google' || a.verification?.strategy === 'oauth_google');
 

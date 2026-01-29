@@ -134,9 +134,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     window.dispatchEvent(new Event('drive-token-updated'));
                     return data.token; 
                 } else {
-                    console.error(`❌ App: Drive Token Fetch Failed. Status: ${res.status}`);
-                    const errText = await res.text();
-                    console.error("❌ App: Error Body:", errText);
+                    // console.error(`❌ App: Drive Token Fetch Failed. Status: ${res.status}`);
                     return null;
                 }
             } catch (e) {
@@ -263,10 +261,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
               window.history.replaceState({}, '', url.toString());
           } else {
                notify("Failed to join project.", "error");
+               // CRITICAL FIX: Mark as processed even on failure to prevent infinite loops
+               processedInvites.current.add(projectId);
           }
       } catch (e) {
           console.error("Join flow error:", e);
           notify("Network error joining project.", "error");
+          processedInvites.current.add(projectId);
       } finally {
           setTimeout(() => { isJoiningFlow.current = false; }, 1000);
           await fetchCloudData(user);
