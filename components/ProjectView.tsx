@@ -33,14 +33,13 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
     // Fallback image in case of error
     const fallback = 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44c?w=600&q=80';
 
-    // Timeout safety: if video takes too long to load (codec issue), return fallback to prevent freezing
+    // Timeout safety
     const timeout = setTimeout(() => {
         URL.revokeObjectURL(video.src);
         resolve(fallback);
     }, 3000); 
 
     video.onloadedmetadata = () => {
-      // Seek to 1s or 20% of video to capture a meaningful frame
       const seekTime = Math.min(1.0, video.duration / 2);
       video.currentTime = seekTime;
     };
@@ -118,7 +117,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     };
     window.addEventListener('drive-token-updated', handleDriveUpdate);
     
-    // Initial check
     if (GoogleDriveService.isAuthenticated()) {
         setUseDriveStorage(true);
     }
@@ -138,14 +136,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       setUseDriveStorage(!useDriveStorage);
   };
 
-  // New Asset Upload
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       handleRealUpload(e.target.files[0]);
     }
   };
 
-  // New Version Upload
   const handleVersionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && uploadingVersionFor) {
         handleRealVersionUpload(e.target.files[0], uploadingVersionFor);
@@ -178,20 +174,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       } else {
         // Upload Logic
         if (useDriveStorage) {
-            // STRICT DRIVE MODE: Do not fallback if token is missing
             if (!isDriveReady) {
                 throw new Error("Google Drive disconnected. Please 'Repair Connection' in Profile.");
             }
 
             try {
                 notify("Preparing Drive...", "info");
-                // 1. Root -> Project
                 const appFolder = await GoogleDriveService.ensureAppFolder();
                 const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-                // 2. Project -> Asset
                 const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
                 
-                // 3. Rename File: AssetName_v1.ext
                 const ext = file.name.split('.').pop();
                 const niceName = `${assetTitle}_v1.${ext}`;
 
@@ -207,7 +199,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 if (driveErr.message.includes("Token") || driveErr.message.includes("404") || driveErr.message.includes("401")) {
                     throw new Error("Drive Auth Error: Please reconnect in Profile.");
                 }
-                throw driveErr; // Re-throw to stop process
+                throw driveErr; 
             }
         } else {
             // Vercel Blob
@@ -291,7 +283,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         let finalFileName = file.name;
         const token = localStorage.getItem('smotree_auth_token');
 
-         // MOCK MODE HANDLING
         if (isMockMode) {
              assetUrl = URL.createObjectURL(file);
              storageType = 'local';
@@ -394,7 +385,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
     try {
         if (!isMockMode) {
-            // 1. Delete from Drive if requested
             if (deleteFromDrive && isDriveReady) {
                 notify("Deleting files from Drive...", "info");
                 for (const v of asset.versions) {
@@ -404,7 +394,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 }
             }
 
-            // 2. Delete Vercel Blobs (always cleanup cloud storage if possible)
             const urlsToDelete: string[] = [];
             asset.versions.forEach(v => {
                 if (v.storageType === 'vercel' && v.url.startsWith('http')) {
@@ -417,7 +406,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             }
         }
 
-        // 3. Update State
         const updatedAssets = project.assets.filter(a => a.id !== asset.id);
         onUpdateProject({ ...project, assets: updatedAssets });
         notify(t('common.success'), "success");
@@ -569,7 +557,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50"
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center"
                     >
                         {isUploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14} />}
                         {isUploading ? `${uploadProgress}%` : t('pv.upload_asset')}

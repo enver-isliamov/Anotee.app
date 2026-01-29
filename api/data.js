@@ -53,6 +53,7 @@ export default async function handler(req, res) {
               `;
               query = rows;
           } else {
+              // Strict personal query: Owner OR Legacy Team membership
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE owner_id = ${user.id}
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
           const projects = query.map(r => {
               const p = r.data;
               if (r.org_id && !p.orgId) p.orgId = r.org_id;
+              // Ensure we return clean project objects
               return p;
           });
           
@@ -109,16 +111,18 @@ export default async function handler(req, res) {
             const isTeam = project.team && Array.isArray(project.team) && project.team.some(m => m.id === user.id);
             const isOrgMember = project.orgId && orgIds.includes(project.orgId);
             
-            if (isOwner || isTeam || isOrgMember) {
+            // Allow creation if user is authenticated (they become owner effectively)
+            if (isOwner || isTeam || isOrgMember || !project.ownerId) {
                 const projectJson = JSON.stringify(project);
                 const orgId = project.orgId || null;
+                const ownerId = project.ownerId || user.id; // Enforce owner if missing
                 
                 try {
                     await sql`
                         INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
                         VALUES (
                             ${project.id}, 
-                            ${project.ownerId || user.id}, 
+                            ${ownerId}, 
                             ${orgId},
                             ${projectJson}::jsonb, 
                             ${Date.now()}, 
@@ -133,7 +137,6 @@ export default async function handler(req, res) {
                 } catch (dbError) {
                     if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline" });
                     if (dbError.code === '42P01') {
-                        // Silent retry logic omitted for brevity
                         throw dbError;
                     } 
                     throw dbError;
