@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { User, UserRole } from '../types';
 import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, XCircle } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
@@ -23,46 +23,58 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const [backendHasToken, setBackendHasToken] = useState<boolean | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Check Backend Token Availability (The real truth)
-  useEffect(() => {
-      const checkBackend = async () => {
-          if (!user || isGuest) return;
-          try {
-              const token = await getToken();
-              const res = await fetch('/api/driveToken', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (res.ok) {
-                  setBackendHasToken(true);
-              } else {
-                  console.warn("Profile: Backend missing Drive token");
-                  setBackendHasToken(false);
-              }
-          } catch (e) {
-              console.error("Profile: Failed to check backend status", e);
-              setBackendHasToken(false);
-          }
-      };
+  // Function to check backend status with optional retry
+  const checkBackend = useCallback(async (retries = 0) => {
+      if (!user || isGuest) return;
       
-      checkBackend();
+      try {
+          const token = await getToken();
+          // Avoid caching issues
+          const res = await fetch(`/api/driveToken?t=${Date.now()}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (res.ok) {
+              setBackendHasToken(true);
+              return true; // Success
+          } else {
+              if (retries > 0) {
+                  console.warn(`Profile: Backend check failed, retrying... (${retries} left)`);
+                  await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+                  return checkBackend(retries - 1);
+              }
+              console.warn("Profile: Backend missing Drive token (Final)");
+              setBackendHasToken(false);
+              return false;
+          }
+      } catch (e) {
+          console.error("Profile: Failed to check backend status", e);
+          setBackendHasToken(false);
+          return false;
+      }
   }, [user, isGuest, getToken]);
+
+  // Initial Check
+  useEffect(() => {
+      checkBackend();
+  }, [checkBackend]);
 
   const handleConnectDrive = async () => {
       if (!user) return;
       setIsProcessing(true);
+      setBackendHasToken(null); // Set to loading UI
       
       try {
           const googleAccount = user.externalAccounts.find(
              a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
           );
 
-          // Force re-authorization to ensure token is fresh and has scopes
+          // Force re-authorization
           if (googleAccount) {
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
                   redirectUrl: window.location.origin 
               });
-              setBackendHasToken(null); // Reset to loading state to trigger re-check
           } else {
               await user.createExternalAccount({
                   strategy: 'oauth_google',
@@ -70,9 +82,19 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                   additionalScopes: [DRIVE_SCOPE]
               });
           }
+
+          // CRITICAL FIX: Clerk Backend API has latency. 
+          // We must wait for the token to propagate to the server before checking.
+          console.log("Profile: OAuth finished, waiting for propagation...");
+          await new Promise(r => setTimeout(r, 2500)); 
+          
+          // Check with retries (3 attempts)
+          await checkBackend(3);
+
       } catch (e) {
           console.error("Failed to authorize Drive scope", e);
-          alert("Failed to connect Google Drive. Please check popup blocker.");
+          alert("Failed to connect Google Drive. Please check popup blocker or try again.");
+          setBackendHasToken(false);
       } finally {
           setIsProcessing(false);
       }
@@ -90,10 +112,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           );
       }
 
-      if (isProcessing) {
+      if (isProcessing || backendHasToken === null) {
           return (
             <div className="flex items-center gap-2 text-zinc-500 text-xs">
-                <RefreshCw size={14} className="animate-spin"/> Processing...
+                <RefreshCw size={14} className="animate-spin"/> 
+                {isProcessing ? 'Verifying connection...' : 'Checking status...'}
             </div>
           );
       }
@@ -132,7 +155,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           );
       }
 
-      return <div className="text-xs text-zinc-500">Checking status...</div>;
+      return null;
   };
 
   return (

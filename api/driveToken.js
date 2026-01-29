@@ -29,8 +29,11 @@ export default async function handler(req, res) {
             const response = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
             // Clerk returns an array of tokens or a data object containing the array
             const tokens = response.data || response || [];
+            
             if (Array.isArray(tokens) && tokens.length > 0) {
                 tokenData = tokens[0];
+            } else {
+                console.log(`ℹ️ [DriveToken] No 'oauth_google' tokens found for ${user.userId}`);
             }
         } catch(e) {
             console.warn(`⚠️ [DriveToken] 'oauth_google' fetch failed for ${user.userId}:`, e.message);
@@ -45,7 +48,7 @@ export default async function handler(req, res) {
                     tokenData = tokens[0];
                 }
             } catch(e) {
-                console.warn(`⚠️ [DriveToken] 'google' fetch failed for ${user.userId}:`, e.message);
+                // Silently ignore if both fail, we will error out below
             }
         }
 
