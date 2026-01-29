@@ -19,6 +19,7 @@ import { api } from './services/apiClient';
 import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ShortcutsModal } from './components/ShortcutsModal';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -99,6 +100,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [isSyncing, setIsSyncing] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Track the last local modification to prevent server overwrites
   const lastLocalUpdateRef = useRef<number>(0);
@@ -112,16 +114,27 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // --- PREVENT BROWSER DEFAULT DRAG DROP ---
+  // --- PREVENT BROWSER DEFAULT DRAG DROP & GLOBAL SHORTCUTS ---
   useEffect(() => {
       const handleGlobalDrag = (e: DragEvent) => {
           e.preventDefault();
       };
+      
+      const handleGlobalKeys = (e: KeyboardEvent) => {
+          if (e.key === '?' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.target as HTMLElement).isContentEditable) {
+              e.preventDefault();
+              setShowShortcuts(prev => !prev);
+          }
+      };
+
       window.addEventListener('dragover', handleGlobalDrag);
       window.addEventListener('drop', handleGlobalDrag);
+      window.addEventListener('keydown', handleGlobalKeys);
+      
       return () => {
           window.removeEventListener('dragover', handleGlobalDrag);
           window.removeEventListener('drop', handleGlobalDrag);
+          window.removeEventListener('keydown', handleGlobalKeys);
       };
   }, []);
 
@@ -645,6 +658,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         {/* GLOBAL COMPONENTS */}
         <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         
         {isMockMode && (
             <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] pointer-events-none">

@@ -348,6 +348,22 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                {visibleAssets.length === 0 && !isDragging && (
+                    <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="col-span-full h-[60vh] border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all cursor-pointer group"
+                    >
+                        <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                            <Upload size={32} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">No videos yet</h3>
+                        <p className="text-sm max-w-xs text-center mb-6">Drag and drop video files here, or click to browse.</p>
+                        <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all pointer-events-none">
+                            Select Files
+                        </button>
+                    </div>
+                )}
+
                 {visibleAssets.map((asset) => {
                     const lastVer = asset.versions[asset.versions.length-1];
                     const isDrive = lastVer?.storageType === 'drive';
