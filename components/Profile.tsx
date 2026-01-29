@@ -1,10 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { LogOut, ShieldCheck, Mail, Crown, HardDrive, CheckCircle, RefreshCw, AlertTriangle, Link as LinkIcon, XCircle } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 
 interface ProfileProps {
   currentUser: User;
@@ -16,34 +16,61 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const isGuest = currentUser.role === UserRole.GUEST;
   const { t } = useLanguage();
   const { user } = useUser();
+  const { getToken } = useAuth();
   
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  
+  // Frontend scope check
+  const [hasScope, setHasScope] = useState(false);
+  // Backend token check
+  const [backendHasToken, setBackendHasToken] = useState<boolean | null>(null);
+  
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // 1. Check Frontend Scopes
   useEffect(() => {
       if (!user) {
-          setIsDriveConnected(false);
+          setHasScope(false);
           return;
       }
-      
-      // Find the Google account connection
       const googleAccount = user.externalAccounts.find(
           a => a.provider === 'google' || a.verification?.strategy === 'oauth_google'
       );
-
       if (!googleAccount) {
-          setIsDriveConnected(false);
+          setHasScope(false);
           return;
       }
-
-      // Debugging Scopes: Check console to see what permissions we actually have
       const scopes = googleAccount.approvedScopes || "";
-      console.log("🔍 Current Google Scopes:", scopes);
-
-      const hasScope = scopes.includes(DRIVE_SCOPE);
-      setIsDriveConnected(hasScope);
+      setHasScope(scopes.includes(DRIVE_SCOPE));
   }, [user]);
+
+  // 2. Check Backend Token Availability (The real truth)
+  useEffect(() => {
+      const checkBackend = async () => {
+          if (!user || isGuest) return;
+          try {
+              const token = await getToken();
+              const res = await fetch('/api/driveToken', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                  setBackendHasToken(true);
+              } else {
+                  console.warn("Profile: Backend missing Drive token despite frontend status");
+                  setBackendHasToken(false);
+              }
+          } catch (e) {
+              console.error("Profile: Failed to check backend status", e);
+              setBackendHasToken(false);
+          }
+      };
+      
+      if (hasScope) {
+          checkBackend();
+      } else {
+          setBackendHasToken(false);
+      }
+  }, [user, hasScope, isGuest, getToken]);
 
   const handleConnectDrive = async () => {
       if (!user) return;
@@ -55,14 +82,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           );
 
           if (googleAccount) {
-              // FORCE Re-Authorization to ensure we get the Scope and a fresh Refresh Token
-              // We pass 'force' to ensure the consent screen appears if needed
+              // FORCE Re-Authorization
               await googleAccount.reauthorize({
                   additionalScopes: [DRIVE_SCOPE],
                   redirectUrl: window.location.href
               });
+              // After reauth, re-check backend
+              setBackendHasToken(null); // Reset to loading state
           } else {
-              // Create new connection if none exists
               await user.createExternalAccount({
                   strategy: 'oauth_google',
                   redirectUrl: window.location.href,
@@ -75,6 +102,71 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       } finally {
           setIsProcessing(false);
       }
+  };
+
+  const renderDriveStatus = () => {
+      if (isGuest) {
+          return (
+            <button 
+                onClick={handleConnectDrive}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full md:w-auto justify-center bg-indigo-600 text-white hover:bg-indigo-500"
+            >
+                <HardDrive size={14} /> Link Google Account
+            </button>
+          );
+      }
+
+      if (isProcessing) {
+          return (
+            <div className="flex items-center gap-2 text-zinc-500 text-xs">
+                <RefreshCw size={14} className="animate-spin"/> Processing...
+            </div>
+          );
+      }
+
+      // Case A: Everything Good
+      if (hasScope && backendHasToken === true) {
+          return (
+            <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-500 text-xs font-bold bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
+                    <CheckCircle size={12} /> Active
+                </div>
+                <button 
+                    onClick={handleConnectDrive}
+                    className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline"
+                >
+                    Reconnect
+                </button>
+            </div>
+          );
+      }
+
+      // Case B: Frontend says yes, Backend says no (Ghost Token)
+      if (hasScope && backendHasToken === false) {
+          return (
+            <div className="flex flex-col md:flex-row gap-2 items-center">
+                <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 text-xs font-bold bg-red-100 dark:bg-red-900/20 px-3 py-1.5 rounded-full border border-red-200 dark:border-red-500/20 whitespace-nowrap">
+                    <XCircle size={12} /> Sync Error
+                </div>
+                <button 
+                    onClick={handleConnectDrive}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border border-red-300 dark:border-red-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 shadow-sm"
+                >
+                    <RefreshCw size={14} /> Repair Connection
+                </button>
+            </div>
+          );
+      }
+
+      // Case C: No Scope
+      return (
+        <button 
+            onClick={handleConnectDrive}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full md:w-auto justify-center bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+        >
+            <AlertTriangle size={14} className="text-orange-500"/> Grant Permissions
+        </button>
+      );
   };
 
   return (
@@ -127,7 +219,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                         <div>
                             <div className="text-sm font-bold text-zinc-900 dark:text-zinc-200">Google Drive</div>
                             <div className="text-xs text-zinc-500">
-                                {isDriveConnected 
+                                {backendHasToken === true 
                                     ? 'Connected to "SmoTree.App" folder' 
                                     : (isGuest ? 'Link account to enable Cloud Storage' : 'Grant permissions to enable uploads')}
                             </div>
@@ -135,32 +227,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                     </div>
                     
                     <div className="flex items-center gap-3 w-full md:w-auto">
-                        {isDriveConnected ? (
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-500 text-xs font-bold bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-500/20 whitespace-nowrap">
-                                    <CheckCircle size={12} /> Active
-                                </div>
-                                {/* NEW: Reconnect button even if active, to fix broken tokens */}
-                                <button 
-                                    onClick={handleConnectDrive}
-                                    disabled={isProcessing}
-                                    className="text-xs text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 flex items-center gap-1 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                                    title="Reconnect Drive if you are experiencing issues"
-                                >
-                                    <RefreshCw size={12} className={isProcessing ? "animate-spin" : ""} />
-                                    {isProcessing ? 'Fixing...' : 'Reconnect'}
-                                </button>
-                            </div>
-                        ) : (
-                            <button 
-                                onClick={handleConnectDrive}
-                                disabled={isProcessing}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full md:w-auto justify-center ${isGuest ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
-                            >
-                                {isProcessing ? <RefreshCw size={14} className="animate-spin"/> : (isGuest ? <HardDrive size={14} /> : <AlertTriangle size={14} className="text-orange-500"/>)}
-                                {isGuest ? 'Link Google Account' : 'Grant Permissions'}
-                            </button>
-                        )}
+                        {renderDriveStatus()}
                     </div>
                 </div>
             </div>
