@@ -81,6 +81,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'land.chart.wa': 'WhatsApp/Email',
     'land.chart.cloud': 'Cloud Drives',
     'land.chart.pro': 'SmoTree Pro',
+    'land.integrations.title': 'Works with Your Favorite Editor',
 
     // Why Smotree Section
     'why.title': 'Why SmoTree?',
@@ -324,6 +325,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'land.chart.wa': 'WhatsApp/Email',
     'land.chart.cloud': 'Облачные диски',
     'land.chart.pro': 'SmoTree Pro',
+    'land.integrations.title': 'Работает с вашим любимым редактором',
 
     // Why Smotree Section
     'why.title': 'Почему SmoTree?',
@@ -538,7 +540,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.team': 'Equipo',
     'pv.share.title': 'Invitar a Revisar',
     'pv.share.link': 'Enlace de Revisión',
-    // ... basic fallback for others
+    'land.integrations.title': 'Funciona con tu editor favorito',
   },
   ja: {
     'app.name': 'SmoTree',
@@ -576,6 +578,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.team': 'チーム',
     'pv.share.title': 'レビューに招待',
     'pv.share.link': 'レビューリンク',
+    'land.integrations.title': 'お気に入りのエディタと連携',
   },
   ko: {
     'app.name': 'SmoTree',
@@ -613,6 +616,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.team': '팀',
     'pv.share.title': '리뷰 초대',
     'pv.share.link': '리뷰 링크',
+    'land.integrations.title': '즐겨 사용하는 편집기와 호환',
   },
   pt: {
     'app.name': 'SmoTree',
@@ -650,6 +654,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'pv.team': 'Equipe',
     'pv.share.title': 'Convidar para Revisão',
     'pv.share.link': 'Link de Revisão',
+    'land.integrations.title': 'Funciona com seu editor favorito',
   }
 };
 

@@ -4,6 +4,74 @@ import { Upload, Share2, MessageSquare, Download, Film, Terminal, ArrowRight, Co
 import { useLanguage } from '../services/i18n';
 import { RoadmapBlock } from './RoadmapBlock';
 
+export const IntegrationBlock: React.FC = () => {
+  const { t } = useLanguage();
+  return (
+    <div className="py-16 bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800">
+        <div className="max-w-5xl mx-auto px-4 text-center">
+            <h3 className="text-2xl font-bold text-zinc-900 dark:text-white mb-10">{t('land.integrations.title')}</h3>
+            <div className="flex flex-wrap justify-center gap-8 md:gap-12 items-end">
+                {/* Premiere */}
+                <div className="flex flex-col items-center gap-3 group">
+                    <div className="w-16 h-16 rounded-xl bg-[#00005B] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <span className="font-bold text-[#D89DFE] text-3xl tracking-tighter">Pr</span>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-500">Adobe Premiere</span>
+                </div>
+
+                {/* DaVinci */}
+                <div className="flex flex-col items-center gap-3 group">
+                    <div className="w-16 h-16 rounded-full bg-[#111] flex items-center justify-center relative overflow-hidden shadow-lg group-hover:scale-110 transition-transform p-3">
+                         {/* Simplified DaVinci Logo: 3 colored circles */}
+                         <svg viewBox="0 0 100 100" className="w-full h-full">
+                            <circle cx="50" cy="35" r="25" fill="#30C5F0" opacity="0.8" />
+                            <circle cx="35" cy="65" r="25" fill="#FC2E58" opacity="0.8" />
+                            <circle cx="65" cy="65" r="25" fill="#FFCB05" opacity="0.8" />
+                         </svg>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-500">DaVinci Resolve</span>
+                </div>
+
+                {/* Final Cut Pro */}
+                <div className="flex flex-col items-center gap-3 group">
+                     {/* Simplified FCP: Gradient Clapper */}
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform p-1">
+                        <div className="w-full h-full border-4 border-white/20 rounded-lg flex items-center justify-center">
+                             <svg viewBox="0 0 24 24" className="w-8 h-8 text-white" fill="currentColor"><path d="M19.5 4h-15A2.5 2.5 0 002 6.5v11A2.5 2.5 0 004.5 20h15a2.5 2.5 0 002.5-2.5v-11A2.5 2.5 0 0019.5 4zm-9 12L6 10h9l-4.5 6z" /></svg>
+                        </div>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-500">Final Cut Pro</span>
+                </div>
+
+                {/* ScreenFlow */}
+                <div className="flex flex-col items-center gap-3 group">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-gray-200 to-gray-400 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform p-1 relative">
+                        {/* Film reel look */}
+                        <div className="w-12 h-12 rounded-full border-4 border-zinc-600 border-dashed animate-spin-slow" style={{animationDuration: '10s'}}></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-blue-500 rounded-sm rotate-45"></div>
+                        </div>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-500">ScreenFlow</span>
+                </div>
+
+                {/* CapCut */}
+                <div className="flex flex-col items-center gap-3 group">
+                    <div className="w-16 h-16 rounded-xl bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative overflow-hidden">
+                        <div className="absolute inset-0 bg-black dark:bg-white" style={{clipPath: 'polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)', transform: 'scale(0.6)'}}></div>
+                        {/* Simple X shape */}
+                        <svg viewBox="0 0 24 24" className="w-8 h-8 text-black dark:text-white" fill="currentColor">
+                            <path d="M18.6 5.6l-6.6 6.6 6.6 6.6-1.4 1.4-6.6-6.6-6.6 6.6-1.4-1.4 6.6-6.6-6.6-6.6 1.4-1.4 6.6 6.6 6.6-6.6z"/>
+                        </svg>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-500">CapCut</span>
+                </div>
+            </div>
+        </div>
+    </div>
+  );
+};
+
 // Simplified Props - No navigation logic needed inside content components
 export const WorkflowPage: React.FC = () => {
     const { t } = useLanguage();
@@ -15,6 +83,7 @@ export const WorkflowPage: React.FC = () => {
     ];
 
     return (
+        <>
         <div className="max-w-5xl mx-auto py-8">
              <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-12 text-center">{t('page.workflow.title')}</h1>
              
@@ -80,6 +149,8 @@ export const WorkflowPage: React.FC = () => {
                  </div>
              </div>
         </div>
+        <IntegrationBlock />
+        </>
     );
 };
 

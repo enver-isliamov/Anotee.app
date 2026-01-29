@@ -6,6 +6,7 @@ import { generateId } from '../services/utils';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
 import { RoadmapBlock } from './RoadmapBlock';
+import { IntegrationBlock } from './StaticPages';
 import { SignInButton, useSignIn } from '@clerk/clerk-react';
 
 interface LoginProps {
@@ -229,7 +230,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                 </div>
             </div>
 
-            {/* Rest of the landing page remains the same */}
+            {/* INTEGRATION BLOCK */}
+            <IntegrationBlock />
+
             {/* SECTION: STATS (SPEED) */}
             <div className="py-24 bg-white dark:bg-zinc-900 border-y border-zinc-200 dark:border-zinc-800 relative overflow-hidden">
                  <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
