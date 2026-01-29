@@ -14,7 +14,6 @@ export default async function handler(req, res) {
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         // 1. Auth Check using Clerk
-        // Guests are no longer supported, so if verifyUser returns a user, they are allowed.
         const user = await verifyUser(req);
         if (!user) {
              throw new Error("Unauthorized: Invalid Token");

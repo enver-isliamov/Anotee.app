@@ -56,9 +56,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       if (activeOrgId) {
           return p.orgId === activeOrgId;
       }
-      // 2. If Personal Workspace (no Org selected), show projects where user is owner AND no orgId is set
-      //    OR projects where they are explicitly in the team (legacy shared projects) AND no orgId
-      return (!p.orgId && (p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id)));
+      // 2. If Personal Workspace (no Org selected):
+      // Show projects where orgId is missing/null AND (user is owner OR user is in team)
+      const isPersonal = !p.orgId || p.orgId === 'null';
+      const hasAccess = p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id);
+      
+      return isPersonal && hasAccess;
   });
   
   const sectionTitle = activeOrgId 

@@ -10,14 +10,6 @@ const isDbConnectionError = (err) => {
     );
 };
 
-// --- DB INIT HELPER ---
-async function ensureProjectsTable() {
-    // Kept for fallback, but main logic moved to /api/setup
-    try {
-        await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, org_id TEXT, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
-    } catch (e) {}
-}
-
 export default async function handler(req, res) {
   try {
       const user = await verifyUser(req);
@@ -41,14 +33,15 @@ export default async function handler(req, res) {
               }
           }
 
-          // 2. Query projects (Optimized with org_id column)
+          // 2. Query projects
           let query;
           
           if (orgIds.length > 0) {
               const { rows } = await sql`
-                SELECT data FROM projects 
+                SELECT data, org_id FROM projects 
                 WHERE owner_id = ${user.id} 
                 OR org_id = ANY(${orgIds}) 
+                OR (org_id IS NULL AND owner_id = ${user.id})
                 OR (
                     jsonb_typeof(data->'team') = 'array' 
                     AND EXISTS (
@@ -61,8 +54,8 @@ export default async function handler(req, res) {
               query = rows;
           } else {
               const { rows } = await sql`
-                SELECT data FROM projects 
-                WHERE owner_id = ${user.id} 
+                SELECT data, org_id FROM projects 
+                WHERE owner_id = ${user.id}
                 OR (
                     jsonb_typeof(data->'team') = 'array' 
                     AND EXISTS (
@@ -75,7 +68,13 @@ export default async function handler(req, res) {
               query = rows;
           }
 
-          const projects = query.map(r => r.data);
+          // Map and ensure orgId is present in JSON if DB column has it
+          const projects = query.map(r => {
+              const p = r.data;
+              if (r.org_id && !p.orgId) p.orgId = r.org_id;
+              return p;
+          });
+          
           return res.status(200).json(projects);
 
         } catch (dbError) {
@@ -134,7 +133,7 @@ export default async function handler(req, res) {
                 } catch (dbError) {
                     if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline" });
                     if (dbError.code === '42P01') {
-                        // Silent retry logic omitted for brevity, assuming setup.js is run
+                        // Silent retry logic omitted for brevity
                         throw dbError;
                     } 
                     throw dbError;
