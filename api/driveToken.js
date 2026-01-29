@@ -11,6 +11,7 @@ export default async function handler(req, res) {
         const user = await verifyUser(req);
         
         if (!user || !user.userId) {
+            console.warn("⚠️ [DriveToken] Auth failed: No user");
             return res.status(401).json({ error: "Unauthorized" });
         }
 
@@ -21,35 +22,45 @@ export default async function handler(req, res) {
         // 2. Fetch OAuth Token from Clerk
         const clerk = getClerkClient();
         
-        let tokens = [];
+        let tokenData = null;
         
-        // Strategy 1: Try 'oauth_google' (Standard)
+        // Attempt 1: 'oauth_google' (Standard for Clerk v5+)
         try {
             const response = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
-            tokens = response.data || response || [];
+            // Clerk returns an array of tokens or a data object containing the array
+            const tokens = response.data || response || [];
+            if (Array.isArray(tokens) && tokens.length > 0) {
+                tokenData = tokens[0];
+            }
         } catch(e) {
-            // Strategy 2: Try 'google' (Legacy/Alternative)
+            console.warn(`⚠️ [DriveToken] 'oauth_google' fetch failed for ${user.userId}:`, e.message);
+        }
+
+        // Attempt 2: 'google' (Legacy/Compatibility)
+        if (!tokenData) {
             try {
                 const response = await clerk.users.getUserOauthAccessToken(user.userId, 'google');
-                tokens = response.data || response || [];
-            } catch(e2) {
-                console.error("Token fetch failed for both providers");
+                const tokens = response.data || response || [];
+                if (Array.isArray(tokens) && tokens.length > 0) {
+                    tokenData = tokens[0];
+                }
+            } catch(e) {
+                console.warn(`⚠️ [DriveToken] 'google' fetch failed for ${user.userId}:`, e.message);
             }
         }
 
-        if (Array.isArray(tokens) && tokens.length > 0) {
-            const tokenData = tokens[0];
-            // Optional: Check scope presence if provided in token data
-            // const hasScope = tokenData.scopes?.includes('drive.file'); 
-            
+        // 3. Return Token or 404
+        if (tokenData && tokenData.token) {
             return res.status(200).json({ token: tokenData.token });
         }
 
-        // 3. Detailed Failure Response
+        // Fallback: Check if account exists but token is missing (expired/revoked)
+        console.error(`❌ [DriveToken] No valid token found for user ${user.userId}`);
+        
         return res.status(404).json({ 
             error: "No Drive Token Found", 
             code: "NO_DRIVE_TOKEN",
-            detail: "User is logged in, but has not granted Google Drive permissions or token is expired."
+            detail: "User is logged in, but no valid OAuth token exists. Re-authentication required."
         });
 
     } catch (error) {

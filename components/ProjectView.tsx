@@ -22,7 +22,6 @@ interface ProjectViewProps {
 }
 
 // Helper to generate a thumbnail from a video file client-side
-// OPTIMIZED: Reduced dimensions and quality to keep payload small for DB sync
 const generateVideoThumbnail = (file: File): Promise<string> => {
   return new Promise((resolve) => {
     const video = document.createElement('video');
@@ -34,6 +33,12 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
     // Fallback image in case of error
     const fallback = 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44c?w=600&q=80';
 
+    // Timeout safety: if video takes too long to load (codec issue), return fallback to prevent freezing
+    const timeout = setTimeout(() => {
+        URL.revokeObjectURL(video.src);
+        resolve(fallback);
+    }, 3000); 
+
     video.onloadedmetadata = () => {
       // Seek to 1s or 20% of video to capture a meaningful frame
       const seekTime = Math.min(1.0, video.duration / 2);
@@ -41,16 +46,15 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
     };
 
     video.onseeked = () => {
+      clearTimeout(timeout);
       try {
         const canvas = document.createElement('canvas');
-        // Reduced from 480 to 320 to save DB space (base64 string length)
         canvas.width = 320;
         canvas.height = 180;
         
         const ctx = canvas.getContext('2d');
         if (ctx) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            // Reduced quality from 0.7 to 0.5
             const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
             resolve(dataUrl);
         } else {
@@ -65,6 +69,7 @@ const generateVideoThumbnail = (file: File): Promise<string> => {
     };
 
     video.onerror = () => {
+      clearTimeout(timeout);
       URL.revokeObjectURL(video.src);
       resolve(fallback);
     };
@@ -102,17 +107,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const isLocked = project.isLocked;
 
   // Filter Assets for Restricted Mode
-  // If restrictedAssetId matches ONLY one asset, show it.
   const visibleAssets = restrictedAssetId 
     ? project.assets.filter(a => a.id === restrictedAssetId)
     : project.assets;
 
   useEffect(() => {
-    // Check Drive status on mount
-    const handleDriveUpdate = () => setIsDriveReady(GoogleDriveService.isAuthenticated());
+    const handleDriveUpdate = () => {
+        setIsDriveReady(GoogleDriveService.isAuthenticated());
+        // If drive becomes ready, auto-switch to it
+        if (GoogleDriveService.isAuthenticated()) setUseDriveStorage(true);
+    };
     window.addEventListener('drive-token-updated', handleDriveUpdate);
     
-    // Auto-select Drive if connected
+    // Initial check
     if (GoogleDriveService.isAuthenticated()) {
         setUseDriveStorage(true);
     }
@@ -163,7 +170,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       let assetUrl = '';
       let googleDriveId = undefined;
       let storageType: StorageType = 'vercel';
-      let isLocalFallback = false;
       let finalFileName = file.name;
       const token = localStorage.getItem('smotree_auth_token');
 
@@ -171,16 +177,20 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       if (isMockMode) {
           assetUrl = URL.createObjectURL(file);
           storageType = 'local';
-          // Simulate progress
           for (let i = 0; i <= 100; i+=20) {
               setUploadProgress(i);
               await new Promise(r => setTimeout(r, 100));
           }
       } else {
         // Upload Logic
-        if (useDriveStorage && isDriveReady) {
+        if (useDriveStorage) {
+            // STRICT DRIVE MODE: Do not fallback if token is missing
+            if (!isDriveReady) {
+                throw new Error("Google Drive disconnected. Please 'Repair Connection' in Profile.");
+            }
+
             try {
-                notify("Preparing Drive Folders...", "info");
+                notify("Preparing Drive...", "info");
                 // 1. Root -> Project
                 const appFolder = await GoogleDriveService.ensureAppFolder();
                 const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
@@ -196,13 +206,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 
                 googleDriveId = result.id;
                 storageType = 'drive';
-                // Important: Keep assetUrl empty for Drive files, player handles ID
                 assetUrl = ''; 
                 finalFileName = niceName; 
-            } catch (driveErr) {
+            } catch (driveErr: any) {
                 console.error("Drive upload failed", driveErr);
-                notify("Drive upload failed. Falling back to local.", "error");
-                isLocalFallback = true;
+                if (driveErr.message.includes("Token") || driveErr.message.includes("404") || driveErr.message.includes("401")) {
+                    throw new Error("Drive Auth Error: Please reconnect in Profile.");
+                }
+                throw driveErr; // Re-throw to stop process
             }
         } else {
             // Vercel Blob
@@ -219,22 +230,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 }
                 });
                 assetUrl = newBlob.url;
-            } catch (uploadError) {
-                console.warn("Cloud upload failed. Switching to Local Mode.", uploadError);
-                // Check if it's a permission error
-                if ((uploadError as any).message?.includes('Forbidden')) {
+            } catch (uploadError: any) {
+                console.warn("Cloud upload failed", uploadError);
+                if (uploadError.message?.includes('Forbidden')) {
                     throw new Error("Upload Forbidden: Guest Access");
                 }
-                assetUrl = URL.createObjectURL(file);
-                storageType = 'local';
-                isLocalFallback = true;
+                throw new Error("Upload failed. Please try again.");
             }
         }
-      }
-
-      if (isLocalFallback && !googleDriveId && !isMockMode) {
-          assetUrl = URL.createObjectURL(file);
-          storageType = 'local';
       }
 
       const newAsset: ProjectAsset = {
@@ -252,8 +255,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             googleDriveId: googleDriveId,
             uploadedAt: 'Just now',
             comments: [],
-            localFileUrl: (isLocalFallback || isMockMode) ? URL.createObjectURL(file) : undefined,
-            localFileName: (isLocalFallback || isMockMode) ? file.name : undefined
+            localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
+            localFileName: isMockMode ? file.name : undefined
           }
         ]
       };
@@ -266,7 +269,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       
       onUpdateProject(updatedProject);
       notify(t('common.success'), "success");
-      if (isLocalFallback && !isMockMode) notify(t('player.media_offline'), "info");
 
     } catch (error: any) {
       console.error("Critical error adding asset", error);
@@ -295,7 +297,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         let assetUrl = '';
         let googleDriveId = undefined;
         let storageType: StorageType = 'vercel';
-        let isLocalFallback = false;
         let finalFileName = file.name;
         const token = localStorage.getItem('smotree_auth_token');
 
@@ -303,19 +304,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         if (isMockMode) {
              assetUrl = URL.createObjectURL(file);
              storageType = 'local';
-             // Simulate progress
              for (let i = 0; i <= 100; i+=20) {
                  setUploadProgress(i);
                  await new Promise(r => setTimeout(r, 100));
              }
         } else {
-             // ... Existing upload logic ...
-             if (useDriveStorage && isDriveReady) {
+             if (useDriveStorage) {
+                if (!isDriveReady) {
+                    throw new Error("Google Drive disconnected.");
+                }
                 try {
                     notify("Finding Drive Folder...", "info");
                     const appFolder = await GoogleDriveService.ensureAppFolder();
                     const projectFolder = await GoogleDriveService.ensureFolder(project.name, appFolder);
-                    // We assume asset folder name matches asset title. If renamed, it creates new folder.
                     const assetFolder = await GoogleDriveService.ensureFolder(targetAsset.title, projectFolder);
 
                     const ext = file.name.split('.').pop();
@@ -326,10 +327,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     googleDriveId = result.id;
                     storageType = 'drive';
                     assetUrl = '';
-                    finalFileName = niceName; // Store nice name
-                } catch (e) {
+                    finalFileName = niceName;
+                } catch (e: any) {
                     console.error("Drive upload failed", e);
-                    isLocalFallback = true;
+                    throw new Error("Drive Upload Failed: " + e.message);
                 }
             } else {
                 try {
@@ -344,14 +345,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     });
                     assetUrl = newBlob.url;
                 } catch (uploadError) {
-                    isLocalFallback = true;
+                    throw new Error("Upload Failed");
                 }
             }
-        }
-
-        if (isLocalFallback && !googleDriveId && !isMockMode) {
-            assetUrl = URL.createObjectURL(file);
-            storageType = 'local';
         }
 
         const newVersion = {
@@ -363,8 +359,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             googleDriveId: googleDriveId,
             uploadedAt: 'Just now',
             comments: [],
-            localFileUrl: (isLocalFallback || isMockMode) ? URL.createObjectURL(file) : undefined,
-            localFileName: (isLocalFallback || isMockMode) ? file.name : undefined
+            localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
+            localFileName: isMockMode ? file.name : undefined
         };
 
         const updatedVersions = [...targetAsset.versions, newVersion];
@@ -389,9 +385,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         onUpdateProject(updatedProject);
         notify(`${t('pv.version')} ${nextVersionNum}`, "success");
 
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
-          notify(t('common.error'), "error");
+          notify(e.message || t('common.error'), "error");
       } finally {
           setIsUploading(false);
           setUploadProgress(0);
