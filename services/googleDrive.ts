@@ -242,18 +242,32 @@ export const GoogleDriveService = {
      });
   },
 
-  getVideoStreamUrl: (fileId: string): string => {
+  /**
+   * Generates a stream URL. 
+   * Tries to use the authenticated API endpoint first (more reliable for private files).
+   */
+  getAuthenticatedStreamUrl: async (fileId: string): Promise<string> => {
+      const accessToken = await GoogleDriveService.getToken();
+      
+      // If we have a token, append it to the API URL.
+      // NOTE: Passing access_token in URL is generally discouraged but necessary for <video src> 
+      // where we cannot control headers.
+      if (accessToken) {
+          return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
+      }
+
+      // Fallback to legacy method (for public files or cached sessions)
+      return GoogleDriveService.getVideoStreamUrlLegacy(fileId);
+  },
+
+  getVideoStreamUrlLegacy: (fileId: string): string => {
       const env = (import.meta as any).env || {};
       const apiKey = env.VITE_GOOGLE_API_KEY;
       
-      // If we have an API Key, use the official API method
       if (apiKey) {
          return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
       }
       
-      // Fallback: The 'uc' export link.
-      // &confirm=t is CRITICAL to bypass the "Google cannot scan for viruses" interstitial page 
-      // for large files, which breaks <video> tags.
       return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`;
   }
 };

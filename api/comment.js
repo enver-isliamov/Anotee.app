@@ -1,6 +1,6 @@
 
 import { sql } from '@vercel/postgres';
-import { verifyUser } from './_auth.js';
+import { verifyUser, getClerkClient } from './_auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       // 1. Fetch Project with Version
       let rows = [];
       try {
-        const result = await sql`SELECT data, owner_id FROM projects WHERE id = ${projectId};`;
+        const result = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId};`;
         rows = result.rows;
       } catch (e) {
          if (e.code === '42P01') return res.status(404).json({ error: "Project not found (DB empty)" });
@@ -34,14 +34,29 @@ export default async function handler(req, res) {
 
       let projectData = rows[0].data;
       const ownerId = rows[0].owner_id;
+      const orgId = rows[0].org_id;
       const currentVersion = projectData._version || 0; // Get current version for Optimistic Lock
 
-      // 2. Security Check (Basic Team Access)
-      const isOwner = ownerId === user.id;
-      const isInTeam = projectData.team && projectData.team.some(m => m.id === user.id);
+      // 2. Security Check
+      let hasAccess = false;
+      
+      // Check Owner
+      if (ownerId === user.id) hasAccess = true;
+      // Check Legacy Team Array
+      else if (projectData.team && projectData.team.some(m => m.id === user.id)) hasAccess = true;
+      // Check Organization
+      else if (orgId) {
+           try {
+               const clerk = getClerkClient();
+               const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
+               const userOrgIds = memberships.data.map(m => m.organization.id);
+               if (userOrgIds.includes(orgId)) hasAccess = true;
+           } catch(e) {
+               console.warn("Failed to check org membership for comment", e);
+           }
+      }
 
-      // TODO: Add refined permission check for Viewer vs Editor roles later
-      if (!isOwner && !isInTeam) return res.status(403).json({ error: "Access denied" });
+      if (!hasAccess) return res.status(403).json({ error: "Access denied" });
 
       // 3. Logic
       const asset = projectData.assets.find(a => a.id === assetId);
@@ -60,8 +75,9 @@ export default async function handler(req, res) {
               if (uIdx !== -1) {
                   // Permission: Can only edit own comment unless Admin/Owner
                   const isCommentOwner = version.comments[uIdx].userId === user.id;
+                  const isProjectOwner = ownerId === user.id;
                   
-                  if (!isCommentOwner && !isOwner) {
+                  if (!isCommentOwner && !isProjectOwner) {
                        return res.status(403).json({ error: "Forbidden: Cannot edit others' comments" });
                   }
 
@@ -73,8 +89,9 @@ export default async function handler(req, res) {
               if (dIdx !== -1) {
                   // Permission: Can only delete own comment unless Admin/Owner
                   const isCommentOwner = version.comments[dIdx].userId === user.id;
+                  const isProjectOwner = ownerId === user.id;
                   
-                  if (!isCommentOwner && !isOwner) {
+                  if (!isCommentOwner && !isProjectOwner) {
                       return res.status(403).json({ error: "Forbidden: Cannot delete others' comments" });
                   }
                   version.comments.splice(dIdx, 1);

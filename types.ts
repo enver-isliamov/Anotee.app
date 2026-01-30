@@ -8,7 +8,6 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
-  role?: string; // Deprecated string for legacy compatibility
 }
 
 export interface Comment {

@@ -403,7 +403,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 return;
             }
 
-            const streamUrl = GoogleDriveService.getVideoStreamUrl(version.googleDriveId);
+            // USE AUTHENTICATED STREAM URL to prevent 403s
+            const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId);
             setDriveUrl(streamUrl);
             setLoadingDrive(false);
         } else if (version?.localFileUrl) { 
