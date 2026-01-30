@@ -13,11 +13,10 @@ const isDbConnectionError = (err) => {
 
 export default async function handler(req, res) {
   try {
-      // OPTIMIZATION: Always use lightweight auth (no external API calls) for generic data fetching.
-      // This prevents "Too Many Requests" (429) errors from Clerk during polling.
-      // We accept that 'user.email' will be null, so legacy email-based sharing 
-      // will rely on the migration script having run (converting email->id).
-      const requireEmail = false; 
+      // OPTIMIZATION: 
+      // - GET (Polling): Lightweight auth (ID only) to prevent 429 "Too Many Requests".
+      // - DELETE/POST (Actions): Full auth (with Email) to validate ownership of legacy projects (where owner_id is an email).
+      const requireEmail = req.method === 'DELETE' || req.method === 'POST'; 
       const user = await verifyUser(req, requireEmail);
       
       if (!user) {
@@ -37,7 +36,8 @@ export default async function handler(req, res) {
           let canDelete = false;
           
           // 1. Universal Owner Override
-          if (projectRow.owner_id === user.id) {
+          // Check Clerk ID OR Legacy Email (if available)
+          if (projectRow.owner_id === user.id || (user.email && projectRow.owner_id === user.email)) {
               canDelete = true;
           }
           // 2. Org Admin Check
@@ -93,9 +93,9 @@ export default async function handler(req, res) {
               query = rows;
           } else {
               // --- PERSONAL WORKSPACE FETCH ---
-              // FIXED SQL SYNTAX: Removed dynamic template literal injection to prevent syntax errors.
-              // Now using standard SQL logic with parameters. 
-              // Passing user.email (which might be null) as $2 safely.
+              // FIXED SQL SYNTAX: Using standard SQL logic with parameters.
+              // Note: user.email might be null here (optimization), so legacy projects might not show in the LIST,
+              // but they will work if accessed directly by ID.
               const userEmail = user.email || null;
               
               const { rows } = await sql`

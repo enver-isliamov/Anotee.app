@@ -670,8 +670,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       <X size={20} />
                   </button>
                   <div className="p-4">
+                      {/* Removed routing="hash" to fix potential conflicts */}
                       <OrganizationProfile 
-                        routing="hash"
                         appearance={{
                             elements: {
                                 card: "shadow-none border-0 bg-transparent",
