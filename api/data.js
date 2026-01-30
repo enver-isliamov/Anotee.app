@@ -13,10 +13,9 @@ const isDbConnectionError = (err) => {
 
 export default async function handler(req, res) {
   try {
-      // OPTIMIZATION: 
-      // - GET (Polling): Lightweight auth (ID only) to prevent 429 "Too Many Requests".
-      // - DELETE/POST (Actions): Full auth (with Email) to validate ownership of legacy projects (where owner_id is an email).
-      const requireEmail = req.method === 'DELETE' || req.method === 'POST'; 
+      // FORCE EMAIL FETCH: Required for "Shared with Me" personal invites to work.
+      // NOTE: This increases Clerk API usage. Client-side polling interval has been increased to mitigate 429 errors.
+      const requireEmail = true; 
       const user = await verifyUser(req, requireEmail);
       
       if (!user) {
@@ -93,9 +92,7 @@ export default async function handler(req, res) {
               query = rows;
           } else {
               // --- PERSONAL WORKSPACE FETCH ---
-              // FIXED SQL SYNTAX: Using standard SQL logic with parameters.
-              // Note: user.email might be null here (optimization), so legacy projects might not show in the LIST,
-              // but they will work if accessed directly by ID.
+              // Uses user.email to match "Shared with Me" projects via invites
               const userEmail = user.email || null;
               
               const { rows } = await sql`

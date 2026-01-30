@@ -33,7 +33,8 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'LIVE_DEMO' };
 
-const POLLING_INTERVAL_MS = 10000;
+// INCREASED TO 20s to prevent Rate Limiting on full Auth checks
+const POLLING_INTERVAL_MS = 20000;
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
