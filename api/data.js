@@ -71,12 +71,70 @@ export default async function handler(req, res) {
               
               if (rows.length > 0) {
                   const projectRow = rows[0];
+                  const projectData = projectRow.data;
+                  
                   // Public Access Check
-                  if (projectRow.data?.publicAccess === 'view') {
-                      query = [projectRow];
+                  let hasAccess = false;
+                  if (projectData.publicAccess === 'view') {
+                      hasAccess = true;
                   } else {
-                      const hasAccess = await checkProjectAccess(user, projectRow);
-                      query = hasAccess ? [projectRow] : [];
+                      hasAccess = await checkProjectAccess(user, projectRow);
+                  }
+
+                  if (hasAccess) {
+                      query = [projectRow];
+
+                      // --- AUTO-JOIN LOGIC ---
+                      // If user accessed via link (Public) or Email Invite, but is not fully in DB 'team' array with ID, add them.
+                      // This ensures the project appears in their Dashboard later.
+                      if (!projectRow.org_id) { // Only for Personal projects (Orgs use Clerk members)
+                          const currentTeam = projectData.team || [];
+                          const alreadyInTeamById = currentTeam.some(m => m.id === user.id);
+                          
+                          // Check if they are in team via Email (Legacy Invite)
+                          const invitedByEmailIndex = user.email 
+                              ? currentTeam.findIndex(m => m.email === user.email || m.id === user.email) 
+                              : -1;
+
+                          let shouldUpdate = false;
+                          let newTeam = [...currentTeam];
+
+                          if (invitedByEmailIndex !== -1 && !alreadyInTeamById) {
+                              // CASE 1: Convert Email Invite to Full User (Claim Invite)
+                              newTeam[invitedByEmailIndex] = {
+                                  ...newTeam[invitedByEmailIndex],
+                                  id: user.id, // Migrate to Clerk ID
+                                  name: user.name || newTeam[invitedByEmailIndex].name,
+                                  avatar: user.avatar || newTeam[invitedByEmailIndex].avatar
+                              };
+                              shouldUpdate = true;
+                          } else if (!alreadyInTeamById && projectData.publicAccess === 'view') {
+                              // CASE 2: Public Link Access -> Add to Team as Viewer
+                              newTeam.push({
+                                  id: user.id,
+                                  name: user.name,
+                                  avatar: user.avatar,
+                                  email: user.email,
+                                  role: 'viewer'
+                              });
+                              shouldUpdate = true;
+                          }
+
+                          if (shouldUpdate) {
+                              // Async update DB (don't await strictly to keep response fast)
+                              const updatedData = { ...projectData, team: newTeam };
+                              sql`
+                                  UPDATE projects 
+                                  SET data = ${JSON.stringify(updatedData)}::jsonb 
+                                  WHERE id = ${specificProjectId}
+                              `.catch(err => console.error("Auto-join update failed", err));
+                              
+                              // Return updated data immediately
+                              query[0].data = updatedData;
+                          }
+                      }
+                  } else {
+                      query = [];
                   }
               } else {
                   query = [];
