@@ -7,7 +7,7 @@ import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
-import { useOrganization, useUser } from '@clerk/clerk-react';
+import { useOrganization, useUser, useAuth } from '@clerk/clerk-react';
 import { isOrgAdmin } from '../services/userUtils';
 
 interface DashboardProps {
@@ -29,6 +29,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   
   // CLERK ORG CONTEXT
   const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
+  const { getToken } = useAuth();
 
   // Determine if user is Admin in current Org
   const isAdmin = useMemo(() => {
@@ -68,9 +69,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       // Show projects where orgId is missing, null, empty string OR 'null' string (legacy)
       // AND user has access (Owner or Team)
       const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
-      const hasAccess = p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id);
       
-      return isPersonal && hasAccess;
+      // Strict Check for Personal Dashboard:
+      // - I am Owner
+      // - OR I am in the Team list (ID or Email)
+      const isOwner = p.ownerId === currentUser.id;
+      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id); // Loose check for email legacy
+      
+      return isPersonal && (isOwner || isInTeam);
   });
   
   const sectionTitle = activeOrgId 
@@ -210,21 +216,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
       setIsDeleting(project.id);
       
-      const urlsToDelete: string[] = [];
-      project.assets.forEach(asset => {
-          asset.versions.forEach(v => {
-              if (v.url.startsWith('http')) {
-                  urlsToDelete.push(v.url);
-              }
+      try {
+          // 1. Delete Assets (Blobs)
+          const urlsToDelete: string[] = [];
+          project.assets.forEach(asset => {
+              asset.versions.forEach(v => {
+                  if (v.url.startsWith('http')) {
+                      urlsToDelete.push(v.url);
+                  }
+              });
           });
-      });
 
-      if (urlsToDelete.length > 0) {
-          await api.deleteAssets(urlsToDelete, project.id);
+          if (!isMockMode && urlsToDelete.length > 0) {
+              await api.deleteAssets(urlsToDelete, project.id);
+          }
+
+          // 2. Delete Project Row (DB)
+          if (!isMockMode) {
+              const res = await fetch(`/api/data?projectId=${project.id}`, {
+                  method: 'DELETE',
+                  headers: {
+                      'Authorization': `Bearer ${await getToken()}`
+                  }
+              });
+              if (!res.ok) {
+                  throw new Error("Failed to delete project row");
+              }
+          }
+
+          onDeleteProject(project.id);
+          notify("Project deleted successfully", "success");
+      } catch(e) {
+          console.error("Delete failed", e);
+          notify("Failed to delete project completely", "error");
+      } finally {
+          setIsDeleting(null);
       }
-
-      onDeleteProject(project.id);
-      setIsDeleting(null);
   };
 
   const renderOnboarding = () => {

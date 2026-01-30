@@ -33,12 +33,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   });
 
   // Calculate the "Display Team"
+  // For Orgs: Fetch from Clerk. For Personal: Use the legacy 'team' array from JSON.
   const displayTeam: User[] = useMemo(() => {
       if (project.orgId && organization && memberships?.data) {
           return memberships.data.map(mapClerkUserToAppUser);
       }
-      return [];
-  }, [project.orgId, organization, memberships]);
+      return project.team || [];
+  }, [project.orgId, organization, memberships, project.team]);
 
   const isAdmin = useMemo(() => {
       if (!organization || !memberships?.data) return false;
@@ -48,7 +49,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   // Is current user in the computed team? (For Org) OR is Owner (For Personal)
   const isProjectMember = project.orgId 
         ? displayTeam.some(m => m.id === currentUser.id)
-        : false;
+        : (project.team?.some(m => m.id === currentUser.id) || false);
         
   const isProjectOwner = project.ownerId === currentUser.id;
   
@@ -56,7 +57,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
   
   // Allow deletion if Owner or Admin OR if user is a member of the Org (Editor)
-  // Logic aligns with api/delete.js which allows 'org:member' to delete assets
   const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
 
   const isLocked = project.isLocked;
@@ -76,6 +76,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [shareTarget, setShareTarget] = useState<{type: 'project' | 'asset', id: string, name: string} | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
   
   // Drag & Drop State
   const [isDragging, setIsDragging] = useState(false);
@@ -250,6 +251,59 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       notify(newAccess === 'view' ? "Link access enabled" : "Link access disabled", "info");
   };
 
+  const handleInviteUser = async () => {
+      if (!inviteEmail.trim()) return;
+      if (!inviteEmail.includes('@')) {
+          notify("Invalid email format", "error");
+          return;
+      }
+
+      const newMember: User = {
+          id: inviteEmail, // Use email as ID for legacy/personal invites
+          name: inviteEmail.split('@')[0],
+          avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${inviteEmail}`
+      };
+
+      const currentTeam = project.team || [];
+      if (currentTeam.some(m => m.id === newMember.id || (m as any).email === inviteEmail)) {
+          notify("User already in team", "warning");
+          return;
+      }
+
+      const newTeam = [...currentTeam, { ...newMember, email: inviteEmail }]; // Store email explicitly
+      
+      // Update Project
+      if (!isMockMode) {
+          try {
+              await api.patchProject(project.id, { team: newTeam }, project._version || 0);
+          } catch (e) {
+              notify("Failed to invite user", "error");
+              return;
+          }
+      }
+      
+      onUpdateProject({ ...project, team: newTeam });
+      setInviteEmail('');
+      notify("User added to project", "success");
+  };
+
+  const handleRemoveUser = async (userId: string) => {
+      if (!confirm("Remove user from project?")) return;
+      
+      const newTeam = (project.team || []).filter(m => m.id !== userId);
+      
+      if (!isMockMode) {
+          try {
+              await api.patchProject(project.id, { team: newTeam }, project._version || 0);
+          } catch (e) {
+              notify("Failed to remove user", "error");
+              return;
+          }
+      }
+      onUpdateProject({ ...project, team: newTeam });
+      notify("User removed", "info");
+  };
+
   const handleCopyLink = () => {
     const origin = window.location.origin;
     let url = '';
@@ -298,8 +352,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         <div className="flex items-center gap-3 shrink-0">
           <LanguageSelector />
           
-          {/* TEAM AVATARS (Only for Org Projects) */}
-          {!restrictedAssetId && project.orgId && (
+          {/* TEAM AVATARS (Only for Org Projects OR if Personal Team exists) */}
+          {!restrictedAssetId && (
             <div 
               onClick={() => setIsParticipantsModalOpen(true)}
               className="flex -space-x-2 cursor-pointer hover:opacity-80 transition-opacity ml-2"
@@ -613,12 +667,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     </div>
                   </div>
                   
-                  {!project.orgId && (
-                      <div className="flex items-start gap-2 bg-yellow-900/10 p-2 rounded border border-yellow-500/10 mt-3">
-                          <Info size={14} className="text-yellow-500 mt-0.5 shrink-0" />
-                          <p className="text-[10px] text-yellow-200/70">
-                              Personal projects are for solo use or public viewing. To add editors and collaborate privately, please <strong className="text-yellow-100">create an Organization</strong>.
-                          </p>
+                  {/* Personal Invite By Email */}
+                  {!project.orgId && shareTarget.type === 'project' && (
+                      <div className="mt-4 border-t border-zinc-800 pt-4">
+                          <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Invite Collaborator</div>
+                          <div className="flex gap-2">
+                              <input 
+                                  value={inviteEmail}
+                                  onChange={(e) => setInviteEmail(e.target.value)}
+                                  placeholder="Enter email..."
+                                  className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600"
+                              />
+                              <button 
+                                  onClick={handleInviteUser}
+                                  disabled={!inviteEmail}
+                                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50"
+                              >
+                                  Add
+                              </button>
+                          </div>
                       </div>
                   )}
 
@@ -631,6 +698,30 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       </div>
                   )}
                 </>
+              )}
+
+              {isParticipantsModalOpen && !project.orgId && (
+                  <>
+                    <h2 className="text-lg font-bold text-white mb-4">Project Team</h2>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {displayTeam.map(member => (
+                            <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">
+                                <div className="flex items-center gap-2">
+                                    <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-zinc-800" />
+                                    <div>
+                                        <div className="text-sm text-zinc-200 font-medium">{member.name}</div>
+                                        <div className="text-[10px] text-zinc-500">{getDisplayRole(member)}</div>
+                                    </div>
+                                </div>
+                                {isProjectOwner && member.id !== currentUser.id && (
+                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                  </>
               )}
 
               {isParticipantsModalOpen && project.orgId && (

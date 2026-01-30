@@ -19,7 +19,40 @@ export default async function handler(req, res) {
           return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // GET: Retrieve Projects
+      // --- DELETE: Remove Project Row ---
+      if (req.method === 'DELETE') {
+          const { projectId } = req.query;
+          if (!projectId) return res.status(400).json({ error: "Missing projectId" });
+
+          const { rows } = await sql`SELECT owner_id, org_id, data FROM projects WHERE id = ${projectId}`;
+          if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
+
+          const projectRow = rows[0];
+          
+          // Permission Check: Only Owner or Org Admin can delete the PROJECT ITSELF
+          // Note: Regular members can delete assets (handled in api/delete.js), but not the container.
+          let canDelete = false;
+          
+          // 1. Personal Owner
+          if (projectRow.owner_id === user.id) canDelete = true;
+          
+          // 2. Org Admin Check
+          else if (projectRow.org_id) {
+              try {
+                  const clerk = getClerkClient();
+                  const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
+                  const membership = memberships.data.find(m => m.organization.id === projectRow.org_id);
+                  if (membership && membership.role === 'org:admin') canDelete = true;
+              } catch(e) {}
+          }
+
+          if (!canDelete) return res.status(403).json({ error: "Forbidden: Only Owner/Admin can delete projects." });
+
+          await sql`DELETE FROM projects WHERE id = ${projectId}`;
+          return res.status(200).json({ success: true });
+      }
+
+      // --- GET: Retrieve Projects ---
       if (req.method === 'GET') {
         try {
           const targetOrgId = req.query.orgId;
@@ -66,11 +99,16 @@ export default async function handler(req, res) {
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
+                ORDER BY updated_at DESC
               `;
               query = rows;
           } else {
-              // --- PERSONAL WORKSPACE FETCH ---
-              // Only show projects I own or am explicitly part of the team.
+              // --- PERSONAL WORKSPACE FETCH (Industry Standard) ---
+              // Show projects where:
+              // 1. I am the Owner
+              // 2. OR I am in the 'team' array (by ID or Email)
+              
+              // Note: Postgres JSONB check for email existence in array of objects
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE (org_id IS NULL OR org_id = '') 
@@ -78,7 +116,13 @@ export default async function handler(req, res) {
                     owner_id = ${user.id} 
                     OR 
                     data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
+                    OR
+                    EXISTS (
+                        SELECT 1 FROM jsonb_array_elements(data->'team') AS member 
+                        WHERE member->>'email' = ${user.email}
+                    )
                 )
+                ORDER BY updated_at DESC
               `;
               query = rows;
           }
@@ -99,7 +143,7 @@ export default async function handler(req, res) {
         }
       } 
       
-      // PATCH: Partial Updates
+      // --- PATCH: Partial Updates ---
       if (req.method === 'PATCH') {
           const { projectId, updates, _version } = req.body;
           if (!projectId || !updates) return res.status(400).json({ error: "Missing projectId or updates" });
@@ -133,7 +177,7 @@ export default async function handler(req, res) {
           return res.status(200).json({ success: true, project: newData });
       }
 
-      // POST: Upsert (Single or Array)
+      // --- POST: Upsert (Single or Array) ---
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
@@ -168,8 +212,12 @@ export default async function handler(req, res) {
                 
                 if (checkExists.rowCount > 0) {
                     const hasAccess = await checkProjectAccess(user, checkExists.rows[0]);
-                    if (!hasAccess) continue; // Skip unauthorized updates
+                    if (!hasAccess) {
+                        console.warn(`Access denied for user ${user.id} on project ${project.id}`);
+                        continue; 
+                    }
                     
+                    // Allow update, keeping owner_id fixed but updating data and org_id
                     await sql`
                         UPDATE projects 
                         SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
