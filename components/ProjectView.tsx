@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, ProjectAsset, User, UserRole, StorageType } from '../types';
+import { Project, ProjectAsset, User, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';

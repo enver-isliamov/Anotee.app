@@ -8,7 +8,7 @@ import { Profile } from './components/Profile';
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
-import { Project, ProjectAsset, User, UserRole, StorageType, UploadTask } from './types';
+import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId, generateVideoThumbnail } from './services/utils';
 import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';

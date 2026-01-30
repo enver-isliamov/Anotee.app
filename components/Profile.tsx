@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User, UserRole } from '../types';
+import { User } from '../types';
 import { Crown, Database, Check, AlertCircle, LogOut } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
@@ -52,7 +52,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                  <div>
                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                         {t('profile.title')}
-                        {currentUser.role === UserRole.ADMIN && <Crown size={20} className="text-yellow-500" fill="currentColor" />}
                      </h2>
                      <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Manage your account settings and subscriptions.</p>
                  </div>

@@ -4,18 +4,13 @@ export enum CommentStatus {
   RESOLVED = 'resolved'
 }
 
-export enum UserRole {
-  ADMIN = 'Admin',
-  CREATOR = 'Creator',
-  VIEWER = 'Viewer'
-}
+// UserRole enum removed. Role logic replaced by Organization/Ownership checks.
 
 export interface User {
   id: string;
   name: string;
   avatar: string;
-  // Role is deprecated. Permissions are now derived from Project ownership or Organization membership.
-  role?: string; 
+  role?: string; // Deprecated string for legacy compatibility
 }
 
 export interface Comment {

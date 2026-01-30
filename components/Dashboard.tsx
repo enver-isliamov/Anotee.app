@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Project, User, UserRole } from '../types';
+import { Project, User } from '../types';
 import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
@@ -79,29 +79,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
     setIsCreating(true);
 
-    setTimeout(() => {
-      const newProject: Project = {
-        id: generateId(), 
-        name,
-        client,
-        description,
-        createdAt: Date.now(), 
-        updatedAt: 'Just now',
-        team: [currentUser],
-        ownerId: currentUser.id,
-        orgId: activeOrgId || null, // Explicitly set null if personal
-        assets: [],
-        isLocked: false
-      };
+    const newProject: Project = {
+      id: generateId(), 
+      name,
+      client,
+      description,
+      createdAt: Date.now(), 
+      updatedAt: 'Just now',
+      team: [currentUser],
+      ownerId: currentUser.id,
+      orgId: activeOrgId || null, // Explicitly set null if personal
+      assets: [],
+      isLocked: false
+    };
 
-      onAddProject(newProject);
-      setIsCreating(false);
-      setIsModalOpen(false);
-      
-      setName('');
-      setClient('');
-      setDescription('');
-    }, 800);
+    onAddProject(newProject);
+    
+    // Reset and Close
+    setIsCreating(false);
+    setIsModalOpen(false);
+    setName('');
+    setClient('');
+    setDescription('');
   };
 
   const handleOpenEdit = (e: React.MouseEvent, project: Project) => {
