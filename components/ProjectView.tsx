@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo } from 'lucide-react';
 import { generateId } from '../services/utils';
@@ -8,6 +8,7 @@ import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
+import { useOrganization } from '@clerk/clerk-react';
 
 interface ProjectViewProps {
   project: Project;
@@ -24,6 +25,35 @@ interface ProjectViewProps {
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
   const { t } = useLanguage();
   
+  // --- CLERK ORGANIZATION LOGIC (Split-Brain Fix) ---
+  const { organization, memberships } = useOrganization({
+      memberships: { infinite: true }
+  });
+
+  // Calculate the "Display Team"
+  // If this is an Org project, we fetch real-time members from Clerk
+  // If this is a personal project, we fallback to the legacy 'team' array in DB
+  const displayTeam: User[] = useMemo(() => {
+      if (project.orgId && organization && memberships?.data) {
+          // Map Clerk Members to App User Type
+          return memberships.data.map(m => ({
+              id: m.publicUserData.userId || m.id,
+              name: `${m.publicUserData.firstName || ''} ${m.publicUserData.lastName || ''}`.trim() || m.publicUserData.identifier,
+              avatar: m.publicUserData.imageUrl,
+              // We could map roles here if needed (m.role)
+          }));
+      }
+      return project.team;
+  }, [project.orgId, project.team, organization, memberships]);
+
+  // Is current user in the computed team?
+  const isProjectMember = displayTeam.some(m => m.id === currentUser.id);
+  const isProjectOwner = project.ownerId === currentUser.id;
+  
+  // Can Upload/Delete? Owner OR Team Member
+  const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
+  const isLocked = project.isLocked;
+
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
   const [isDeleting, setIsDeleting] = useState(false);
@@ -44,13 +74,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
-  
-  const isProjectMember = project.team.some(m => m.id === currentUser.id);
-  const isProjectOwner = project.ownerId === currentUser.id;
-  
-  // Can Upload/Delete? Owner OR Team Member
-  const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
-  const isLocked = project.isLocked;
 
   // Filter Assets for Restricted Mode
   const visibleAssets = restrictedAssetId 
@@ -210,9 +233,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   const handleRemoveMember = (memberId: string) => {
+      // For Org projects, we can't remove members via this simple UI yet (need Clerk API)
+      if (project.orgId) {
+          notify("Please manage team members in your Organization Settings.", "info");
+          return;
+      }
+
       if (!isProjectOwner) return;
       if (memberId === project.ownerId) { notify(t('common.error'), "error"); return; }
       if (!confirm(t('pv.remove_confirm'))) return;
+      
       const updatedTeam = project.team.filter(m => m.id !== memberId);
       onUpdateProject({ ...project, team: updatedTeam });
       notify(t('common.success'), "info");
@@ -271,11 +301,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               className="flex -space-x-2 cursor-pointer hover:opacity-80 transition-opacity ml-2"
               title={t('pv.team')}
             >
-              {project.team.slice(0, 3).map((member) => (
+              {displayTeam.slice(0, 3).map((member) => (
                   <img key={member.id} src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border-2 border-zinc-950" />
               ))}
               <div className="w-8 h-8 rounded-full border-2 border-zinc-950 bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400">
-                {project.team.length > 3 ? `+${project.team.length - 3}` : '+'}
+                {displayTeam.length > 3 ? `+${displayTeam.length - 3}` : '+'}
               </div>
             </div>
           )}
@@ -492,7 +522,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       )}
       
-       {/* Share Modal & Participants Modal (same as before) */}
+       {/* Share Modal & Participants Modal */}
        {(isShareModalOpen || isParticipantsModalOpen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative p-6">
@@ -544,8 +574,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               {isParticipantsModalOpen && (
                 <>
                   <h2 className="text-lg font-bold text-white mb-4">{t('pv.team')}</h2>
+                  {project.orgId && (
+                      <div className="mb-4 text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded">
+                          Managed by Organization. Add/Remove users in your Team Settings.
+                      </div>
+                  )}
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {project.team.map(member => (
+                    {displayTeam.map(member => (
                         <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">
                           <div className="flex items-center gap-2">
                               <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-zinc-800" />
@@ -560,7 +595,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                               </div>
                           </div>
                           
-                          {isProjectOwner && member.id !== currentUser.id && member.id !== project.ownerId && (
+                          {!project.orgId && isProjectOwner && member.id !== currentUser.id && member.id !== project.ownerId && (
                               <button 
                                 onClick={() => handleRemoveMember(member.id)}
                                 className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors opacity-0 group-hover:opacity-100"

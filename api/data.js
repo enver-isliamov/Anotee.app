@@ -78,7 +78,63 @@ export default async function handler(req, res) {
         }
       } 
       
-      // POST: Sync Projects (Upsert with Optimistic Locking & Security Checks)
+      // PATCH: Partial Updates (Smart Merge)
+      // Allows updating specific fields (like name, description) without overwriting assets
+      if (req.method === 'PATCH') {
+          const { projectId, updates, _version } = req.body;
+          
+          if (!projectId || !updates) return res.status(400).json({ error: "Missing projectId or updates" });
+
+          // 1. Fetch current data
+          const { rows } = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId}`;
+          
+          if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
+          
+          const currentDbData = rows[0].data;
+          const dbOwnerId = rows[0].owner_id;
+          const dbOrgId = rows[0].org_id;
+          
+          // 2. Permission Check
+          let hasAccess = false;
+          if (dbOwnerId === user.id) hasAccess = true;
+          else if (dbOrgId) {
+               // Verify Org Access
+               const clerk = getClerkClient();
+               try {
+                   const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
+                   const userOrgs = memberships.data.map(m => m.organization.id);
+                   if (userOrgs.includes(dbOrgId)) hasAccess = true;
+               } catch(e) { console.error(e); }
+          }
+          
+          if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
+
+          // 3. Version Check (Optimistic Locking)
+          const currentVer = currentDbData._version || 0;
+          if (_version !== undefined && currentVer !== _version) {
+              return res.status(409).json({ error: "Conflict", serverVersion: currentVer, clientVersion: _version });
+          }
+
+          // 4. Merge Data (Server-Side)
+          // This ensures that if 'assets' are NOT in updates, they remain untouched in DB
+          const newData = {
+              ...currentDbData,
+              ...updates,
+              _version: currentVer + 1, // Increment version
+              updatedAt: 'Just now'
+          };
+
+          // 5. Save
+          await sql`
+            UPDATE projects 
+            SET data = ${JSON.stringify(newData)}::jsonb, updated_at = ${Date.now()}
+            WHERE id = ${projectId}
+          `;
+
+          return res.status(200).json({ success: true, project: newData });
+      }
+
+      // POST: Full Sync / Create
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
@@ -107,17 +163,13 @@ export default async function handler(req, res) {
             const projectJson = JSON.stringify(project);
             const orgId = project.orgId || null;
             
-            // SECURITY: Enforce that only the authenticated user can be set as owner for new projects
-            const ownerId = project.ownerId || user.id;
-
             try {
-                // 1. Try UPDATE with Version Check AND Ownership Check
                 const hasOrgAccess = orgIds.length > 0 && orgId ? orgIds.includes(orgId) : false;
 
                 let updateResult;
                 
                 if (hasOrgAccess) {
-                     // If Org Match, we allow update regardless of individual owner_id
+                     // If Org Match, we allow update
                      updateResult = await sql`
                         UPDATE projects 
                         SET 
@@ -162,25 +214,10 @@ export default async function handler(req, res) {
                         `;
                         updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
                     } else {
-                        // Conflict or Permission Denied
+                        // Conflict
                         const dbRow = checkExists.rows[0];
-                        const isOwner = dbRow.owner_id === user.id;
-                        
-                        if (!isOwner && !hasOrgAccess) {
-                             console.warn(`Unauthorized update attempt on ${project.id} by ${user.id}`);
-                             continue; 
-                        }
-
-                        // Version Conflict
                         const dbVer = parseInt(dbRow.ver || '0');
-                        console.warn(`Conflict for ${project.id}: Client ${clientVersion} vs DB ${dbVer}`);
-                        
-                        return res.status(409).json({ 
-                            error: "Version Conflict", 
-                            projectId: project.id,
-                            serverVersion: dbVer,
-                            clientVersion: clientVersion
-                        });
+                        return res.status(409).json({ error: "Version Conflict", projectId: project.id });
                     }
                 }
             } catch (dbError) {

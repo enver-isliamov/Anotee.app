@@ -117,20 +117,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       
       setIsSavingEdit(true);
 
-      // Attempt to rename Drive Folder if name changed
-      if (editingProject.name !== editName && GoogleDriveService.isAuthenticated()) {
-          notify("Syncing name change to Google Drive...", "info");
-          await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
-      }
+      try {
+          // Attempt to rename Drive Folder if name changed
+          if (editingProject.name !== editName && GoogleDriveService.isAuthenticated()) {
+              notify("Syncing name change to Google Drive...", "info");
+              await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
+          }
 
-      onEditProject(editingProject.id, {
-          name: editName,
-          client: editClient,
-          description: editDesc
-      });
-      
-      setIsSavingEdit(false);
-      setEditingProject(null);
+          // USE PATCH (Partial Update) instead of full update
+          // This prevents overwriting assets if someone else added one in the background
+          if (!isMockMode) {
+              await api.patchProject(editingProject.id, {
+                  name: editName,
+                  client: editClient,
+                  description: editDesc
+              }, editingProject._version || 0);
+              
+              // Optimistic local update
+              onEditProject(editingProject.id, {
+                  name: editName,
+                  client: editClient,
+                  description: editDesc
+              });
+          } else {
+              onEditProject(editingProject.id, {
+                  name: editName,
+                  client: editClient,
+                  description: editDesc
+              });
+          }
+          
+          notify("Project updated", "success");
+      } catch (err: any) {
+          if (err.code === 'CONFLICT') {
+             notify("Conflict detected! Someone modified this project. Please refresh.", "error");
+          } else {
+             notify("Failed to update project", "error");
+             console.error(err);
+          }
+      } finally {
+          setIsSavingEdit(false);
+          setEditingProject(null);
+      }
   };
 
   const handleToggleLock = (e: React.MouseEvent, project: Project) => {

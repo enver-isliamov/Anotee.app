@@ -140,6 +140,42 @@ export const api = {
         }
     },
 
+    patchProject: async (projectId: string, updates: Partial<Project>, currentVersion: number): Promise<Project> => {
+        if (IS_MOCK_MODE) {
+            const local = getLocalData();
+            const idx = local.findIndex(p => p.id === projectId);
+            if (idx !== -1) {
+                local[idx] = { ...local[idx], ...updates };
+                setLocalData(local);
+                return local[idx];
+            }
+            throw new Error("Mock: Project not found");
+        }
+
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch('/api/data', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ projectId, updates, _version: currentVersion })
+        });
+
+        if (res.status === 409) {
+             const errData = await res.json();
+             const e: any = new Error("Version Conflict");
+             e.code = "CONFLICT";
+             e.details = errData;
+             throw e;
+        }
+
+        if (!res.ok) throw new Error("Patch failed");
+
+        const data = await res.json();
+        return data.project;
+    },
+
     deleteAssets: async (urls: string[], projectId: string, explicitToken?: string | null): Promise<void> => {
         if (IS_MOCK_MODE) {
             return; // Nothing to delete on server
