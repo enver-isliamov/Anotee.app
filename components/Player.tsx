@@ -145,7 +145,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);
   const isOwner = project.ownerId === currentUser.id; // STRICT OWNER CHECK
 
-  const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.currentVersionIndex);
+  // DEFAULT TO LAST VERSION: User wants the latest version by default.
+  const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.versions.length - 1);
   
   const [compareVersionIdx, setCompareVersionIdx] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'single' | 'side-by-side'>('single');
@@ -491,29 +492,30 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       {!isFullscreen && (
         <header className="h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
           {/* Header Content */}
-          <div className="flex items-center gap-2 md:gap-3 overflow-hidden flex-1">
+          <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
             <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
             {(!isSearchOpen || window.innerWidth > 768) && (
-              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight truncate flex-1">
-                   <div className="flex items-center gap-2">
-                       <div className="relative group/title">
+              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
+                   <div className="flex items-center gap-2 max-w-full">
+                       <div className="relative group/title min-w-0">
                             <button 
                                 onClick={() => setShowVersionSelector(!showVersionSelector)}
-                                className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700"
+                                className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 max-w-full"
                             >
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold text-xs md:text-sm truncate max-w-[200px] md:max-w-[400px]" title={localFileName || version.filename || asset.title}>
+                                <div className="min-w-0 flex items-center gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="font-bold text-xs md:text-sm truncate max-w-[200px] md:max-w-[400px] block overflow-hidden text-ellipsis" title={localFileName || version.filename || asset.title}>
                                             {localFileName || version.filename || asset.title}
                                         </span>
-                                        <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-indigo-100 dark:border-indigo-500/20">
+                                        <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-indigo-100 dark:border-indigo-500/20 shrink-0">
                                             v{version.versionNumber} <ChevronDown size={10} />
                                         </div>
                                     </div>
                                 </div>
                             </button>
+                            {/* FIXED: Z-Index 100 to appear above the video player */}
                             {showVersionSelector && (
-                                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-2 max-h-80 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-[100] py-2 max-h-80 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                                     <div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/50 mb-1">Select Version</div>
                                     {asset.versions.map((v, idx) => {
                                         const isCurrent = idx === currentVersionIdx;
@@ -535,10 +537,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                     })}
                                 </div>
                             )}
-                            {showVersionSelector && <div className="fixed inset-0 z-40" onClick={() => setShowVersionSelector(false)}></div>}
+                            {showVersionSelector && <div className="fixed inset-0 z-[90]" onClick={() => setShowVersionSelector(false)}></div>}
                        </div>
                        
-                       {getSourceBadge()}
+                       <div className="hidden sm:block">
+                           {getSourceBadge()}
+                       </div>
                    </div>
                    
                    <div className="flex items-center gap-2">

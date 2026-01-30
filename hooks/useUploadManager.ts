@@ -64,20 +64,25 @@ export const useUploadManager = (
 
             // 1. Calculate Naming & Version
             let nextVersionNumber = 1;
-            const assetTitle = file.name.replace(/\.[^/.]+$/, "");
+            // Default title from file, but cleaned up
+            let assetTitle = file.name.replace(/\.[^/.]+$/, "");
             const ext = file.name.split('.').pop();
 
             if (targetAssetId && project) {
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
                 if (existingAsset) {
                     nextVersionNumber = existingAsset.versions.length + 1;
+                    // FORCE NAMING CONSISTENCY: Use the existing Asset Title as the base
+                    // This ensures "Reels-Hudenie.mp4" + new upload becomes "Reels-Hudenie_v2.mp4"
+                    assetTitle = existingAsset.title.replace(/[^\w\s-]/gi, ''); // Sanitize strictly
                 }
             }
 
             // Correct Naming: _v2, _v3 instead of _vNEW
+            // If it's a new version, strictly append _vX. If it's the first one, stick to original name or append _v1
             const finalFileName = targetAssetId 
                 ? `${assetTitle}_v${nextVersionNumber}.${ext}`
-                : `${assetTitle}_v1.${ext}`;
+                : `${assetTitle}_v1.${ext}`; // Enforce v1 on first upload too for consistency
 
             // 2. Generate Thumbnail
             updateTask({ status: 'processing' });
@@ -178,7 +183,7 @@ export const useUploadManager = (
                 // New Asset
                 const newAsset: ProjectAsset = {
                     id: generateId(),
-                    title: assetTitle,
+                    title: assetTitle, // Use the cleaned title
                     thumbnail: thumbnailDataUrl,
                     currentVersionIndex: 0,
                     versions: [newVersion]
