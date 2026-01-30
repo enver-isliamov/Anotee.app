@@ -17,70 +17,80 @@ export default async function handler(req, res) {
     console.log(`🚀 Starting Migration for User: ${user.email} (${user.id})`);
 
     // 2. SELF-HEALING: Ensure Schema Exists
-    // This fixes the 500 error if the table or column doesn't exist yet.
     try {
         await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
         await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
         await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
     } catch (schemaError) {
         console.error("Schema repair failed:", schemaError);
-        // Continue anyway, maybe it exists
     }
 
-    // 3. Fetch ALL projects
-    const { rows } = await sql`SELECT id, data FROM projects;`;
-    
-    if (rows.length === 0) {
-        return res.status(200).json({ success: true, message: "Database is empty. Nothing to migrate.", updatedProjects: 0 });
-    }
-
+    // 3. Batch Processing
+    const BATCH_SIZE = 50;
+    let offset = 0;
     let updatedCount = 0;
     let claimedCount = 0;
+    let hasMore = true;
 
-    for (const row of rows) {
-        let project = row.data;
-        let needsUpdate = false;
+    while (hasMore) {
+        const { rows } = await sql`SELECT id, data FROM projects ORDER BY created_at DESC LIMIT ${BATCH_SIZE} OFFSET ${offset};`;
+        
+        if (rows.length === 0) {
+            hasMore = false;
+            break;
+        }
 
-        // A. Claim Legacy Projects (Fix User IDs)
-        // If the user's email exists in the team but the ID is different (legacy ID), update it.
-        if (project.team && Array.isArray(project.team)) {
-            const memberIndex = project.team.findIndex(m => m.email === user.email || m.name === user.name); 
-            
-            if (memberIndex !== -1) {
-                const member = project.team[memberIndex];
-                if (member.id !== user.id) {
-                    console.log(`Found legacy membership in project ${project.id}. Updating ID.`);
-                    project.team[memberIndex].id = user.id; // Swap legacy ID with Clerk ID
-                    project.team[memberIndex].avatar = user.avatar; // Update avatar
-                    needsUpdate = true;
-                    claimedCount++;
+        for (const row of rows) {
+            let project = row.data;
+            let needsUpdate = false;
+
+            // A. Claim Legacy Projects
+            if (project.team && Array.isArray(project.team)) {
+                const memberIndex = project.team.findIndex(m => m.email === user.email || m.name === user.name); 
+                
+                if (memberIndex !== -1) {
+                    const member = project.team[memberIndex];
+                    if (member.id !== user.id) {
+                        project.team[memberIndex].id = user.id; 
+                        project.team[memberIndex].avatar = user.avatar; 
+                        needsUpdate = true;
+                        claimedCount++;
+                    }
                 }
+            }
+
+            // B. Ensure Owner ID consistency (Optional logic here)
+
+            // C. Save to DB (Update JSON + Columns)
+            // Always run update to ensure org_id column is populated/synced
+            const jsonOrgId = project.orgId || null;
+            
+            try {
+                // Determine if we actually need to write to DB to save IOPS
+                // We write if:
+                // 1. The JSON changed (needsUpdate)
+                // 2. The column org_id doesn't match the json org_id (migration logic)
+                // Since we can't easily check col value without selecting it (which we did implicitly via `select *` in previous versions, but here `select id, data`), 
+                // we assume we want to enforce consistency.
+                
+                await sql`
+                    UPDATE projects 
+                    SET data = ${JSON.stringify(project)}::jsonb, 
+                        org_id = ${jsonOrgId},
+                        updated_at = ${Date.now()}
+                    WHERE id = ${project.id};
+                `;
+                updatedCount++;
+            } catch (updateErr) {
+                console.error(`Failed to update project ${project.id}`, updateErr);
             }
         }
 
-        // B. Ensure Owner ID is consistent
-        // If I am the creator in the JSON data, but my ID changed
-        if (project.ownerId && project.team.some(m => m.id === user.id && m.role === 'Admin')) {
-             // Logic to claim ownership if previously unassigned or matched by name could go here
-        }
-
-        // C. Save to DB (Update JSON + Columns)
-        // We update if we changed the JSON (needsUpdate) OR if we need to backfill the org_id column
-        // Check if org_id in DB needs backfill from JSON
-        const jsonOrgId = project.orgId || null;
-        
-        // Always run update to ensure org_id column is populated from JSON data
-        try {
-            await sql`
-                UPDATE projects 
-                SET data = ${JSON.stringify(project)}::jsonb, 
-                    org_id = ${jsonOrgId},
-                    updated_at = ${Date.now()}
-                WHERE id = ${project.id};
-            `;
-            updatedCount++;
-        } catch (updateErr) {
-            console.error(`Failed to update project ${project.id}`, updateErr);
+        offset += BATCH_SIZE;
+        // Safety break for extremely large DBs in serverless function timeout
+        if (offset > 5000) {
+            console.warn("Migration limit reached (5000 records). Run again to continue.");
+            hasMore = false; 
         }
     }
 
@@ -90,7 +100,7 @@ export default async function handler(req, res) {
         success: true, 
         updatedProjects: updatedCount,
         claimedMemberships: claimedCount,
-        message: `Migration successful. Optimized ${updatedCount} projects.`
+        message: `Migration successful. Scanned and optimized ${updatedCount} projects.`
     });
 
   } catch (error) {

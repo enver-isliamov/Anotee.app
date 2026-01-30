@@ -4,12 +4,31 @@ import fetch from 'node-fetch';
 export default async function handler(req, res) {
     const { url } = req.query;
 
-    if (!url || typeof url !== 'string' || !url.includes('drive.google.com')) {
-        return res.status(400).send("Invalid Google Drive URL");
+    if (!url || typeof url !== 'string') {
+        return res.status(400).send("Missing URL parameter");
     }
 
+    // STRICT SECURITY: Prevent SSRF by extracting only the File ID.
+    // Do NOT trust the domain provided in the URL query directly for the fetch.
+    // We support standard Drive Viewer URLs and Export URLs.
+    // Regex matches alphanumeric IDs (usually 33 chars, sometimes longer)
+    const idRegex = /[-\w]{25,}/;
+    const match = url.match(idRegex);
+    const fileId = match ? match[0] : null;
+
+    // Check if it at least looks like a drive URL to avoid confusion, 
+    // though the ID extraction is the real security barrier.
+    const isDriveUrl = url.includes('drive.google.com') || url.includes('docs.google.com');
+
+    if (!fileId || !isDriveUrl) {
+        return res.status(400).send("Invalid Google Drive URL format");
+    }
+
+    // Construct the safe URL internally
+    const safeUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
     try {
-        const response = await fetch(url);
+        const response = await fetch(safeUrl);
         
         if (!response.ok) {
             return res.status(response.status).send(`Upstream Error: ${response.statusText}`);

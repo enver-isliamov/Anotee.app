@@ -9,6 +9,7 @@ import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization } from '@clerk/clerk-react';
+import { useDrive } from '../services/driveContext';
 
 interface ProjectViewProps {
   project: Project;
@@ -57,8 +58,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [uploadingVersionFor, setUploadingVersionFor] = useState<string | null>(null);
+  
+  // Use Context instead of local state/events
+  const { isDriveReady } = useDrive();
   const [useDriveStorage, setUseDriveStorage] = useState(false);
-  const [isDriveReady, setIsDriveReady] = useState(GoogleDriveService.isAuthenticated());
   
   // Share / Team View State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -79,18 +82,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     : project.assets;
 
   useEffect(() => {
-    const handleDriveUpdate = () => {
-        setIsDriveReady(GoogleDriveService.isAuthenticated());
-        if (GoogleDriveService.isAuthenticated()) setUseDriveStorage(true);
-    };
-    window.addEventListener('drive-token-updated', handleDriveUpdate);
-    
-    if (GoogleDriveService.isAuthenticated()) {
+    if (isDriveReady) {
         setUseDriveStorage(true);
     }
-    
-    return () => window.removeEventListener('drive-token-updated', handleDriveUpdate);
-  }, []);
+  }, [isDriveReady]);
 
   // --- DRAG & DROP HANDLERS ---
   const handleDragEnter = (e: React.DragEvent) => {

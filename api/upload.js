@@ -1,8 +1,8 @@
 
 import { handleUpload } from '@vercel/blob';
-import { verifyToken } from '@clerk/backend';
 import { sql } from '@vercel/postgres';
 import { checkProjectAccess } from './_permissions.js';
+import { getUserFromToken } from './_auth.js';
 
 export default async function handler(req, res) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -28,20 +28,11 @@ export default async function handler(req, res) {
         if (!token) throw new Error("Unauthorized: Missing Token in Payload");
         if (!projectId) throw new Error("Forbidden: Project ID required");
 
-        // 2. Verify Token with Clerk
-        let user;
-        try {
-            const verified = await verifyToken(token, {
-                secretKey: process.env.CLERK_SECRET_KEY,
-                clockSkewInMs: 60000 
-            });
-            // Replicate structure expected by checkProjectAccess
-            // We set 'id' to sub as fallback, but for legacy checks to work ideally 
-            // we would need the email. 
-            // Phase XI assumes migration is done, so userId (Clerk ID) should match DB owner_id/team IDs.
-            user = { id: verified.sub, userId: verified.sub };
-        } catch (e) {
-            throw new Error("Unauthorized: Invalid Token Verification");
+        // 2. Verify Token using shared Auth Logic
+        const user = await getUserFromToken(token);
+        
+        if (!user) {
+            throw new Error("Unauthorized: Invalid Token");
         }
 
         // 3. Verify Project Access in DB

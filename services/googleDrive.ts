@@ -21,12 +21,10 @@ export const GoogleDriveService = {
    */
   getToken: async (): Promise<string | null> => {
       if (!tokenGetter) {
-          console.warn("DriveService: No token provider set.");
           return null;
       }
       try {
           const t = await tokenGetter();
-          if (!t) console.warn("DriveService: Token provider returned null.");
           return t;
       } catch (e) {
           console.error("DriveService: Failed to get token", e);

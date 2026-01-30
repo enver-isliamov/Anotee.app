@@ -48,6 +48,25 @@ export const api = {
         clerkTokenProvider = provider;
     },
 
+    checkUpdates: async (orgId?: string): Promise<number> => {
+        if (IS_MOCK_MODE) return 0;
+        try {
+            const token = await getAuthToken();
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            
+            let url = '/api/check-updates';
+            if (orgId) url += `?orgId=${orgId}`;
+            
+            const res = await fetch(url, { headers });
+            if (!res.ok) return 0;
+            const data = await res.json();
+            return data.lastModified || 0;
+        } catch (e) {
+            return 0;
+        }
+    },
+
     getProjects: async (user: User | null, explicitToken?: string | null, orgId?: string, projectId?: string): Promise<Project[]> => {
         if (IS_MOCK_MODE) {
             // Simulate network delay

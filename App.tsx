@@ -20,6 +20,7 @@ import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react'
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
+import { DriveProvider, useDrive } from './services/driveContext';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -101,9 +102,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [isSyncing, setIsSyncing] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  
+  // Use Drive Context
+  const { checkDriveConnection } = useDrive();
 
   // Track the last local modification to prevent server overwrites
   const lastLocalUpdateRef = useRef<number>(0);
+  
+  // Track last known server data timestamp to minimize fetching
+  const lastServerTimestampRef = useRef<number>(0);
 
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
@@ -169,7 +176,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 
                 if (res.ok) {
                     const data = await res.json();
-                    window.dispatchEvent(new Event('drive-token-updated'));
+                    // Update context directly instead of event
+                    checkDriveConnection();
                     return data.token; 
                 } else {
                     return null;
@@ -182,7 +190,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     } else {
         GoogleDriveService.setTokenProvider(async () => null);
     }
-  }, [isSignedIn, getToken, isMockMode]);
+  }, [isSignedIn, getToken, isMockMode, checkDriveConnection]);
 
   const handleLogout = async () => {
     if (isSignedIn) {
@@ -191,7 +199,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     setView({ type: 'DASHBOARD' });
   };
 
-  const fetchCloudData = useCallback(async (userOverride?: User) => {
+  const fetchCloudData = useCallback(async (userOverride?: User, force = false) => {
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
       
@@ -205,11 +213,27 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           try { token = await getToken(); } catch (e) {}
       }
 
-      try {
-         // Check URL parameters for direct link access
-         const params = new URLSearchParams(window.location.search);
-         const directProjectId = params.get('projectId');
+      // Check URL parameters for direct link access
+      const params = new URLSearchParams(window.location.search);
+      const directProjectId = params.get('projectId');
 
+      // OPTIMIZATION: Check if we need to fetch full data
+      // If we are just polling (not forced), check the lightweight timestamp first
+      if (!force && !directProjectId && !isMockMode) {
+          try {
+              const lastModified = await api.checkUpdates(organization?.id);
+              if (lastModified > 0 && lastModified <= lastServerTimestampRef.current) {
+                  // No changes since last fetch
+                  return;
+              }
+              // If changed, update ref and proceed to fetch full JSON
+              if (lastModified > 0) lastServerTimestampRef.current = lastModified;
+          } catch(e) {
+              console.warn("Failed update check, falling back to full fetch");
+          }
+      }
+
+      try {
          setIsSyncing(true);
          // Pass explicit project ID to fetch it even if it's public/not in my list
          const serverData = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
@@ -265,7 +289,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       } finally {
          setIsSyncing(false);
       }
-  }, [currentUser, getToken, authMode, organization]);
+  }, [currentUser, getToken, authMode, organization, isMockMode]);
 
   // OPTIMIZED SYNC: Now accepts a single Project or Array
   const forceSync = async (projectsData: Project[]) => {
@@ -289,6 +313,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   }
                   return p;
               }));
+              // Update our local timestamp ref so next poll doesn't refetch our own changes
+              lastServerTimestampRef.current = Date.now();
           }
       } catch (e: any) {
           console.error("Sync failed", e);
@@ -296,7 +322,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           if (e.code === 'CONFLICT') {
               notify("Conflict detected. Reloading...", "warning");
               lastLocalUpdateRef.current = 0; // Allow immediate poll
-              fetchCloudData(); 
+              fetchCloudData(undefined, true); 
           } else {
               notify("Failed to save changes. Check internet.", "error");
           }
@@ -319,7 +345,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   useEffect(() => {
     if (!currentUser) return; 
-    fetchCloudData();
+    // Initial fetch always forced
+    fetchCloudData(undefined, true);
   }, [currentUser, fetchCloudData]);
 
   useEffect(() => {
@@ -578,18 +605,23 @@ const ClerkWrapper: React.FC = () => {
     
     // Clerk provides the active organization here if one is selected
     const activeOrg = organization;
+    
+    const env = (import.meta as any).env || {};
+    const isMockMode = !env.VITE_CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY.includes('placeholder');
 
     return (
-        <AppLayout 
-            clerkUser={user}
-            isLoaded={isLoaded}
-            isSignedIn={isSignedIn || false}
-            getToken={getToken}
-            signOut={async () => { await signOut(); }}
-            mockSignIn={() => openSignIn()}
-            authMode="clerk"
-            organization={activeOrg}
-        />
+        <DriveProvider isMockMode={isMockMode}>
+            <AppLayout 
+                clerkUser={user}
+                isLoaded={isLoaded}
+                isSignedIn={isSignedIn || false}
+                getToken={getToken}
+                signOut={async () => { await signOut(); }}
+                mockSignIn={() => openSignIn()}
+                authMode="clerk"
+                organization={activeOrg}
+            />
+        </DriveProvider>
     );
 }
 
@@ -619,16 +651,18 @@ const App: React.FC = () => {
         };
 
         return (
-            <AppLayout 
-                clerkUser={mockUser}
-                isLoaded={true}
-                isSignedIn={isMockSignedIn}
-                getToken={async () => 'mock-token'}
-                signOut={handleMockSignOut}
-                mockSignIn={handleMockSignIn}
-                authMode="mock"
-                organization={null}
-            />
+            <DriveProvider isMockMode={true}>
+                <AppLayout 
+                    clerkUser={mockUser}
+                    isLoaded={true}
+                    isSignedIn={isMockSignedIn}
+                    getToken={async () => 'mock-token'}
+                    signOut={handleMockSignOut}
+                    mockSignIn={handleMockSignIn}
+                    authMode="mock"
+                    organization={null}
+                />
+            </DriveProvider>
         );
     };
 
