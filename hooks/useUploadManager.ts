@@ -58,23 +58,37 @@ export const useUploadManager = (
             // Block server polling to prevent overwriting
             lastLocalUpdateRef.current = Date.now() + 60000; 
 
-            // 1. Generate Thumbnail
-            updateTask({ status: 'processing' });
-            const thumbnailDataUrl = await generateVideoThumbnail(file);
-            const assetTitle = file.name.replace(/\.[^/.]+$/, "");
-            
-            // Find Project Name for UI
+            // Find Project & Determine Version Number BEFORE Upload
             const project = projects.find(p => p.id === projectId);
             if (project) updateTask({ projectName: project.name });
 
+            // 1. Calculate Naming & Version
+            let nextVersionNumber = 1;
+            const assetTitle = file.name.replace(/\.[^/.]+$/, "");
+            const ext = file.name.split('.').pop();
+
+            if (targetAssetId && project) {
+                const existingAsset = project.assets.find(a => a.id === targetAssetId);
+                if (existingAsset) {
+                    nextVersionNumber = existingAsset.versions.length + 1;
+                }
+            }
+
+            // Correct Naming: _v2, _v3 instead of _vNEW
+            const finalFileName = targetAssetId 
+                ? `${assetTitle}_v${nextVersionNumber}.${ext}`
+                : `${assetTitle}_v1.${ext}`;
+
+            // 2. Generate Thumbnail
+            updateTask({ status: 'processing' });
+            const thumbnailDataUrl = await generateVideoThumbnail(file);
             updateTask({ status: 'uploading' });
 
             let assetUrl = '';
             let googleDriveId = undefined;
             let storageType: StorageType = 'vercel';
-            let finalFileName = file.name;
 
-            // 2. Upload Process
+            // 3. Upload Process
             if (isMockMode) {
                 for (let i = 0; i <= 100; i+=10) {
                     updateProgress(i);
@@ -96,15 +110,14 @@ export const useUploadManager = (
                         const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
                         const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
 
-                        const ext = file.name.split('.').pop();
-                        const niceName = targetAssetId 
-                            ? `${assetTitle}_vNEW.${ext}`
-                            : `${assetTitle}_v1.${ext}`;
-
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), niceName);
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
                         googleDriveId = result.id;
                         storageType = 'drive';
-                        finalFileName = niceName;
+                        
+                        // CRITICAL: Ensure Permissions are Public immediately after upload
+                        // This prevents "Access Denied" when the player tries to load it via 'uc' link
+                        await GoogleDriveService.makeFilePublic(result.id);
+
                     } catch (driveErr: any) {
                         if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
                              throw new Error("Drive Session Expired. Please refresh page/reconnect.");
@@ -129,7 +142,8 @@ export const useUploadManager = (
                 }
             }
 
-            // 3. Construct New Project State
+            // 4. Construct New Project State
+            // Refetch index to be safe against async state changes
             const projIndex = projects.findIndex(p => p.id === projectId);
             if (projIndex === -1) throw new Error("Project not found during upload finalization");
 
@@ -137,7 +151,7 @@ export const useUploadManager = (
             
             const newVersion = {
                 id: generateId(),
-                versionNumber: 1, 
+                versionNumber: nextVersionNumber, 
                 filename: finalFileName,
                 url: assetUrl,
                 storageType,
@@ -149,19 +163,15 @@ export const useUploadManager = (
             };
 
             if (targetAssetId) {
-                // Adding Version
+                // Adding Version to Existing Asset
                 const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
                 if (assetIdx !== -1) {
                     const asset = { ...updatedProject.assets[assetIdx] };
-                    newVersion.versionNumber = asset.versions.length + 1;
                     
-                    if (!isMockMode && useDrive) {
-                        newVersion.filename = `${asset.title}_v${newVersion.versionNumber}.${file.name.split('.').pop()}`;
-                    }
-                    
+                    // Add new version
                     asset.versions = [...asset.versions, newVersion];
                     asset.thumbnail = thumbnailDataUrl;
-                    asset.currentVersionIndex = asset.versions.length - 1;
+                    asset.currentVersionIndex = asset.versions.length - 1; // Switch to new version
                     updatedProject.assets[assetIdx] = asset;
                 }
             } else {
@@ -178,7 +188,7 @@ export const useUploadManager = (
             
             updatedProject.updatedAt = 'Just now';
 
-            // 4. Try Sync
+            // 5. Try Sync
             try {
                 // Optimistically update UI
                 setProjects(currentProjects => {

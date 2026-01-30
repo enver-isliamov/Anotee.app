@@ -413,7 +413,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
   const handleExport = (format: 'xml' | 'csv' | 'edl') => { let content = ''; let mime = 'text/plain'; let ext = ''; if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); setShowExportMenu(false); };
   const handleSelectCompareVersion = (idx: number | null) => { setCompareVersionIdx(idx); if (idx !== null) setViewMode('side-by-side'); else setViewMode('single'); setShowCompareMenu(false); };
-  const handleSwitchVersion = (idx: number) => { setDriveUrl(null); setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(idx); setShowVersionSelector(false); if (compareVersionIdx === idx) { setCompareVersionIdx(null); setViewMode('single'); } };
+  
+  // FIXED SWITCH: Reset Drive URL to force reload
+  const handleSwitchVersion = (idx: number) => { 
+      setDriveUrl(null); 
+      setVideoError(false); 
+      setDriveFileMissing(false); 
+      setDrivePermissionError(false); 
+      setDriveUrlRetried(false); 
+      setLoadingDrive(true); 
+      setCurrentVersionIdx(idx); 
+      setShowVersionSelector(false); 
+      if (compareVersionIdx === idx) { 
+          setCompareVersionIdx(null); 
+          setViewMode('single'); 
+      } 
+  };
 
   const filteredComments = comments.filter(c => c.text.toLowerCase().includes(searchQuery.toLowerCase()));
   const activeOverlayComments = comments.filter(c => { const s = c.timestamp; const e = c.duration ? (s + c.duration) : (s + 4); return currentTime >= s && currentTime <= e; });
