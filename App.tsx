@@ -121,6 +121,34 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
+  // --- NAVIGATION HANDLER (HISTORY API) ---
+  useEffect(() => {
+    const handlePopState = () => {
+        const params = new URLSearchParams(window.location.search);
+        const pId = params.get('projectId');
+        const aId = params.get('assetId');
+
+        if (pId && aId) {
+            setView({ type: 'PLAYER', projectId: pId, assetId: aId });
+        } else if (pId) {
+            setView({ type: 'PROJECT_VIEW', projectId: pId });
+        } else {
+            // Check for other static routes based on some other logic if needed, 
+            // but for now default to Dashboard
+            // NOTE: Ideally we'd have a router, but this suffices for the requirements
+            setView({ type: 'DASHBOARD' });
+        }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    // Initial Load Logic handled in a separate Effect below, 
+    // but we can trigger it here if needed.
+    
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+
   // --- PREVENT BROWSER DEFAULT DRAG DROP & GLOBAL SHORTCUTS ---
   useEffect(() => {
       const handleGlobalDrag = (e: DragEvent) => {
@@ -197,6 +225,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         await signOut();
     } 
     setView({ type: 'DASHBOARD' });
+    window.history.pushState({}, '', '/');
   };
 
   const fetchCloudData = useCallback(async (userOverride?: User, force = false) => {
@@ -249,9 +278,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     return currentLocalProjects;
                 }
 
-                // 2. SMART MERGE: Preserve Local Files
-                // Server data does NOT contain localFileUrl (security/blob rules).
-                // We must restore them from our current local state if the IDs match.
+                // 2. SMART MERGE: Preserve Local Files & Cleanup Ghosts
                 const mergedProjects = serverData.map(serverProj => {
                     const localProj = currentLocalProjects.find(p => p.id === serverProj.id);
                     
@@ -264,7 +291,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                             const mergedVersions = serverAsset.versions.map(serverVer => {
                                 const localVer = localAsset.versions.find(v => v.id === serverVer.id);
                                 if (localVer && localVer.localFileUrl) {
-                                    // RESTORE LOCAL REFERENCE
+                                    // CLEANUP: If not in mock mode, invalidate blob URLs on reload
+                                    if (!isMockMode && localVer.localFileUrl.startsWith('blob:')) {
+                                        return serverVer; // Drop the blob reference
+                                    }
+                                    // RESTORE LOCAL REFERENCE (Only if valid)
                                     return {
                                         ...serverVer,
                                         localFileUrl: localVer.localFileUrl,
@@ -361,6 +392,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
+  // Initial Route Check (Sync state with URL on load)
   useEffect(() => {
     if (!currentUser) return;
 
@@ -369,44 +401,40 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const aId = params.get('assetId');
 
     if (pId) {
-      // Find in existing or loaded projects
-      const projectExists = projects.find(p => p.id === pId);
-      
-      if (projectExists) {
-            if (aId) {
-                const assetExists = projectExists.assets.find(a => a.id === aId);
-                if (assetExists) setView({ type: 'PLAYER', projectId: pId, assetId: aId });
-                else setView({ type: 'PROJECT_VIEW', projectId: pId });
-            } else {
-                setView({ type: 'PROJECT_VIEW', projectId: pId });
-            }
+      // Find in existing or loaded projects (Note: projects might be empty on first render)
+      // This logic relies on fetchCloudData populating `projects`.
+      // The view switching logic needs to be robust enough to handle "Loading" state or just set view ID.
+      if (aId) {
+           setView({ type: 'PLAYER', projectId: pId, assetId: aId });
+      } else {
+           setView({ type: 'PROJECT_VIEW', projectId: pId });
       }
     }
-  }, [currentUser, projects]); 
+  }, [currentUser]); 
 
   const handleSelectProject = (project: Project) => {
     setView({ type: 'PROJECT_VIEW', projectId: project.id });
-    const newUrl = `${window.location.pathname}?projectId=${project.id}`;
+    const newUrl = `/?projectId=${project.id}`;
     window.history.pushState({ path: newUrl }, '', newUrl);
   };
 
   const handleSelectAsset = (asset: ProjectAsset) => {
     if (view.type === 'PROJECT_VIEW') {
       setView({ type: 'PLAYER', assetId: asset.id, projectId: view.projectId, restrictedAssetId: view.restrictedAssetId });
-      const newUrl = `${window.location.pathname}?projectId=${view.projectId}&assetId=${asset.id}`;
+      const newUrl = `/?projectId=${view.projectId}&assetId=${asset.id}`;
       window.history.pushState({ path: newUrl }, '', newUrl);
     }
   };
 
   const handleBackToDashboard = () => {
     setView({ type: 'DASHBOARD' });
-    window.history.pushState({}, '', window.location.pathname);
+    window.history.pushState({}, '', '/');
   };
 
   const handleBackToProject = () => {
     if (view.type === 'PLAYER') {
       setView({ type: 'PROJECT_VIEW', projectId: view.projectId, restrictedAssetId: view.restrictedAssetId });
-      const newUrl = `${window.location.pathname}?projectId=${view.projectId}`;
+      const newUrl = `/?projectId=${view.projectId}`;
       window.history.pushState({ path: newUrl }, '', newUrl);
     }
   };
@@ -448,6 +476,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
   
   const handleNavigate = (page: string) => {
+      // Clear URL params for static pages
+      window.history.pushState({}, '', '/');
       switch(page) {
           case 'WORKFLOW': setView({ type: 'WORKFLOW' }); break;
           case 'ABOUT': setView({ type: 'ABOUT' }); break;
@@ -455,6 +485,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'PROFILE': setView({ type: 'PROFILE' }); break;
           case 'AI_FEATURES': setView({ type: 'AI_FEATURES' }); break;
           case 'LIVE_DEMO': setView({ type: 'LIVE_DEMO' }); break;
+          case 'DASHBOARD': setView({ type: 'DASHBOARD' }); break;
           default: setView({ type: 'DASHBOARD' });
       }
   };

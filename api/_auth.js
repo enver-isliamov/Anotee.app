@@ -30,8 +30,8 @@ export async function getUserFromToken(token) {
         const primaryEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress;
 
         return {
-            id: primaryEmail || user.id, // Legacy compat: prefer email if available for ID match, else Clerk ID
-            userId: user.id, // Explicit Clerk ID
+            id: user.id, // IDENTITY FIX: Always use Clerk ID as the primary ID
+            userId: user.id, // Keep alias for explicit usage
             email: primaryEmail,
             name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User',
             avatar: user.imageUrl,

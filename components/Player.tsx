@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User } from '../types';
-import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2 } from 'lucide-react';
+import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor } from '../services/utils';
 import { ToastType } from './Toast';
@@ -48,6 +48,180 @@ interface TranscriptChunk {
     timestamp: [number, number] | null; 
 }
 
+// --- OPTIMIZATION: Memoized Sidebar Component ---
+// This prevents the entire comment list from re-rendering on every video frame update (30-60fps)
+// We pass down necessary props and callbacks.
+const PlayerSidebar = React.memo(({ 
+    sidebarTab, setSidebarTab, filteredComments, isManager, version, 
+    handleToggleLock, setShowExportMenu, showExportMenu, handleExport, handleBulkResolve,
+    currentUser, currentTime, editingCommentId, selectedCommentId, swipeCommentId, swipeOffset,
+    setSelectedCommentId, videoRef, setVideoError, setPreviousTime, setIsPlaying,
+    startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
+    transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
+    transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
+    setTranscript, seekByFrame, videoFps, formatTimecode, t
+}: any) => {
+    
+    return (
+        <div className="w-full lg:w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shrink-0 h-[45vh] lg:h-auto z-10 shadow-2xl lg:shadow-none pb-20 lg:pb-0 relative transition-colors">
+             <>
+                <div className="flex border-b border-zinc-200 dark:border-zinc-800">
+                    <button 
+                        onClick={() => setSidebarTab('comments')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'comments' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
+                    >
+                        <MessageSquare size={14} /> {t('player.comments')}
+                    </button>
+                    <button 
+                        onClick={() => setSidebarTab('transcript')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'transcript' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
+                    >
+                        <List size={14} /> Transcript
+                    </button>
+                </div>
+                {sidebarTab === 'comments' && (
+                    <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 sticky top-0 z-20">
+                        <div className="flex items-center gap-3"><span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total: ({filteredComments.length})</span></div>
+                        <div className="flex items-center gap-2">
+                            {isManager && (<><button onClick={handleToggleLock} className={`p-1 rounded transition-colors ${version.isLocked ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} title={version.isLocked ? t('player.unlock_ver') : t('player.lock_ver')}>{version.isLocked ? <Lock size={14} /> : <Unlock size={14} />}</button><div className="relative"><button onClick={() => setShowExportMenu(!showExportMenu)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title={t('player.export.title')}><Download size={14} /></button>{showExportMenu && (<div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100"><button onClick={() => handleExport('xml')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><Film size={14} className="text-indigo-500 dark:text-indigo-400" />{t('player.export.xml')}</button><button onClick={() => handleExport('csv')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileSpreadsheet size={14} className="text-green-500 dark:text-green-400" />{t('player.export.csv')}</button><button onClick={() => handleExport('edl')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileText size={14} className="text-orange-500 dark:text-orange-400" />{t('player.export.edl')}</button></div>)}{showExportMenu && (<div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>)}</div></>)}
+                            {isManager && filteredComments.some((c: any) => c.status === CommentStatus.OPEN) && (<button onClick={handleBulkResolve} className="flex items-center gap-1 text-[9px] font-bold bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-900/50 hover:bg-green-200 dark:hover:bg-green-900/40 px-2 py-0.5 rounded transition-colors uppercase"><CheckSquare size={10} />{t('player.resolve_all')}</button>)}
+                        </div>
+                    </div>
+                )}
+                
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
+                    {sidebarTab === 'comments' && filteredComments.map((comment: any) => {
+                        const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager);
+                        return (
+                        <div key={comment.id} className="relative group/wrapper" id={`comment-${comment.id}`}>
+                             <div className="absolute inset-0 rounded-lg flex items-center justify-between px-4"><div className="flex items-center text-blue-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o > 20 ? 1 : 0 }}><Pencil size={16} /> {t('common.edit')}</div><div className="flex items-center text-red-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o < -20 ? 1 : 0 }}>{t('common.delete')} <Trash2 size={16} /></div></div>
+                            <div onTouchStart={(e) => {}} style={{ transform: `translateX(${o}px)` }} onClick={() => { if (isE) return; setSelectedCommentId(comment.id); if (videoRef.current && !videoError) { videoRef.current.currentTime = comment.timestamp; setPreviousTime(comment.timestamp); setIsPlaying(false); videoRef.current.pause(); } }} className={`rounded-lg p-2 border text-xs cursor-pointer transition-all relative z-10 shadow-sm ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/50' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-zinc-700'} ${isA && !isSelected ? 'border-l-4 border-l-indigo-500 bg-zinc-50 dark:bg-zinc-800 shadow-md ring-1 ring-inset ring-indigo-500/20' : ''}`}>
+                                <div className="flex justify-between items-start mb-1">
+                                    <div className="flex items-center gap-2"><span className="font-bold text-zinc-900 dark:text-zinc-100" style={{ color: cC }}>{a.name.split(' ')[0]}</span><span className={`font-mono text-[10px] px-1 rounded flex items-center gap-1 ${isA ? 'text-indigo-600 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30' : 'text-zinc-400 dark:text-zinc-500'}`}>{formatTimecode(comment.timestamp)}{comment.duration && <span className="opacity-50">→ {formatTimecode(comment.timestamp + comment.duration)}</span>}</span></div>
+                                    <div className="flex items-center gap-1">
+                                        {canEd && !isE && (<button onClick={(e) => { e.stopPropagation(); startEditing(comment); }} className="text-zinc-400 hover:text-blue-500 opacity-0 group-hover/wrapper:opacity-100 transition-opacity p-1" title={t('common.edit')}><Pencil size={12} /></button>)}
+                                        {canD && !isE && (<button onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }} className="text-zinc-400 hover:text-red-500 opacity-0 group-hover/wrapper:opacity-100 transition-opacity p-1" title={t('common.delete')}><Trash2 size={12} /></button>)}
+                                        {canR && !isE && (<button onClick={(e) => handleResolveComment(e, comment.id)} className={`p-1 ${comment.status==='resolved'?'text-green-500':'text-zinc-300 hover:text-green-500'}`}><CheckCircle size={12} /></button>)}
+                                        {!canR && !isE && (<div className={`w-1.5 h-1.5 rounded-full mx-1 ${comment.status==='resolved'?'bg-green-500':'bg-yellow-500'}`} />)}
+                                    </div>
+                                </div>
+                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-xs leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}`}>{comment.text}</p>)}
+                            </div>
+                        </div>);
+                    })}
+
+                    {sidebarTab === 'transcript' && (
+                        <div className="h-full flex flex-col">
+                            {!transcript && !isTranscribing && (
+                                <div className="flex flex-col h-full p-4">
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                                        <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/10 flex items-center justify-center mb-4 text-indigo-500">
+                                            <Bot size={24} />
+                                        </div>
+                                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">AI Transcription</h3>
+                                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed max-w-[240px]">
+                                            Use Client-Side AI to convert speech to text locally.
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
+                                                Language
+                                            </label>
+                                            <div className="relative">
+                                                <select 
+                                                    value={transcribeLanguage} 
+                                                    onChange={(e) => setTranscribeLanguage(e.target.value)}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500"
+                                                >
+                                                    {TRANSCRIBE_LANGUAGES.map(lang => (
+                                                        <option key={lang.code} value={lang.code}>{lang.label}</option>
+                                                    ))}
+                                                </select>
+                                                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
+                                                Model Quality
+                                            </label>
+                                            <div className="relative">
+                                                <select 
+                                                    value={transcribeModel} 
+                                                    onChange={(e) => setTranscribeModel(e.target.value)}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500"
+                                                >
+                                                    {TRANSCRIBE_MODELS.map(m => (
+                                                        <option key={m.id} value={m.id}>{m.label}</option>
+                                                    ))}
+                                                </select>
+                                                <Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+
+                                        <button 
+                                            onClick={handleTranscribe}
+                                            disabled={loadingDrive || driveFileMissing || videoError}
+                                            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+                                        >
+                                            <Wand2 size={14} /> Generate Transcript
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isTranscribing && (
+                                <div className="flex flex-col items-center justify-center h-64 px-8 text-center">
+                                    <Loader2 size={32} className="animate-spin text-indigo-500 mb-4" />
+                                    <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden">
+                                        <div 
+                                            className="bg-indigo-500 h-full transition-all duration-300 ease-out" 
+                                            style={{ width: `${transcribeProgress?.progress || 0}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
+                                        {transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {transcript && transcript.length > 0 && (
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                    <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between">
+                                        <span>Result</span>
+                                        <button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button>
+                                    </div>
+                                    {transcript.map((chunk: TranscriptChunk, i: number) => {
+                                        const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1];
+                                        return (
+                                            <div 
+                                                key={i}
+                                                onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)}
+                                                className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}
+                                            >
+                                                <div className="flex gap-2">
+                                                    <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">
+                                                        {chunk.timestamp ? formatTimecode(chunk.timestamp[0]) : '--:--'}
+                                                    </span>
+                                                    <p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>
+                                                        {chunk.text}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </>
+        </div>
+    );
+});
+
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
   const { t } = useLanguage();
   const { organization } = useOrganization();
@@ -80,6 +254,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [driveUrlRetried, setDriveUrlRetried] = useState(false); 
   const [driveFileMissing, setDriveFileMissing] = useState(false); 
+  const [drivePermissionError, setDrivePermissionError] = useState(false); // NEW STATE
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [videoError, setVideoError] = useState(false);
 
@@ -382,6 +557,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       
       setDriveUrl(null); 
       setDriveFileMissing(false);
+      setDrivePermissionError(false);
       setVideoError(false);
       setDriveUrlRetried(false);
       setLoadingDrive(true); 
@@ -398,6 +574,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     
     setVideoError(false); 
     setDriveFileMissing(false);
+    setDrivePermissionError(false);
     setDriveUrlRetried(false); 
     setDriveUrl(null); 
     setLoadingDrive(false);
@@ -499,6 +676,23 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       }
   };
   
+  const handleFixPermissions = async () => {
+      if (!version.googleDriveId) return;
+      notify("Attempting to make file public...", "info");
+      const success = await GoogleDriveService.makeFilePublic(version.googleDriveId);
+      if (success) {
+          notify("Permissions fixed! Refreshing...", "success");
+          setVideoError(false);
+          setDrivePermissionError(false);
+          // Force refresh url
+          setDriveUrlRetried(false);
+          const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId);
+          setDriveUrl(`${streamUrl}&t=${Date.now()}`); // Bust cache
+      } else {
+          notify("Failed to fix permissions. Check Drive settings.", "error");
+      }
+  };
+
   const handleVideoError = async () => {
       if (loadingDrive) return;
 
@@ -527,7 +721,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           if (status !== 'ok') {
               setDriveFileMissing(true);
           } else {
-              setVideoError(true); // File exists but player can't play it
+              // File exists, but we can't play it. Likely 403 Permissions issue.
+              setDrivePermissionError(true);
+              setVideoError(true); 
           }
       } else {
           // Local file or Vercel Blob error
@@ -682,8 +878,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setDriveUrl(null); 
       setVideoError(false);
       setDriveFileMissing(false);
+      setDrivePermissionError(false);
       setDriveUrlRetried(false);
-      setLoadingDrive(true);(idx);
+      setLoadingDrive(true);
       
       setCurrentVersionIdx(idx);
       setShowVersionSelector(false);
@@ -881,7 +1078,31 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
              {loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><Loader2 size={48} className="animate-spin text-white/50"/></div>)}
 
-             {videoError && !driveFileMissing && (<div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-6 text-center animate-in fade-in duration-300"><div className="bg-zinc-800 p-4 rounded-full mb-4 ring-1 ring-zinc-700"><FileVideo size={32} className="text-zinc-400" /></div><p className="text-zinc-300 font-bold text-lg mb-2">{t('player.media_offline')}</p><p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">{t('player.offline_desc')}</p><button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer"><Upload size={16} /> {t('player.link_local')}</button></div>)}
+             {videoError && !driveFileMissing && (
+                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-6 text-center animate-in fade-in duration-300">
+                    <div className="bg-zinc-800 p-4 rounded-full mb-4 ring-1 ring-zinc-700">
+                        {drivePermissionError ? <ShieldAlert size={32} className="text-orange-500" /> : <FileVideo size={32} className="text-zinc-400" />}
+                    </div>
+                    
+                    <p className="text-zinc-300 font-bold text-lg mb-2">
+                        {drivePermissionError ? "Access Restricted" : t('player.media_offline')}
+                    </p>
+                    
+                    <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
+                        {drivePermissionError ? "You need public access to view this Drive file in the player." : t('player.offline_desc')}
+                    </p>
+
+                    {drivePermissionError && isManager && (
+                         <button onClick={(e) => { e.stopPropagation(); handleFixPermissions(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
+                             <Unlock size={16} /> Fix Permissions (Make Public)
+                         </button>
+                    )}
+
+                    <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm border border-zinc-700 cursor-pointer">
+                        <Upload size={16} /> {t('player.link_local')}
+                    </button>
+                 </div>
+             )}
 
              {driveFileMissing && (
                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-red-950/80 backdrop-blur-md p-6 text-center animate-in fade-in duration-300">
@@ -935,175 +1156,32 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         </div>
 
         {!isFullscreen && (
-        <div className="w-full lg:w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shrink-0 h-[45vh] lg:h-auto z-10 shadow-2xl lg:shadow-none pb-20 lg:pb-0 relative transition-colors">
-             <>
-                <div className="flex border-b border-zinc-200 dark:border-zinc-800">
-                    <button 
-                        onClick={() => setSidebarTab('comments')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'comments' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
-                    >
-                        <MessageSquare size={14} /> {t('player.comments')}
-                    </button>
-                    <button 
-                        onClick={() => setSidebarTab('transcript')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'transcript' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
-                    >
-                        <List size={14} /> Transcript
-                    </button>
-                </div>
-                {sidebarTab === 'comments' && (
-                    <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 sticky top-0 z-20">
-                        <div className="flex items-center gap-3"><span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total: ({filteredComments.length})</span></div>
-                        <div className="flex items-center gap-2">
-                            {isManager && (<><button onClick={handleToggleLock} className={`p-1 rounded transition-colors ${version.isLocked ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} title={version.isLocked ? t('player.unlock_ver') : t('player.lock_ver')}>{version.isLocked ? <Lock size={14} /> : <Unlock size={14} />}</button><div className="relative"><button onClick={() => setShowExportMenu(!showExportMenu)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title={t('player.export.title')}><Download size={14} /></button>{showExportMenu && (<div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100"><button onClick={() => handleExport('xml')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><Film size={14} className="text-indigo-500 dark:text-indigo-400" />{t('player.export.xml')}</button><button onClick={() => handleExport('csv')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileSpreadsheet size={14} className="text-green-500 dark:text-green-400" />{t('player.export.csv')}</button><button onClick={() => handleExport('edl')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileText size={14} className="text-orange-500 dark:text-orange-400" />{t('player.export.edl')}</button></div>)}{showExportMenu && (<div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>)}</div></>)}
-                            {isManager && filteredComments.some(c => c.status === CommentStatus.OPEN) && (<button onClick={handleBulkResolve} className="flex items-center gap-1 text-[9px] font-bold bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-900/50 hover:bg-green-200 dark:hover:bg-green-900/40 px-2 py-0.5 rounded transition-colors uppercase"><CheckSquare size={10} />{t('player.resolve_all')}</button>)}
-                        </div>
+            <PlayerSidebar 
+                sidebarTab={sidebarTab} setSidebarTab={setSidebarTab} filteredComments={filteredComments} isManager={isManager}
+                version={version} handleToggleLock={handleToggleLock} setShowExportMenu={setShowExportMenu} showExportMenu={showExportMenu}
+                handleExport={handleExport} handleBulkResolve={handleBulkResolve} currentUser={currentUser} currentTime={currentTime}
+                editingCommentId={editingCommentId} selectedCommentId={selectedCommentId} swipeCommentId={swipeCommentId} swipeOffset={swipeOffset}
+                setSelectedCommentId={setSelectedCommentId} videoRef={videoRef} setVideoError={setVideoError} setPreviousTime={setCurrentTime}
+                setIsPlaying={setIsPlaying} startEditing={startEditing} handleDeleteComment={handleDeleteComment} handleResolveComment={handleResolveComment}
+                editText={editText} setEditText={setEditText} cancelEdit={cancelEdit} saveEdit={saveEdit}
+                transcript={transcript} isTranscribing={isTranscribing} transcribeProgress={transcribeProgress} transcribeLanguage={transcribeLanguage}
+                setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
+                handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
+                setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} formatTimecode={formatTimecode} t={t}
+            />
+        )}
+
+        {!isFullscreen && sidebarTab === 'comments' && (
+            <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+                {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime)} - {markerOutPoint ? formatTimecode(markerOutPoint) : '...'}</span></div></div>)}
+                <div className="flex gap-2 items-center pb-[env(safe-area-inset-bottom)]">
+                    <div className="relative flex-1">
+                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? "Comments locked" : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
+                        <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={12} /> : <Mic size={12} />}</button>
                     </div>
-                )}
-                
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
-                    {sidebarTab === 'comments' && filteredComments.map(comment => {
-                        const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager);
-                        return (
-                        <div key={comment.id} className="relative group/wrapper" id={`comment-${comment.id}`}>
-                             <div className="absolute inset-0 rounded-lg flex items-center justify-between px-4"><div className="flex items-center text-blue-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o > 20 ? 1 : 0 }}><Pencil size={16} /> {t('common.edit')}</div><div className="flex items-center text-red-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o < -20 ? 1 : 0 }}>{t('common.delete')} <Trash2 size={16} /></div></div>
-                            <div onTouchStart={(e) => {}} style={{ transform: `translateX(${o}px)` }} onClick={() => { if (isE) return; setSelectedCommentId(comment.id); if (videoRef.current && !videoError) { videoRef.current.currentTime = comment.timestamp; setCurrentTime(comment.timestamp); setIsPlaying(false); videoRef.current.pause(); } }} className={`rounded-lg p-2 border text-xs cursor-pointer transition-all relative z-10 shadow-sm ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/50' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-zinc-700'} ${isA && !isSelected ? 'border-l-4 border-l-indigo-500 bg-zinc-50 dark:bg-zinc-800 shadow-md ring-1 ring-inset ring-indigo-500/20' : ''}`}>
-                                <div className="flex justify-between items-start mb-1">
-                                    <div className="flex items-center gap-2"><span className="font-bold text-zinc-900 dark:text-zinc-100" style={{ color: cC }}>{a.name.split(' ')[0]}</span><span className={`font-mono text-[10px] px-1 rounded flex items-center gap-1 ${isA ? 'text-indigo-600 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30' : 'text-zinc-400 dark:text-zinc-500'}`}>{formatTimecode(comment.timestamp)}{comment.duration && <span className="opacity-50">→ {formatTimecode(comment.timestamp + comment.duration)}</span>}</span></div>
-                                    <div className="flex items-center gap-1">
-                                        {canEd && !isE && (<button onClick={(e) => { e.stopPropagation(); startEditing(comment); }} className="text-zinc-400 hover:text-blue-500 opacity-0 group-hover/wrapper:opacity-100 transition-opacity p-1" title={t('common.edit')}><Pencil size={12} /></button>)}
-                                        {canD && !isE && (<button onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }} className="text-zinc-400 hover:text-red-500 opacity-0 group-hover/wrapper:opacity-100 transition-opacity p-1" title={t('common.delete')}><Trash2 size={12} /></button>)}
-                                        {canR && !isE && (<button onClick={(e) => handleResolveComment(e, comment.id)} className={`p-1 ${comment.status==='resolved'?'text-green-500':'text-zinc-300 hover:text-green-500'}`}><CheckCircle size={12} /></button>)}
-                                        {!canR && !isE && (<div className={`w-1.5 h-1.5 rounded-full mx-1 ${comment.status==='resolved'?'bg-green-500':'bg-yellow-500'}`} />)}
-                                    </div>
-                                </div>
-                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-xs leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}`}>{comment.text}</p>)}
-                            </div>
-                        </div>);
-                    })}
-
-                    {sidebarTab === 'transcript' && (
-                        <div className="h-full flex flex-col">
-                            {!transcript && !isTranscribing && (
-                                <div className="flex flex-col h-full p-4">
-                                    <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                        <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/10 flex items-center justify-center mb-4 text-indigo-500">
-                                            <Bot size={24} />
-                                        </div>
-                                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">AI Transcription</h3>
-                                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed max-w-[240px]">
-                                            Use Client-Side AI to convert speech to text locally.
-                                        </p>
-                                    </div>
-                                    
-                                    <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
-                                                Language
-                                            </label>
-                                            <div className="relative">
-                                                <select 
-                                                    value={transcribeLanguage} 
-                                                    onChange={(e) => setTranscribeLanguage(e.target.value)}
-                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500"
-                                                >
-                                                    {TRANSCRIBE_LANGUAGES.map(lang => (
-                                                        <option key={lang.code} value={lang.code}>{lang.label}</option>
-                                                    ))}
-                                                </select>
-                                                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">
-                                                Model Quality
-                                            </label>
-                                            <div className="relative">
-                                                <select 
-                                                    value={transcribeModel} 
-                                                    onChange={(e) => setTranscribeModel(e.target.value)}
-                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500"
-                                                >
-                                                    {TRANSCRIBE_MODELS.map(m => (
-                                                        <option key={m.id} value={m.id}>{m.label}</option>
-                                                    ))}
-                                                </select>
-                                                <Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                                            </div>
-                                        </div>
-
-                                        <button 
-                                            onClick={handleTranscribe}
-                                            disabled={loadingDrive || driveFileMissing || videoError}
-                                            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
-                                        >
-                                            <Wand2 size={14} /> Generate Transcript
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {isTranscribing && (
-                                <div className="flex flex-col items-center justify-center h-64 px-8 text-center">
-                                    <Loader2 size={32} className="animate-spin text-indigo-500 mb-4" />
-                                    <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden">
-                                        <div 
-                                            className="bg-indigo-500 h-full transition-all duration-300 ease-out" 
-                                            style={{ width: `${transcribeProgress?.progress || 0}%` }}
-                                        />
-                                    </div>
-                                    <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
-                                        {transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}
-                                    </p>
-                                </div>
-                            )}
-
-                            {transcript && transcript.length > 0 && (
-                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                    <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between">
-                                        <span>Result</span>
-                                        <button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button>
-                                    </div>
-                                    {transcript.map((chunk, i) => {
-                                        const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1];
-                                        return (
-                                            <div 
-                                                key={i}
-                                                onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)}
-                                                className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}
-                                            >
-                                                <div className="flex gap-2">
-                                                    <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">
-                                                        {chunk.timestamp ? formatTimecode(chunk.timestamp[0]) : '--:--'}
-                                                    </span>
-                                                    <p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>
-                                                        {chunk.text}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-2 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={14} /></button>
                 </div>
-
-                {sidebarTab === 'comments' && (
-                    <div className="fixed bottom-0 left-0 right-0 lg:static lg:w-full bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                        {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime)} - {markerOutPoint ? formatTimecode(markerOutPoint) : '...'}</span></div></div>)}
-                        <div className="flex gap-2 items-center pb-[env(safe-area-inset-bottom)]">
-                            <div className="relative flex-1">
-                                <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? "Comments locked" : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
-                                <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={12} /> : <Mic size={12} />}</button>
-                            </div>
-                            <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-2 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={14} /></button>
-                        </div>
-                    </div>
-                )}
-             </>
-        </div>
+            </div>
         )}
       </div>
 
