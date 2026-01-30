@@ -1,4 +1,5 @@
 
+// @deprecated - Roles are now handled by Clerk Organizations context
 export enum UserRole {
   ADMIN = 'Admin',
   CREATOR = 'Creator'
@@ -13,7 +14,7 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
-  role: UserRole;
+  role?: string; // Made optional, as we move away from internal role management
 }
 
 export interface Comment {

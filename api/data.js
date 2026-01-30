@@ -21,50 +21,42 @@ export default async function handler(req, res) {
       // GET: Retrieve Projects
       if (req.method === 'GET') {
         try {
-          // 1. Fetch Org Memberships
-          let orgIds = [];
+          const targetOrgId = req.query.orgId; // Optional filter
+
+          // 1. Fetch Org Memberships to verify access
+          let userOrgIds = [];
           if (user.isVerified && user.userId) {
               try {
                   const clerk = getClerkClient();
                   const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
-                  orgIds = memberships.data.map(m => m.organization.id);
+                  userOrgIds = memberships.data.map(m => m.organization.id);
               } catch (e) {
                   console.warn("Failed to fetch org memberships", e.message);
               }
           }
 
-          // 2. Query projects
+          // Security: If requesting a specific Org, user MUST be a member
+          if (targetOrgId && !userOrgIds.includes(targetOrgId)) {
+              // Return empty if user tries to access an Org they are not part of
+              return res.status(200).json([]);
+          }
+
           let query;
           
-          if (orgIds.length > 0) {
+          if (targetOrgId) {
+              // A. Organization View (Filtered)
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
-                WHERE owner_id = ${user.id} 
-                OR org_id = ANY(${orgIds}) 
-                OR (org_id IS NULL AND owner_id = ${user.id})
-                OR (
-                    jsonb_typeof(data->'team') = 'array' 
-                    AND EXISTS (
-                        SELECT 1 
-                        FROM jsonb_array_elements(data->'team') AS member 
-                        WHERE member->>'id' = ${user.id}
-                    )
-                );
+                WHERE org_id = ${targetOrgId}
               `;
               query = rows;
           } else {
-              // Strict personal query: Owner OR Legacy Team membership
+              // B. Personal Workspace View (No Org)
+              // Show projects where org_id is NULL OR owner_id matches (legacy support)
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
-                WHERE owner_id = ${user.id}
-                OR (
-                    jsonb_typeof(data->'team') = 'array' 
-                    AND EXISTS (
-                        SELECT 1 
-                        FROM jsonb_array_elements(data->'team') AS member 
-                        WHERE member->>'id' = ${user.id}
-                    )
-                );
+                WHERE (org_id IS NULL OR org_id = '') 
+                AND (owner_id = ${user.id})
               `;
               query = rows;
           }
@@ -73,7 +65,6 @@ export default async function handler(req, res) {
           const projects = query.map(r => {
               const p = r.data;
               if (r.org_id && !p.orgId) p.orgId = r.org_id;
-              // Ensure we return clean project objects
               return p;
           });
           
@@ -117,17 +108,10 @@ export default async function handler(req, res) {
             const orgId = project.orgId || null;
             
             // SECURITY: Enforce that only the authenticated user can be set as owner for new projects
-            // For existing projects, we check ownership in the WHERE clause.
             const ownerId = project.ownerId || user.id;
 
             try {
                 // 1. Try UPDATE with Version Check AND Ownership Check
-                // We allow update if:
-                // a) User is the owner (owner_id = user.id)
-                // b) Project belongs to an Org the user is part of (org_id IN orgIds)
-                // c) User is in the 'team' array (handled loosely here for legacy, but ideally strict)
-                
-                // Construct Org Check
                 const hasOrgAccess = orgIds.length > 0 && orgId ? orgIds.includes(orgId) : false;
 
                 let updateResult;
@@ -161,14 +145,10 @@ export default async function handler(req, res) {
                 if (updateResult.rowCount > 0) {
                     updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
                 } else {
-                    // 2. If Update failed, check if it's an INSERT (id doesn't exist)
-                    // OR a Conflict (id exists but version mismatch) OR Permission Denied
-                    
                     const checkExists = await sql`SELECT data->>'_version' as ver, owner_id FROM projects WHERE id = ${project.id}`;
                     
                     if (checkExists.rowCount === 0) {
                         // Does not exist -> INSERT
-                        // SECURITY: Force owner_id to be current user on creation
                         await sql`
                             INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
                             VALUES (
@@ -182,12 +162,11 @@ export default async function handler(req, res) {
                         `;
                         updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
                     } else {
-                        // Exists. Check if it was a permission issue or version conflict
+                        // Conflict or Permission Denied
                         const dbRow = checkExists.rows[0];
                         const isOwner = dbRow.owner_id === user.id;
                         
                         if (!isOwner && !hasOrgAccess) {
-                             // Silent fail or continue, do not expose error details for security
                              console.warn(`Unauthorized update attempt on ${project.id} by ${user.id}`);
                              continue; 
                         }

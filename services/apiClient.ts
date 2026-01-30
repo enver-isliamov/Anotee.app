@@ -50,11 +50,18 @@ export const api = {
         clerkTokenProvider = provider;
     },
 
-    getProjects: async (user: User | null, explicitToken?: string | null): Promise<Project[]> => {
+    getProjects: async (user: User | null, explicitToken?: string | null, orgId?: string): Promise<Project[]> => {
         if (IS_MOCK_MODE) {
             // Simulate network delay
             await new Promise(r => setTimeout(r, 600));
-            return getLocalData();
+            let data = getLocalData();
+            // Mock filter
+            if (orgId) {
+                data = data.filter(p => p.orgId === orgId);
+            } else {
+                data = data.filter(p => !p.orgId);
+            }
+            return data;
         }
 
         if (!user) return [];
@@ -66,7 +73,8 @@ export const api = {
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             
-            const res = await fetch('/api/data', { headers });
+            const url = orgId ? `/api/data?orgId=${orgId}` : '/api/data';
+            const res = await fetch(url, { headers });
             
             if (res.status === 401) {
                 console.error("Unauthorized request to /api/data. Token present:", !!token);
@@ -129,41 +137,6 @@ export const api = {
         } catch (e) {
             console.error("API Sync Error", e);
             throw e; // Propagate error to UI
-        }
-    },
-
-    joinProject: async (projectId: string, user: User, explicitToken?: string | null): Promise<{ success: boolean, project?: Project }> => {
-        if (IS_MOCK_MODE) {
-            await new Promise(r => setTimeout(r, 800));
-            const projects = getLocalData();
-            const project = projects.find(p => p.id === projectId);
-            
-            if (project) {
-                // Add user to team locally if not exists
-                if (!project.team.some(u => u.id === user.id)) {
-                    project.team.push(user);
-                    setLocalData(projects);
-                }
-                return { success: true, project };
-            }
-            return { success: false };
-        }
-
-        try {
-            // Even for joining, we might need auth if available (e.g. to verify the user identity)
-            const token = explicitToken || await getAuthToken();
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            const res = await fetch('/api/join', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ projectId, user })
-            });
-            const data = await res.json();
-            return { success: res.ok, project: data.project };
-        } catch (e) {
-            return { success: false };
         }
     },
 

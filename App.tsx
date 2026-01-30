@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -14,7 +13,7 @@ import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
-import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, ClerkProvider, useOrganization } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
 import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
@@ -32,7 +31,7 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'LIVE_DEMO' };
 
-const POLLING_INTERVAL_MS = 10000; // Increased to 10s for stability and quota savings
+const POLLING_INTERVAL_MS = 10000;
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
@@ -90,9 +89,10 @@ interface AppLayoutProps {
     signOut: () => Promise<void>;
     mockSignIn?: () => void;
     authMode: 'clerk' | 'mock';
+    organization?: any;
 }
 
-const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode }) => {
+const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization }) => {
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -112,6 +112,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const removeUploadTask = (id: string) => {
+    setUploadTasks(prev => prev.filter(t => t.id !== id));
   };
 
   // --- PREVENT BROWSER DEFAULT DRAG DROP & GLOBAL SHORTCUTS ---
@@ -145,9 +149,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     if (isSignedIn && clerkUser) {
         setCurrentUser({
             id: clerkUser.id,
-            name: clerkUser.fullName || clerkUser.firstName || 'Developer',
-            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
-            role: UserRole.ADMIN 
+            name: clerkUser.fullName || clerkUser.firstName || 'User',
+            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev'
         });
     } else {
         setCurrentUser(null);
@@ -347,10 +350,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  const removeUploadTask = (id: string) => {
-      setUploadTasks(prev => prev.filter(t => t.id !== id));
-  };
-
   const fetchCloudData = useCallback(async (userOverride?: User) => {
       const userToUse = userOverride || currentUser;
       if (!userToUse) return;
@@ -367,7 +366,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
       try {
          setIsSyncing(true);
-         const data = await api.getProjects(userToUse, token);
+         // Pass organization ID to fetch specific org projects
+         const data = await api.getProjects(userToUse, token, organization?.id);
          if (data && Array.isArray(data)) {
             setProjects(data);
          }
@@ -376,7 +376,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       } finally {
          setIsSyncing(false);
       }
-  }, [currentUser, getToken, authMode]);
+  }, [currentUser, getToken, authMode, organization]);
 
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
@@ -404,8 +404,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           console.error("Sync failed", e);
           
           if (e.code === 'CONFLICT') {
-              notify("Conflict detected. Another user modified this project. Reloading...", "warning");
-              // Force reload from server to resolve conflict
+              notify("Conflict detected. Reloading...", "warning");
               lastLocalUpdateRef.current = 0; // Allow immediate poll
               fetchCloudData(); 
           } else {
@@ -433,7 +432,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
-  // Deep Linking for Navigation
+  // Handle URL navigation
   useEffect(() => {
     if (!currentUser) return;
 
@@ -442,7 +441,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const aId = params.get('assetId');
 
     if (pId) {
-      // Optimistic check in current list
+      // We only switch view if the project is actually available in the current context
       const projectExists = projects.find(p => p.id === pId);
       
       if (projectExists) {
@@ -457,6 +456,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     }
   }, [currentUser, projects]); 
 
+  // ... [Handlers: handleSelectProject, etc. remain the same]
   const handleSelectProject = (project: Project) => {
     setView({ type: 'PROJECT_VIEW', projectId: project.id });
     const newUrl = `${window.location.pathname}?projectId=${project.id}`;
@@ -487,26 +487,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleUpdateProject = (updatedProject: Project, skipSync = false) => {
     const newProjects = projects.map(p => p.id === updatedProject.id ? updatedProject : p);
     setProjects(newProjects);
-    
     if (!skipSync) {
-        forceSync(newProjects); // Changed to use forceSync to handle conflicts
+        forceSync(newProjects);
     }
   };
   
   const handleEditProject = (projectId: string, data: Partial<Project>) => {
       const updated = projects.map(p => p.id === projectId ? { ...p, ...data, updatedAt: 'Just now' } : p);
       setProjects(updated);
-      forceSync(updated); // Changed to use forceSync
+      forceSync(updated);
       notify("Project updated", "success");
   };
 
   const handleAddProject = (newProject: Project) => {
-    // Initialize new project version
     const projectWithVersion = { ...newProject, _version: 0 };
     const newProjects = [projectWithVersion, ...projects];
     setProjects(newProjects);
     notify("Project created successfully", "success");
-    forceSync([projectWithVersion]); // Sync only the new project to reduce payload
+    forceSync([projectWithVersion]);
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -530,7 +528,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  // --- PREVENT FLICKERING (LOADING STATE) ---
   if (!isLoaded) {
       return (
           <div className="h-screen w-screen bg-zinc-950 flex items-center justify-center">
@@ -673,7 +670,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 const ClerkWrapper: React.FC = () => {
     const { user, isLoaded, isSignedIn } = useUser();
     const { getToken, signOut } = useAuth();
-    const { openSignIn } = useClerk();
+    const { openSignIn, organization } = useClerk();
+    
+    // Clerk provides the active organization here if one is selected
+    const activeOrg = organization;
 
     return (
         <AppLayout 
@@ -684,6 +684,7 @@ const ClerkWrapper: React.FC = () => {
             signOut={async () => { await signOut(); }}
             mockSignIn={() => openSignIn()}
             authMode="clerk"
+            organization={activeOrg}
         />
     );
 }
@@ -693,11 +694,7 @@ const App: React.FC = () => {
     const clerkKey = env.VITE_CLERK_PUBLISHABLE_KEY;
     const isMock = !clerkKey || clerkKey.includes('placeholder');
 
-    // Mock Mode Wrapper to simulate auth state if needed
     const MockAppWrapper = () => {
-        // In mock mode we can start signed out or signed in. 
-        // For simplicity, let's start signed out but allow "logging in"
-        // Note: AppLayout resets currentUser if isSignedIn is false.
         const [isMockSignedIn, setIsMockSignedIn] = useState(false);
         const [mockUser, setMockUser] = useState<any | null>(null);
 
@@ -726,6 +723,7 @@ const App: React.FC = () => {
                 signOut={handleMockSignOut}
                 mockSignIn={handleMockSignIn}
                 authMode="mock"
+                organization={null}
             />
         );
     };

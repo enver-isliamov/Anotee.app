@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Project, ProjectAsset, Comment, CommentStatus, User, UserRole } from '../types';
+import { Project, ProjectAsset, Comment, CommentStatus, User } from '../types';
 import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2 } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor } from '../services/utils';
@@ -9,6 +9,7 @@ import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
+import { useOrganization } from '@clerk/clerk-react';
 
 interface PlayerProps {
   asset: ProjectAsset;
@@ -42,12 +43,6 @@ const TRANSCRIBE_MODELS = [
     { id: 'Xenova/whisper-base', label: 'Balanced (Base)' },
 ];
 
-const canManageProject = (user: User, project: Project) => {
-    const isOwner = project.ownerId === user.id;
-    const isTeamMember = project.team.some(m => m.id === user.id);
-    return isOwner || isTeamMember;
-};
-
 interface TranscriptChunk {
     text: string;
     timestamp: [number, number] | null; 
@@ -55,6 +50,11 @@ interface TranscriptChunk {
 
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
   const { t } = useLanguage();
+  const { organization } = useOrganization();
+
+  // Check management permissions (Owner or Org Member)
+  const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);
+
   const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.currentVersionIndex);
   
   const [compareVersionIdx, setCompareVersionIdx] = useState<number | null>(null);
@@ -84,7 +84,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [videoError, setVideoError] = useState(false);
 
   const [isScrubbing, setIsScrubbing] = useState(false);
-  const scrubStartDataRef = useRef<{ x: number, time: number, wasPlaying: boolean } | null>(null);
   const isDragRef = useRef(false); 
   
   const [controlsPos, setControlsPos] = useState(() => {
@@ -140,10 +139,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const playerContainerRef = useRef<HTMLDivElement>(null); 
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const sidebarInputRef = useRef<HTMLInputElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   
   const fpsDetectionRef = useRef<{ frames: number[], lastTime: number, active: boolean }>({ frames: [], lastTime: 0, active: false });
-
-  const isManager = canManageProject(currentUser, project);
 
   const formatTimecode = (seconds: number) => {
     const fps = videoFps;
@@ -523,50 +521,46 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       }
   };
   
+  // PRECISE SCRUBBING LOGIC
   const handlePointerDown = (e: React.PointerEvent) => {
-    isDragRef.current = false;
-    scrubStartDataRef.current = {
-        x: e.clientX,
-        time: currentTime,
-        wasPlaying: isPlaying
-    };
+    isDragRef.current = true;
+    setIsScrubbing(true);
+    
+    // Pause immediately on touch
+    if (isPlaying) {
+        setIsPlaying(false);
+        videoRef.current?.pause();
+    }
+    
+    // Initial jump to tap position
+    updateScrubPosition(e);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-      if (!isDragRef.current && scrubStartDataRef.current && Math.abs(e.clientX - scrubStartDataRef.current.x) > 5) {
-          isDragRef.current = true;
-          setIsScrubbing(true);
-          if (isPlaying) {
-              setIsPlaying(false);
-              videoRef.current?.pause();
-          }
-      }
-
-      if (isDragRef.current && scrubStartDataRef.current && videoRef.current) {
-          const deltaX = e.clientX - scrubStartDataRef.current.x;
-          const pixelsPerFrame = 25; 
-          const framesMoved = deltaX / pixelsPerFrame;
-          const frameDuration = 1 / videoFps; 
-          const deltaT = framesMoved * frameDuration;
-          const newTime = Math.max(0, Math.min(duration, scrubStartDataRef.current.time + deltaT));
-          
-          videoRef.current.currentTime = newTime;
-          setCurrentTime(newTime);
-          if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
+      if (isDragRef.current) {
+          updateScrubPosition(e);
       }
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-      if (isDragRef.current && scrubStartDataRef.current) {
-          if (scrubStartDataRef.current.wasPlaying) togglePlay();
-      } else if (e.button === 0) {
-          togglePlay();
-      }
+  const updateScrubPosition = (e: React.PointerEvent) => {
+      if (!timelineRef.current || !videoRef.current) return;
       
+      const rect = timelineRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const percentage = x / rect.width;
+      const newTime = percentage * duration;
+      
+      // Immediate Update
+      setCurrentTime(newTime);
+      videoRef.current.currentTime = newTime;
+      
+      if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
       isDragRef.current = false;
       setIsScrubbing(false);
-      scrubStartDataRef.current = null;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
   
@@ -914,8 +908,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           </div>
 
           <div className={`${isVerticalVideo ? 'absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pb-6 pt-10' : 'bg-zinc-900 border-t border-zinc-800 pb-2'} p-2 lg:p-4 shrink-0 transition-transform duration-300`}>
-             <div className="relative h-6 md:h-8 group cursor-pointer flex items-center touch-none">
-                <input type="range" min={0} max={duration || 100} step={0.01} value={currentTime} onChange={handleSeek} disabled={videoError || driveFileMissing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30 disabled:cursor-not-allowed" />
+             <div className="relative h-6 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef}>
+                <input type="range" min={0} max={duration || 100} step={0.01} value={currentTime} onChange={handleSeek} disabled={videoError || driveFileMissing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30 disabled:cursor-not-allowed pointer-events-auto" />
                 <div className="w-full h-1.5 bg-zinc-700/50 rounded-full overflow-hidden relative"><div className="h-full bg-indigo-500" style={{ width: `${(currentTime / duration) * 100}%` }} /></div>
                 {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: c.status === 'resolved' ? '#22c55e' : cl }} />); })}
              </div>
@@ -951,7 +945,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
                     {sidebarTab === 'comments' && filteredComments.map(comment => {
-                        const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager && currentUser.role === UserRole.ADMIN);
+                        const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager);
                         return (
                         <div key={comment.id} className="relative group/wrapper" id={`comment-${comment.id}`}>
                              <div className="absolute inset-0 rounded-lg flex items-center justify-between px-4"><div className="flex items-center text-blue-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o > 20 ? 1 : 0 }}><Pencil size={16} /> {t('common.edit')}</div><div className="flex items-center text-red-500 gap-2 font-bold text-xs uppercase opacity-0 transition-opacity duration-200" style={{ opacity: o < -20 ? 1 : 0 }}>{t('common.delete')} <Trash2 size={16} /></div></div>
