@@ -282,15 +282,19 @@ export const GoogleDriveService = {
 
   /**
    * Generates a stream URL. 
-   * REVERTED to use the legacy export link because the API endpoint (googleapis.com)
-   * does not reliably support Range requests in <video> tags due to CORS.
    * 
-   * This relies on the file being Public (which we try to enforce via upload/fix permissions).
+   * !!! CRITICAL ARCHITECTURE DECISION !!!
+   * We MUST use the legacy `drive.google.com/uc?export=download` format.
+   * 
+   * DO NOT switch to `googleapis.com/drive/v3/files/...` with Authorization headers.
+   * The API endpoint has strict CORS policies that block HTML5 <video> 'Range' requests,
+   * causing playback failures or inability to scrub video (Partial Content 206).
+   * 
+   * The `uc` link works reliably as long as the file permissions are set to Public/Anyone.
+   * 
+   * @locked Do not change this logic without explicit user approval.
    */
   getAuthenticatedStreamUrl: async (fileId: string): Promise<string> => {
-      // Revert to legacy logic.
-      // Do NOT append access_token here as it can conflict with cookie-based auth on the UC endpoint
-      // and typically requires the file to be public anyway.
       return GoogleDriveService.getVideoStreamUrlLegacy(fileId);
   },
 
