@@ -168,6 +168,18 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       };
   }, []);
 
+  // Force single view on mobile if window is resized
+  useEffect(() => {
+      const handleResize = () => {
+          if (window.innerWidth < 768 && viewMode === 'side-by-side') {
+              setViewMode('single');
+              setCompareVersionIdx(null);
+          }
+      };
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+  }, [viewMode]);
+
   const handleTranscribe = async () => {
     if (isTranscribing) return;
     
@@ -671,7 +683,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setVideoError(false);
       setDriveFileMissing(false);
       setDriveUrlRetried(false);
-      setLoadingDrive(true);
+      setLoadingDrive(true);(idx);
       
       setCurrentVersionIdx(idx);
       setShowVersionSelector(false);
@@ -780,9 +792,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                    </div>
                    
                    <div className="flex items-center gap-2">
-                       {/* COMPARE SELECTOR */}
+                       {/* COMPARE SELECTOR (Hidden on Mobile) */}
                        {asset.versions.length > 1 && (
-                            <div className="relative">
+                            <div className="relative hidden md:block">
                                 <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>
                                     {compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : 'Compare'} <ChevronDown size={10} />
                                 </button>
@@ -818,10 +830,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 {isSearchOpen && (<input autoFocus className="w-full bg-transparent text-xs text-zinc-900 dark:text-white outline-none py-1.5" placeholder={t('dash.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onBlur={() => !searchQuery && setIsSearchOpen(false)} />)}
                 <button onClick={() => { if (isSearchOpen && searchQuery) setSearchQuery(''); else setIsSearchOpen(!isSearchOpen); }} className={`p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white ${isSearchOpen ? 'text-zinc-900 dark:text-white' : ''}`}>{isSearchOpen && searchQuery ? <XIcon size={16} /> : <Search size={18} />}</button>
              </div>
-             <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1 hidden md:block"></div>
-             <div className="relative">
-                <button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="p-1.5 md:p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>
-                {showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}
+             
+             {/* Hidden on Mobile - Use Single View Only */}
+             <div className="hidden md:block">
+                 <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
+                 <div className="relative">
+                    <button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="p-1.5 md:p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>
+                    {showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}
+                 </div>
              </div>
           </div>
         </header>

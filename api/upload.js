@@ -2,7 +2,7 @@
 import { handleUpload } from '@vercel/blob';
 import { verifyToken } from '@clerk/backend';
 import { sql } from '@vercel/postgres';
-import { getClerkClient } from './_auth.js';
+import { checkProjectAccess } from './_permissions.js';
 
 export default async function handler(req, res) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -15,8 +15,7 @@ export default async function handler(req, res) {
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        // 1. Extract Token from Payload
-        // Vercel Blob client-side SDK doesn't support custom headers easily, so we pass it in payload.
+        // 1. Extract Payload
         let payload;
         try {
             payload = JSON.parse(clientPayload || '{}');
@@ -36,45 +35,32 @@ export default async function handler(req, res) {
                 secretKey: process.env.CLERK_SECRET_KEY,
                 clockSkewInMs: 60000 
             });
+            // Replicate structure expected by checkProjectAccess
+            // We set 'id' to sub as fallback, but for legacy checks to work ideally 
+            // we would need the email. 
+            // Phase XI assumes migration is done, so userId (Clerk ID) should match DB owner_id/team IDs.
             user = { id: verified.sub, userId: verified.sub };
         } catch (e) {
             throw new Error("Unauthorized: Invalid Token Verification");
         }
 
         // 3. Verify Project Access in DB
-        // User must be owner OR member of the organization
         try {
-            const { rows } = await sql`SELECT owner_id, org_id FROM projects WHERE id = ${projectId}`;
+            const { rows } = await sql`SELECT owner_id, org_id, data FROM projects WHERE id = ${projectId}`;
             
             if (rows.length === 0) {
                 throw new Error("Project not found");
             }
             
-            const project = rows[0];
-            let hasAccess = false;
-
-            // Check A: Owner
-            if (project.owner_id === user.userId) {
-                hasAccess = true;
-            } 
-            // Check B: Org Member
-            else if (project.org_id) {
-                const clerk = getClerkClient();
-                const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
-                const userOrgs = memberships.data.map(m => m.organization.id);
-                
-                if (userOrgs.includes(project.org_id)) {
-                    hasAccess = true;
-                }
-            }
-
+            const hasAccess = await checkProjectAccess(user, rows[0]);
+            
             if (!hasAccess) {
                 throw new Error("Forbidden: You do not have permission to upload files to this project.");
             }
 
         } catch (dbError) {
             console.error("Upload Auth Error:", dbError);
-            throw new Error("Authorization verification failed");
+            throw new Error(dbError.message || "Authorization verification failed");
         }
 
         // 4. Allow Upload
@@ -88,7 +74,6 @@ export default async function handler(req, res) {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // Optional: Log upload success
         console.log(`Blob uploaded: ${blob.url}`);
       },
     });

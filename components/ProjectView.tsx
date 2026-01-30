@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2 } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -31,7 +31,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   });
 
   // Calculate the "Display Team"
-  // If this is an Org project, we fetch real-time members from Clerk
   const displayTeam: User[] = useMemo(() => {
       if (project.orgId && organization && memberships?.data) {
           // Map Clerk Members to App User Type
@@ -41,7 +40,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               avatar: m.publicUserData.imageUrl,
           }));
       }
-      // If personal, we don't show a team list anymore (Solo Mode)
       return [];
   }, [project.orgId, organization, memberships]);
 
@@ -51,8 +49,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         : false;
         
   const isProjectOwner = project.ownerId === currentUser.id;
-  
-  // Can Upload/Delete? Owner OR Team Member
   const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
   const isLocked = project.isLocked;
 
@@ -85,7 +81,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   useEffect(() => {
     const handleDriveUpdate = () => {
         setIsDriveReady(GoogleDriveService.isAuthenticated());
-        // If drive becomes ready, auto-switch to it
         if (GoogleDriveService.isAuthenticated()) setUseDriveStorage(true);
     };
     window.addEventListener('drive-token-updated', handleDriveUpdate);
@@ -130,15 +125,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       if (!canEditProject || isLocked) return;
 
       const files = Array.from(e.dataTransfer.files);
-      // Filter video files
       const videoFiles = files.filter(f => f.type.startsWith('video/'));
       
       if (videoFiles.length === 0) {
           if (files.length > 0) notify("Only video files supported", "warning");
           return;
       }
-
-      // Handle upload for first file (multi-upload could be added later)
       onUploadAsset(videoFiles[0], project.id, useDriveStorage);
   };
 
@@ -194,7 +186,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             });
 
             if (urlsToDelete.length > 0) {
-                // Pass project.id to validate ownership server-side
                 await api.deleteAssets(urlsToDelete, project.id);
             }
         }
@@ -240,14 +231,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       const success = await GoogleDriveService.makeFilePublic(driveId);
       if (success) notify("Success! File is now public.", "success");
       else notify("Failed. Check Google Workspace settings.", "error");
-  };
-
-  const handleRemoveMember = (memberId: string) => {
-      // For Org projects, we can't remove members via this simple UI yet (need Clerk API)
-      if (project.orgId) {
-          notify("Please manage team members in your Organization Settings.", "info");
-          return;
-      }
   };
 
   const togglePublicAccess = async () => {
@@ -328,6 +311,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             </div>
           )}
 
+          {/* PERSONAL PROJECT INDICATOR (Solo Mode) */}
+          {!restrictedAssetId && !project.orgId && (
+             <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace: Collaboration limited to link sharing">
+                 <UserIcon size={12} />
+                 <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
+             </div>
+          )}
+
           {!isLocked && !restrictedAssetId && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
@@ -344,7 +335,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           )}
         </div>
       </header>
-
+      
       {isLocked && (
           <div className="bg-red-900/20 border-b border-red-900/30 text-red-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
               <Lock size={12} />
@@ -500,7 +491,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       </div>
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* MODALS RENDERED HERE... */}
+      {/* DELETE MODAL */}
       {deleteModalState.isOpen && deleteModalState.asset && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
@@ -551,7 +543,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       )}
       
-       {/* Share Modal & Participants Modal */}
+       {/* SHARE MODALS */}
        {(isShareModalOpen || isParticipantsModalOpen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative p-6">

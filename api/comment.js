@@ -1,6 +1,7 @@
 
 import { sql } from '@vercel/postgres';
-import { verifyUser, getClerkClient } from './_auth.js';
+import { verifyUser } from './_auth.js';
+import { checkProjectAccess } from './_permissions.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: "Missing required fields" });
       }
 
-      // 1. Fetch Project with Version
+      // 1. Fetch Project
       let rows = [];
       try {
         const result = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId};`;
@@ -32,30 +33,12 @@ export default async function handler(req, res) {
 
       if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
 
-      let projectData = rows[0].data;
-      const ownerId = rows[0].owner_id;
-      const orgId = rows[0].org_id;
-      const currentVersion = projectData._version || 0; // Get current version for Optimistic Lock
+      const projectRow = rows[0];
+      let projectData = projectRow.data;
+      const currentVersion = projectData._version || 0;
 
-      // 2. Security Check
-      let hasAccess = false;
-      
-      // Check Owner
-      if (ownerId === user.id) hasAccess = true;
-      // Check Legacy Team Array
-      else if (projectData.team && projectData.team.some(m => m.id === user.id)) hasAccess = true;
-      // Check Organization
-      else if (orgId) {
-           try {
-               const clerk = getClerkClient();
-               const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
-               const userOrgIds = memberships.data.map(m => m.organization.id);
-               if (userOrgIds.includes(orgId)) hasAccess = true;
-           } catch(e) {
-               console.warn("Failed to check org membership for comment", e);
-           }
-      }
-
+      // 2. Security Check (Centralized)
+      const hasAccess = await checkProjectAccess(user, projectRow);
       if (!hasAccess) return res.status(403).json({ error: "Access denied" });
 
       // 3. Logic
@@ -73,9 +56,9 @@ export default async function handler(req, res) {
           case 'update':
               const uIdx = version.comments.findIndex(c => c.id === payload.id);
               if (uIdx !== -1) {
-                  // Permission: Can only edit own comment unless Admin/Owner
+                  // Permission: Can only edit own comment unless Owner
                   const isCommentOwner = version.comments[uIdx].userId === user.id;
-                  const isProjectOwner = ownerId === user.id;
+                  const isProjectOwner = projectRow.owner_id === user.id;
                   
                   if (!isCommentOwner && !isProjectOwner) {
                        return res.status(403).json({ error: "Forbidden: Cannot edit others' comments" });
@@ -87,9 +70,9 @@ export default async function handler(req, res) {
           case 'delete':
               const dIdx = version.comments.findIndex(c => c.id === payload.id);
               if (dIdx !== -1) {
-                  // Permission: Can only delete own comment unless Admin/Owner
+                  // Permission: Can only delete own comment unless Owner
                   const isCommentOwner = version.comments[dIdx].userId === user.id;
-                  const isProjectOwner = ownerId === user.id;
+                  const isProjectOwner = projectRow.owner_id === user.id;
                   
                   if (!isCommentOwner && !isProjectOwner) {
                       return res.status(403).json({ error: "Forbidden: Cannot delete others' comments" });
@@ -103,7 +86,7 @@ export default async function handler(req, res) {
       const newVersion = currentVersion + 1;
       projectData._version = newVersion;
 
-      // 4. Save with Optimistic Locking
+      // 4. Save
       const updateResult = await sql`
           UPDATE projects 
           SET data = ${JSON.stringify(projectData)}::jsonb, updated_at = ${Date.now()}

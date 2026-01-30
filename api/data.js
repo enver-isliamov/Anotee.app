@@ -1,6 +1,7 @@
 
 import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
+import { checkProjectAccess } from './_permissions.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
           const targetOrgId = req.query.orgId;
           const specificProjectId = req.query.projectId;
 
-          // 1. Fetch Org Memberships to verify access
+          // 1. Fetch Org Memberships to verify access for LIST requests
           let userOrgIds = [];
           if (user.isVerified && user.userId) {
               try {
@@ -39,21 +40,26 @@ export default async function handler(req, res) {
           let query;
 
           if (specificProjectId) {
-              // --- SINGLE PROJECT FETCH (Permissive for Public Links) ---
-              // Returns project if: Owner OR Team OR Org Member OR Public Access
-              const { rows } = await sql`
-                SELECT data, org_id FROM projects 
-                WHERE id = ${specificProjectId}
-                AND (
-                    owner_id = ${user.id} 
-                    OR data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
-                    OR org_id = ANY(${userOrgIds}::text[])
-                    OR data->>'publicAccess' = 'view'
-                )
-              `;
-              query = rows;
+              // --- SINGLE PROJECT FETCH ---
+              // Uses stricter check or Public Access
+              const { rows } = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${specificProjectId}`;
+              
+              if (rows.length > 0) {
+                  const projectRow = rows[0];
+                  // Public Access Check
+                  if (projectRow.data?.publicAccess === 'view') {
+                      query = [projectRow];
+                  } else {
+                      // Private Access Check
+                      const hasAccess = await checkProjectAccess(user, projectRow);
+                      query = hasAccess ? [projectRow] : [];
+                  }
+              } else {
+                  query = [];
+              }
+
           } else if (targetOrgId) {
-              // --- ORG LIST FETCH (Restricted) ---
+              // --- ORG LIST FETCH ---
               if (!userOrgIds.includes(targetOrgId)) {
                   return res.status(200).json([]);
               }
@@ -63,9 +69,8 @@ export default async function handler(req, res) {
               `;
               query = rows;
           } else {
-              // --- PERSONAL WORKSPACE FETCH (Restricted) ---
+              // --- PERSONAL WORKSPACE FETCH ---
               // Only show projects I own or am explicitly part of the team.
-              // DO NOT show public projects here to avoid dashboard spam.
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE (org_id IS NULL OR org_id = '') 
@@ -102,25 +107,12 @@ export default async function handler(req, res) {
           const { rows } = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId}`;
           if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
           
-          const currentDbData = rows[0].data;
-          const dbOwnerId = rows[0].owner_id;
-          const dbOrgId = rows[0].org_id;
-          
-          let hasAccess = false;
-          if (dbOwnerId === user.id) hasAccess = true;
-          else if (currentDbData.team && currentDbData.team.some(m => m.id === user.id)) hasAccess = true; 
-          else if (dbOrgId) {
-               const clerk = getClerkClient();
-               try {
-                   const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
-                   const userOrgs = memberships.data.map(m => m.organization.id);
-                   if (userOrgs.includes(dbOrgId)) hasAccess = true;
-               } catch(e) {}
-          }
-          
+          const hasAccess = await checkProjectAccess(user, rows[0]);
           if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
 
+          const currentDbData = rows[0].data;
           const currentVer = currentDbData._version || 0;
+          
           if (_version !== undefined && currentVer !== _version) {
               return res.status(409).json({ error: "Conflict", serverVersion: currentVer, clientVersion: _version });
           }
@@ -145,9 +137,9 @@ export default async function handler(req, res) {
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
-        
-        if (!Array.isArray(projectsToSync)) projectsToSync = [projectsToSync]; // Handle single object
+        if (!Array.isArray(projectsToSync)) projectsToSync = [projectsToSync]; 
 
+        // Pre-fetch org memberships to optimize loop
         let orgIds = [];
         if (user.isVerified && user.userId) {
             try {
@@ -170,40 +162,33 @@ export default async function handler(req, res) {
             const orgId = project.orgId || null;
             
             try {
-                const hasOrgAccess = orgIds.length > 0 && orgId ? orgIds.includes(orgId) : false;
-                let updateResult;
+                // Determine Access Logic for Update
+                // If existing project, check access. If new, allow.
+                const checkExists = await sql`SELECT owner_id, org_id, data FROM projects WHERE id = ${project.id}`;
                 
-                if (hasOrgAccess) {
-                     updateResult = await sql`
+                if (checkExists.rowCount > 0) {
+                    const hasAccess = await checkProjectAccess(user, checkExists.rows[0]);
+                    if (!hasAccess) continue; // Skip unauthorized updates
+                    
+                    await sql`
                         UPDATE projects 
                         SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
-                        WHERE id = ${project.id} AND (org_id = ${orgId})
+                        WHERE id = ${project.id}
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
-                } else {
-                    updateResult = await sql`
-                        UPDATE projects 
-                        SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
-                        WHERE id = ${project.id} 
-                        AND (owner_id = ${user.id} OR data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb)
-                        AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
-                    `;
-                }
-
-                if (updateResult.rowCount > 0) {
                     updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
                 } else {
-                    const checkExists = await sql`SELECT data->>'_version' as ver, owner_id FROM projects WHERE id = ${project.id}`;
-                    
-                    if (checkExists.rowCount === 0) {
-                        await sql`
-                            INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
-                            VALUES (${project.id}, ${user.id}, ${orgId}, ${projectJson}::jsonb, ${Date.now()}, ${project.createdAt || Date.now()});
-                        `;
-                        updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
-                    } else {
-                        return res.status(409).json({ error: "Version Conflict", projectId: project.id });
+                    // Create New
+                    // Validate Org Access if orgId is set
+                    if (orgId && !orgIds.includes(orgId)) {
+                        continue; // Cannot create in org you don't belong to
                     }
+
+                    await sql`
+                        INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
+                        VALUES (${project.id}, ${user.id}, ${orgId}, ${projectJson}::jsonb, ${Date.now()}, ${project.createdAt || Date.now()});
+                    `;
+                    updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
                 }
             } catch (dbError) {
                 if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline" });

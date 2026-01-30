@@ -8,10 +8,17 @@ const MAX_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
  * Includes safety checks for file size.
  */
 export async function extractAudioFromUrl(url: string): Promise<Float32Array> {
-    // 1. Safety Check for Remote URLs
-    if (url.startsWith('http')) {
+    let fetchUrl = url;
+
+    // Detect Google Drive URL and route through proxy to bypass CORS
+    if (url.includes('drive.google.com')) {
+        fetchUrl = `/api/proxyAudio?url=${encodeURIComponent(url)}`;
+    }
+
+    // 1. Safety Check for Remote URLs (Head Request)
+    if (fetchUrl.startsWith('http')) {
         try {
-            const head = await fetch(url, { method: 'HEAD' });
+            const head = await fetch(fetchUrl, { method: 'HEAD' });
             if (head.ok) {
                 const size = parseInt(head.headers.get('content-length') || '0', 10);
                 if (size > MAX_BYTES) {
@@ -19,9 +26,10 @@ export async function extractAudioFromUrl(url: string): Promise<Float32Array> {
                 }
             }
         } catch (e: any) {
-            // If HEAD fails (CORS?), we might proceed but warn, or if specifically size error, rethrow
+            // If HEAD fails, we might proceed but warn. 
+            // If it's the proxy, it should handle CORS, so HEAD might actually work now!
             if (e.message.includes('too large')) throw e;
-            console.warn("Could not verify file size, proceeding with caution...", e);
+            console.warn("Could not verify file size via HEAD, proceeding...", e);
         }
     }
 
@@ -30,8 +38,8 @@ export async function extractAudioFromUrl(url: string): Promise<Float32Array> {
     });
 
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Failed to fetch audio: ${response.statusText}`);
+        const response = await fetch(fetchUrl);
+        if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
         
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -45,7 +53,7 @@ export async function extractAudioFromUrl(url: string): Promise<Float32Array> {
         if (e.message.includes('too large')) throw e;
         throw new Error("Failed to extract audio. The file might be corrupted, too large, or format unsupported.");
     } finally {
-        // CRITICAL: Close context to release hardware resources and prevent browser limit errors
+        // CRITICAL: Close context to release hardware resources
         if (audioContext.state !== 'closed') {
             await audioContext.close();
         }
