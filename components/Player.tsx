@@ -351,8 +351,37 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // ... (File persisting and sync functions) ...
   const persistLocalFile = (url: string, name: string) => { const uV = [...asset.versions]; uV[currentVersionIdx] = { ...uV[currentVersionIdx], localFileUrl: url, localFileName: name }; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV } : a); onUpdateProject({ ...project, assets: uA }); };
   const handleLocalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { if (isDemo) { notify("Local file disabled in Demo.", "info"); return; } if (e.target.files && e.target.files.length > 0) { const file = e.target.files[0]; const url = URL.createObjectURL(file); setLocalFileSrc(url); setLocalFileName(file.name); setVideoError(false); persistLocalFile(url, file.name); notify(t('common.success'), "success"); } };
-  const syncCommentAction = async (action: 'create' | 'update' | 'delete', payload: any) => { if (action === 'create') setComments(prev => [...prev, { ...payload, userId: currentUser.id, createdAt: 'Just now' }]); else if (action === 'update') setComments(prev => prev.map(c => c.id === payload.id ? { ...c, ...payload } : c)); else if (action === 'delete') setComments(prev => prev.filter(c => c.id !== payload.id)); const updatedVersions = [...asset.versions]; const versionToUpdate = updatedVersions[currentVersionIdx]; let newComments = [...(versionToUpdate.comments || [])]; if (action === 'create') newComments.push({ ...payload, userId: currentUser.id, createdAt: 'Just now' }); else if (action === 'update') newComments = newComments.map(c => c.id === payload.id ? { ...c, ...payload } : c); else if (action === 'delete') newComments = newComments.filter(c => c.id !== payload.id); versionToUpdate.comments = newComments; updatedVersions[currentVersionIdx] = versionToUpdate; const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); onUpdateProject({ ...project, assets: updatedAssets }); if (!isDemo && currentUser) await api.comment(project.id, asset.id, version.id, action, payload, currentUser); };
-  useEffect(() => { setComments(version?.comments || []); }, [version?.comments]);
+  
+  const syncCommentAction = async (action: 'create' | 'update' | 'delete', payload: any) => { 
+      // 1. Update Local State (Optimistic)
+      if (action === 'create') setComments(prev => [...prev, { ...payload, userId: currentUser.id, createdAt: 'Just now' }]); 
+      else if (action === 'update') setComments(prev => prev.map(c => c.id === payload.id ? { ...c, ...payload } : c)); 
+      else if (action === 'delete') setComments(prev => prev.filter(c => c.id !== payload.id)); 
+      
+      // 2. Update Project Structure (Immutably)
+      const updatedVersions = [...asset.versions];
+      const versionToUpdate = { ...updatedVersions[currentVersionIdx] };
+      
+      let newComments = [...(versionToUpdate.comments || [])]; 
+      
+      if (action === 'create') newComments.push({ ...payload, userId: currentUser.id, createdAt: 'Just now' }); 
+      else if (action === 'update') newComments = newComments.map(c => c.id === payload.id ? { ...c, ...payload } : c); 
+      else if (action === 'delete') newComments = newComments.filter(c => c.id !== payload.id); 
+      
+      versionToUpdate.comments = newComments; 
+      updatedVersions[currentVersionIdx] = versionToUpdate; 
+      
+      const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); 
+      onUpdateProject({ ...project, assets: updatedAssets }); 
+      
+      if (!isDemo && currentUser) await api.comment(project.id, asset.id, version.id, action, payload, currentUser); 
+  };
+
+  // Ensure comments update when version changes (by checking version.id)
+  useEffect(() => { 
+      setComments(version?.comments || []); 
+  }, [version?.id, version?.comments]);
+
   const handleRemoveDeadVersion = async () => { if (!confirm("Remove version?")) return; const uV = asset.versions.filter(v => v.id !== version.id); if (uV.length === 0) { onBack(); return; } let newIdx = Math.min(currentVersionIdx, uV.length - 1); if (newIdx < 0) newIdx = 0; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a); setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(newIdx); onUpdateProject({ ...project, assets: uA }); notify("Version removed", "info"); };
 
   // --- CRITICAL FIX: DRIVE LOADING LOGIC ---
@@ -467,6 +496,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setLoadingDrive(true); 
       setCurrentVersionIdx(idx); 
       setShowVersionSelector(false); 
+      
+      // Clear comment states to avoid stale references
+      setSelectedCommentId(null);
+      setEditingCommentId(null);
+      setSwipeCommentId(null);
+
       if (compareVersionIdx === idx) { 
           setCompareVersionIdx(null); 
           setViewMode('single'); 
