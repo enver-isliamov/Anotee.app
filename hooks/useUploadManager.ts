@@ -19,10 +19,8 @@ export const useUploadManager = (
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
     
-    // We can't access Context here easily without breaking Hook rules or prop drilling "checkDriveConnection".
-    // Assuming checkDriveConnection is passed or handled via global error handler for now, 
-    // or we just trigger it implicitly by checking auth status.
-    // Ideally pass checkDriveConnection from App.tsx if needed, but let's try to be robust without it.
+    // Throttling Ref to prevent UI freeze
+    const lastProgressUpdate = useRef<number>(0);
 
     const removeUploadTask = (id: string) => {
         setUploadTasks(prev => prev.filter(t => t.id !== id));
@@ -41,8 +39,19 @@ export const useUploadManager = (
 
         setUploadTasks(prev => [...prev, newTask]);
 
+        // Helper to update task state safely
         const updateTask = (updates: Partial<UploadTask>) => {
             setUploadTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+        };
+
+        // Helper for throttled progress
+        const updateProgress = (percentage: number) => {
+            const now = Date.now();
+            // Only update every 100ms or if completed to save React renders
+            if (percentage === 100 || now - lastProgressUpdate.current > 100) {
+                updateTask({ progress: percentage });
+                lastProgressUpdate.current = now;
+            }
         };
 
         try {
@@ -68,7 +77,7 @@ export const useUploadManager = (
             // 2. Upload Process
             if (isMockMode) {
                 for (let i = 0; i <= 100; i+=10) {
-                    updateTask({ progress: i });
+                    updateProgress(i);
                     await new Promise(r => setTimeout(r, 200));
                 }
                 assetUrl = URL.createObjectURL(file);
@@ -92,13 +101,12 @@ export const useUploadManager = (
                             ? `${assetTitle}_vNEW.${ext}`
                             : `${assetTitle}_v1.${ext}`;
 
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateTask({ progress: p }), niceName);
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), niceName);
                         googleDriveId = result.id;
                         storageType = 'drive';
                         finalFileName = niceName;
                     } catch (driveErr: any) {
                         if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
-                             // Token expired during operation
                              throw new Error("Drive Session Expired. Please refresh page/reconnect.");
                         }
                         throw driveErr;
@@ -115,7 +123,7 @@ export const useUploadManager = (
                             token: token, 
                             projectId: projectId 
                         }),
-                        onUploadProgress: (p) => updateTask({ progress: Math.round((p.loaded / p.total) * 100) })
+                        onUploadProgress: (p) => updateProgress(Math.round((p.loaded / p.total) * 100))
                     });
                     assetUrl = newBlob.url;
                 }

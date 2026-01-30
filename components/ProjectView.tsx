@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
-import { useOrganization } from '@clerk/clerk-react';
+import { useOrganization, OrganizationProfile } from '@clerk/clerk-react';
 import { useDrive } from '../services/driveContext';
 import { mapClerkUserToAppUser, isOrgAdmin } from '../services/userUtils';
 
@@ -27,13 +27,12 @@ interface ProjectViewProps {
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
   const { t } = useLanguage();
   
-  // --- CLERK ORGANIZATION LOGIC (Split-Brain Fix) ---
+  // --- CLERK ORGANIZATION LOGIC ---
   const { organization, memberships } = useOrganization({
       memberships: { infinite: true }
   });
 
   // Calculate the "Display Team"
-  // For Orgs: Fetch from Clerk. For Personal: Use the legacy 'team' array from JSON.
   const displayTeam: User[] = useMemo(() => {
       if (project.orgId && organization && memberships?.data) {
           return memberships.data.map(mapClerkUserToAppUser);
@@ -46,19 +45,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       return isOrgAdmin(currentUser.id, memberships.data);
   }, [organization, memberships, currentUser.id]);
 
-  // Is current user in the computed team? (For Org) OR is Owner (For Personal)
   const isProjectMember = project.orgId 
         ? displayTeam.some(m => m.id === currentUser.id)
         : (project.team?.some(m => m.id === currentUser.id) || false);
         
   const isProjectOwner = project.ownerId === currentUser.id;
   
-  // Permissions
   const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
-  
-  // Allow deletion if Owner or Admin OR if user is a member of the Org (Editor)
   const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
-
   const isLocked = project.isLocked;
 
   // Delete State
@@ -67,7 +61,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const [uploadingVersionFor, setUploadingVersionFor] = useState<string | null>(null);
   
-  // Use Context instead of local state/events
+  // Use Context
   const { isDriveReady } = useDrive();
   const [useDriveStorage, setUseDriveStorage] = useState(false);
   
@@ -78,14 +72,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   
-  // Drag & Drop State
+  // Org Settings Modal
+  const [isOrgSettingsOpen, setIsOrgSettingsOpen] = useState(false);
+  
+  // Drag & Drop
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
 
-  // Filter Assets for Restricted Mode
   const visibleAssets = restrictedAssetId 
     ? project.assets.filter(a => a.id === restrictedAssetId)
     : project.assets;
@@ -96,7 +92,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     }
   }, [isDriveReady]);
 
-  // --- DRAG & DROP HANDLERS ---
+  // --- HANDLERS ---
   const handleDragEnter = (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -259,7 +255,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       }
 
       const newMember: User = {
-          id: inviteEmail, // Use email as ID for legacy/personal invites
+          id: inviteEmail, 
           name: inviteEmail.split('@')[0],
           avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${inviteEmail}`
       };
@@ -270,9 +266,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           return;
       }
 
-      const newTeam = [...currentTeam, { ...newMember, email: inviteEmail }]; // Store email explicitly
+      const newTeam = [...currentTeam, { ...newMember, email: inviteEmail }]; 
       
-      // Update Project
       if (!isMockMode) {
           try {
               await api.patchProject(project.id, { team: newTeam }, project._version || 0);
@@ -289,9 +284,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleRemoveUser = async (userId: string) => {
       if (!confirm("Remove user from project?")) return;
-      
       const newTeam = (project.team || []).filter(m => m.id !== userId);
-      
       if (!isMockMode) {
           try {
               await api.patchProject(project.id, { team: newTeam }, project._version || 0);
@@ -352,7 +345,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         <div className="flex items-center gap-3 shrink-0">
           <LanguageSelector />
           
-          {/* TEAM AVATARS (Only for Org Projects OR if Personal Team exists) */}
+          {/* TEAM AVATARS */}
           {!restrictedAssetId && (
             <div 
               onClick={() => setIsParticipantsModalOpen(true)}
@@ -368,9 +361,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             </div>
           )}
 
-          {/* PERSONAL PROJECT INDICATOR (Solo Mode) */}
+          {/* PERSONAL PROJECT INDICATOR */}
           {!restrictedAssetId && !project.orgId && (
-             <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace: Collaboration limited to link sharing">
+             <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace">
                  <UserIcon size={12} />
                  <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
              </div>
@@ -386,7 +379,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               >
                 {project.orgId ? <UserPlus size={16} /> : <Globe size={16} />}
                 <span className="hidden md:inline">{t('pv.invite')}</span>
-                {!project.orgId && <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[9px] font-bold uppercase">Link</span>}
               </button>
             </>
           )}
@@ -403,7 +395,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       {restrictedAssetId && (
         <div className="bg-orange-900/20 border-b border-orange-900/30 text-orange-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
             <Info size={12} />
-            Viewing restricted asset. Full project access limited.
+            Viewing restricted asset.
         </div>
       )}
 
@@ -418,6 +410,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-[1600px] mx-auto">
+            {/* Same asset grid rendering as before ... */}
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-sm md:text-base font-semibold text-zinc-200">{t('pv.assets')} <span className="text-zinc-500 ml-1">{visibleAssets.length}</span></h2>
                 
@@ -429,7 +422,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <button
                         onClick={toggleStorage}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${useDriveStorage && isDriveReady ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                        title={isMockMode ? "Mock Mode (Local)" : (isDriveReady ? "Toggle Storage" : "Drive not connected")}
+                        title={isMockMode ? "Mock Mode" : (isDriveReady ? "Toggle Storage" : "Drive not connected")}
                     >
                         {useDriveStorage && isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
                         <span className="hidden md:inline">{useDriveStorage && isDriveReady ? "Drive Storage" : (isMockMode ? "Local Mode" : "SmoTree Cloud")}</span>
@@ -484,13 +477,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100"
                             onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
                         />
-                        
-                        {isDrive && (
-                            <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm" title="Stored on Google Drive">
-                                <HardDrive size={10} />
-                            </div>
-                        )}
-
+                        {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
                             {!isLocked && (
                                 <button 
@@ -501,52 +488,24 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                     <LinkIcon size={12} />
                                 </button>
                             )}
-                            
                             {canEditProject && !isLocked && (
                                 <>
                                     {isProjectOwner && isDrive && lastVer.googleDriveId && (
-                                        <button 
-                                            onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)}
-                                            className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md backdrop-blur-sm transition-colors"
-                                            title="Fix Drive Permissions (Make Public)"
-                                        >
-                                            <Unlock size={12} />
-                                        </button>
+                                        <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
                                     )}
-                                    <button 
-                                        onClick={(e) => handleAddVersionClick(e, asset.id)}
-                                        className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md backdrop-blur-sm transition-colors"
-                                        title={t('pv.upload_new_ver')}
-                                    >
-                                        <History size={12} />
-                                    </button>
-                                    
-                                    {/* DELETE BUTTON: Visible if canDeleteAssets is true */}
+                                    <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
                                     {canDeleteAssets && (
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }}
-                                            className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
-                                            title={t('pv.delete_asset')}
-                                        >
-                                            <Trash2 size={12} />
-                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
                                     )}
                                 </>
                             )}
                         </div>
-
-                        <div className="absolute bottom-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-white font-mono backdrop-blur-sm">
-                            v{asset.versions.length}
+                        <div className="absolute bottom-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-white font-mono backdrop-blur-sm">v{asset.versions.length}</div>
                         </div>
-                        </div>
-
                         <div className="p-3">
                         <h3 className="font-medium text-zinc-200 text-xs md:text-sm truncate mb-1">{asset.title}</h3>
                         <div className="flex justify-between items-center text-[10px] text-zinc-500">
-                            <span className="flex items-center gap-1">
-                            <Clock size={10} />
-                            {asset.versions[asset.versions.length-1]?.comments.length}
-                            </span>
+                            <span className="flex items-center gap-1"><Clock size={10} />{asset.versions[asset.versions.length-1]?.comments.length}</span>
                             <span>{asset.versions[asset.versions.length-1]?.uploadedAt}</span>
                         </div>
                         </div>
@@ -556,7 +515,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       </div>
 
-      {/* ... Modals (No changes needed except maybe refactoring map functions if any) ... */}
       {/* DELETE MODAL */}
       {deleteModalState.isOpen && deleteModalState.asset && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -567,43 +525,20 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   </div>
                   <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
                       You are about to delete <strong>{deleteModalState.asset.title}</strong>. 
-                      How would you like to proceed?
                   </p>
-                  
                   <div className="space-y-3">
                       {isDriveReady && !isMockMode && (
-                          <button 
-                            onClick={() => confirmDeleteAsset(true)} 
-                            disabled={isDeleting}
-                            className="w-full flex items-center justify-between p-4 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 rounded-xl text-left transition-colors group"
-                          >
-                              <div>
-                                  <div className="font-bold text-red-400 text-sm mb-0.5">Delete Everywhere</div>
-                                  <div className="text-[10px] text-red-300/60">Remove from dashboard & trash Drive files</div>
-                              </div>
+                          <button onClick={() => confirmDeleteAsset(true)} disabled={isDeleting} className="w-full flex items-center justify-between p-4 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 rounded-xl text-left transition-colors group">
+                              <div><div className="font-bold text-red-400 text-sm mb-0.5">Delete Everywhere</div><div className="text-[10px] text-red-300/60">Remove from dashboard & trash Drive files</div></div>
                               <Trash2 size={18} className="text-red-500 group-hover:scale-110 transition-transform"/>
                           </button>
                       )}
-                      
-                      <button 
-                        onClick={() => confirmDeleteAsset(false)}
-                        disabled={isDeleting} 
-                        className="w-full flex items-center justify-between p-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-left transition-colors group"
-                      >
-                          <div>
-                              <div className="font-bold text-zinc-200 text-sm mb-0.5">Remove from Dashboard</div>
-                              <div className="text-[10px] text-zinc-500">Files remain in your storage</div>
-                          </div>
+                      <button onClick={() => confirmDeleteAsset(false)} disabled={isDeleting} className="w-full flex items-center justify-between p-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-left transition-colors group">
+                          <div><div className="font-bold text-zinc-200 text-sm mb-0.5">Remove from Dashboard</div><div className="text-[10px] text-zinc-500">Files remain in your storage</div></div>
                           <X size={18} className="text-zinc-400 group-hover:text-white transition-colors"/>
                       </button>
                   </div>
-
-                  <button 
-                    onClick={() => setDeleteModalState({ isOpen: false, asset: null })}
-                    className="mt-6 w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 font-medium"
-                  >
-                      Cancel
-                  </button>
+                  <button onClick={() => setDeleteModalState({ isOpen: false, asset: null })} className="mt-6 w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 font-medium">Cancel</button>
               </div>
           </div>
       )}
@@ -612,12 +547,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
        {(isShareModalOpen || isParticipantsModalOpen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative p-6">
-              <button 
-                onClick={() => { setIsShareModalOpen(false); setIsParticipantsModalOpen(false); setShareTarget(null); }}
-                className="absolute top-4 right-4 text-zinc-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
+              <button onClick={() => { setIsShareModalOpen(false); setIsParticipantsModalOpen(false); setShareTarget(null); }} className="absolute top-4 right-4 text-zinc-400 hover:text-white"><X size={20} /></button>
               
               {isShareModalOpen && shareTarget && (
                 <>
@@ -628,74 +558,45 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       <h2 className="text-lg font-bold text-white">{t('pv.share.title')}</h2>
                   </div>
                   
-                  <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
-                     {t('pv.share.desc')}
-                  </p>
-                  
-                  {/* Public Link Toggle for Personal Projects */}
-                  {!project.orgId && shareTarget.type === 'project' && isProjectOwner && (
-                      <div className="mb-4 bg-zinc-800/50 p-3 rounded-xl border border-zinc-700 flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-zinc-300">
-                              <Globe size={16} className={project.publicAccess === 'view' ? 'text-green-400' : 'text-zinc-500'} />
-                              <div className="flex flex-col">
-                                  <span className="text-xs font-bold text-white">Public Access</span>
-                                  <span className="text-[9px] text-zinc-500">Anyone with link can view</span>
-                              </div>
-                          </div>
-                          <button 
-                            onClick={togglePublicAccess}
-                            className={`w-10 h-5 rounded-full relative transition-colors ${project.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}
-                          >
-                              <div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${project.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div>
+                  {project.orgId ? (
+                      <div className="mt-4">
+                          <p className="text-xs text-zinc-400 mb-4">This project belongs to an organization. Manage access in settings.</p>
+                          <button onClick={() => { setIsShareModalOpen(false); setIsOrgSettingsOpen(true); }} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                              <Settings size={14} /> Open Org Settings
                           </button>
                       </div>
-                  )}
+                  ) : (
+                      <>
+                        <p className="text-xs text-zinc-400 mb-4 leading-relaxed">{t('pv.share.desc')}</p>
+                        
+                        {shareTarget.type === 'project' && isProjectOwner && (
+                            <div className="mb-4 bg-zinc-800/50 p-3 rounded-xl border border-zinc-700 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-zinc-300">
+                                    <Globe size={16} className={project.publicAccess === 'view' ? 'text-green-400' : 'text-zinc-500'} />
+                                    <div className="flex flex-col"><span className="text-xs font-bold text-white">Public Access</span><span className="text-[9px] text-zinc-500">Anyone with link can view</span></div>
+                                </div>
+                                <button onClick={togglePublicAccess} className={`w-10 h-5 rounded-full relative transition-colors ${project.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}><div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${project.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div></button>
+                            </div>
+                        )}
 
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
-                    <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
-                    <div className="flex items-center gap-2">
-                        <input 
-                        type="text" 
-                        readOnly 
-                        value={`${window.location.origin}?projectId=${project.id}${shareTarget.type === 'asset' ? `&assetId=${shareTarget.id}` : ''}`} 
-                        className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
-                        />
-                        <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-medium ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
-                        {isCopied ? <Check size={12} /> : <Copy size={12} />}
-                        {isCopied ? t('common.copied') : t('common.copy')}
-                        </button>
-                    </div>
-                  </div>
-                  
-                  {/* Personal Invite By Email */}
-                  {!project.orgId && shareTarget.type === 'project' && (
-                      <div className="mt-4 border-t border-zinc-800 pt-4">
-                          <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Invite Collaborator</div>
-                          <div className="flex gap-2">
-                              <input 
-                                  value={inviteEmail}
-                                  onChange={(e) => setInviteEmail(e.target.value)}
-                                  placeholder="Enter email..."
-                                  className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600"
-                              />
-                              <button 
-                                  onClick={handleInviteUser}
-                                  disabled={!inviteEmail}
-                                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50"
-                              >
-                                  Add
-                              </button>
-                          </div>
-                      </div>
-                  )}
-
-                  {project.orgId && (
-                      <div className="flex items-start gap-2 bg-indigo-900/10 p-2 rounded border border-indigo-500/10 mt-3">
-                          <Building2 size={14} className="text-indigo-400 mt-0.5 shrink-0" />
-                          <p className="text-[10px] text-indigo-200/70">
-                              This project belongs to an Organization. Only organization members can access the private link.
-                          </p>
-                      </div>
+                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
+                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
+                            <div className="flex items-center gap-2">
+                                <input type="text" readOnly value={`${window.location.origin}?projectId=${project.id}${shareTarget.type === 'asset' ? `&assetId=${shareTarget.id}` : ''}`} className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" />
+                                <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-medium ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>{isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}</button>
+                            </div>
+                        </div>
+                        
+                        {shareTarget.type === 'project' && (
+                            <div className="mt-4 border-t border-zinc-800 pt-4">
+                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Invite Collaborator (Personal)</div>
+                                <div className="flex gap-2">
+                                    <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
+                                    <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                </div>
+                            </div>
+                        )}
+                      </>
                   )}
                 </>
               )}
@@ -708,15 +609,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">
                                 <div className="flex items-center gap-2">
                                     <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-zinc-800" />
-                                    <div>
-                                        <div className="text-sm text-zinc-200 font-medium">{member.name}</div>
-                                        <div className="text-[10px] text-zinc-500">{getDisplayRole(member)}</div>
-                                    </div>
+                                    <div><div className="text-sm text-zinc-200 font-medium">{member.name}</div><div className="text-[10px] text-zinc-500">{getDisplayRole(member)}</div></div>
                                 </div>
                                 {isProjectOwner && member.id !== currentUser.id && (
-                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
-                                        <Trash2 size={14} />
-                                    </button>
+                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 size={14} /></button>
                                 )}
                             </div>
                         ))}
@@ -727,23 +623,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               {isParticipantsModalOpen && project.orgId && (
                 <>
                   <h2 className="text-lg font-bold text-white mb-4">{t('pv.team')}</h2>
-                  <div className="mb-4 text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded">
-                      Managed by Organization. Add/Remove users in your Team Settings.
+                  <div className="mb-4 text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded flex items-center justify-between">
+                      <span>Managed by Organization</span>
+                      <button onClick={() => { setIsParticipantsModalOpen(false); setIsOrgSettingsOpen(true); }} className="text-indigo-400 hover:text-indigo-300 font-bold">Manage</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                     {displayTeam.map(member => (
                         <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">
                           <div className="flex items-center gap-2">
                               <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-zinc-800" />
-                              <div>
-                                <div className="text-sm text-zinc-200 font-medium flex items-center gap-2">
-                                    {member.name}
-                                    {member.id === currentUser.id && <span className="text-[10px] text-zinc-500">(You)</span>}
-                                </div>
-                                <div className={`text-[10px] uppercase font-bold text-indigo-400`}>
-                                    {getDisplayRole(member)}
-                                </div>
-                              </div>
+                              <div><div className="text-sm text-zinc-200 font-medium flex items-center gap-2">{member.name}{member.id === currentUser.id && <span className="text-[10px] text-zinc-500">(You)</span>}</div><div className={`text-[10px] uppercase font-bold text-indigo-400`}>{getDisplayRole(member)}</div></div>
                           </div>
                         </div>
                     ))}
@@ -752,6 +641,41 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               )}
            </div>
         </div>
+      )}
+
+      {/* CLERK ORG PROFILE MODAL */}
+      {isOrgSettingsOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className="relative w-full max-w-4xl bg-zinc-900 rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto border border-zinc-800">
+                  <button onClick={() => setIsOrgSettingsOpen(false)} className="absolute top-4 right-4 z-50 p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-white transition-colors">
+                      <X size={20} />
+                  </button>
+                  <div className="p-4">
+                      <OrganizationProfile 
+                        routing="hash"
+                        appearance={{
+                            elements: {
+                                card: "shadow-none border-0 bg-transparent",
+                                navbar: "hidden",
+                                navbarMobileMenuButton: "hidden",
+                                headerTitle: "text-white",
+                                headerSubtitle: "text-zinc-400",
+                                profileSectionTitleText: "text-white",
+                                userPreviewMainIdentifier: "text-white",
+                                userPreviewSecondaryIdentifier: "text-zinc-400",
+                            },
+                            variables: {
+                                colorPrimary: "#4f46e5",
+                                colorBackground: "#18181b",
+                                colorText: "#fff",
+                                colorInputBackground: "#09090b",
+                                colorInputText: "#fff",
+                            }
+                        }}
+                      />
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );
