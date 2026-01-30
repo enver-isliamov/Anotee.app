@@ -146,7 +146,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isOwner = project.ownerId === currentUser.id; // STRICT OWNER CHECK
 
   // DEFAULT TO LAST VERSION: User wants the latest version by default.
-  // Using asset.versions.length - 1 instead of asset.currentVersionIndex ensuring we land on the newest uploaded one.
   const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.versions.length - 1);
   
   const [compareVersionIdx, setCompareVersionIdx] = useState<number | null>(null);
@@ -492,7 +491,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       {!isFullscreen && (
         <header className="h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
-          {/* Header Content - CHANGED: Removed overflow-hidden from here to let dropdown pop out */}
+          {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
             <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
             {(!isSearchOpen || window.innerWidth > 768) && (
@@ -505,7 +504,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             >
                                 <div className="min-w-0 flex items-center gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
-                                        {/* CHANGED: Apply truncation directly to the text span */}
                                         <span className="font-bold text-xs md:text-sm truncate max-w-[200px] md:max-w-[400px] block overflow-hidden text-ellipsis" title={localFileName || version.filename || asset.title}>
                                             {localFileName || version.filename || asset.title}
                                         </span>
