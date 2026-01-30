@@ -64,25 +64,29 @@ export const useUploadManager = (
 
             // 1. Calculate Naming & Version
             let nextVersionNumber = 1;
-            // Default title from file, but cleaned up
-            let assetTitle = file.name.replace(/\.[^/.]+$/, "");
+            
+            // Extract base name and extension
+            // Remove extension
+            let rawTitle = file.name.replace(/\.[^/.]+$/, "");
+            // Sanitize: Keep alphanumeric, spaces, dashes, underscores. Remove others to prevent FS/URL issues.
+            let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
+            if (!assetTitle) assetTitle = "Video_Asset";
+
             const ext = file.name.split('.').pop();
 
             if (targetAssetId && project) {
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
                 if (existingAsset) {
                     nextVersionNumber = existingAsset.versions.length + 1;
-                    // FORCE NAMING CONSISTENCY: Use the existing Asset Title as the base
-                    // This ensures "Reels-Hudenie.mp4" + new upload becomes "Reels-Hudenie_v2.mp4"
-                    assetTitle = existingAsset.title.replace(/[^\w\s-]/gi, ''); // Sanitize strictly
+                    // NOTE: We now use the UPLOADED FILE NAME as the base for the new version filename
+                    // This allows keeping context like "Cut_v2_ColorGraded" instead of forcing "AssetTitle_v3"
                 }
             }
 
-            // Correct Naming: _v2, _v3 instead of _vNEW
-            // If it's a new version, strictly append _vX. If it's the first one, stick to original name or append _v1
-            const finalFileName = targetAssetId 
-                ? `${assetTitle}_v${nextVersionNumber}.${ext}`
-                : `${assetTitle}_v1.${ext}`; // Enforce v1 on first upload too for consistency
+            // Construct Filename: {SanitizedName}_v{Number}.{ext}
+            // If it's a fresh upload, it gets _v1. 
+            // If it's a version, it gets _vX based on count.
+            const finalFileName = `${assetTitle}_v${nextVersionNumber}.${ext}`;
 
             // 2. Generate Thumbnail
             updateTask({ status: 'processing' });
@@ -113,7 +117,19 @@ export const useUploadManager = (
                     try {
                         const appFolder = await GoogleDriveService.ensureAppFolder();
                         const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                        const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
+                        // For assets, we might want to group by Asset Title folder, but if we change names, 
+                        // flat project folder or asset-specific folder is fine. 
+                        // To keep it clean, we'll use the Asset Title from the *Asset Object* if updating, or new name if new.
+                        // But finding the "Asset Folder" by name is tricky if we rename things. 
+                        // For now, let's create/find folder based on the *Target Asset Title* if it exists, or the new file name.
+                        
+                        let folderName = assetTitle;
+                        if (targetAssetId && project) {
+                             const existingAsset = project.assets.find(a => a.id === targetAssetId);
+                             if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+                        }
+
+                        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
 
                         const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
                         googleDriveId = result.id;
@@ -183,7 +199,7 @@ export const useUploadManager = (
                 // New Asset
                 const newAsset: ProjectAsset = {
                     id: generateId(),
-                    title: assetTitle, // Use the cleaned title
+                    title: assetTitle, // Use the sanitized name as title
                     thumbnail: thumbnailDataUrl,
                     currentVersionIndex: 0,
                     versions: [newVersion]
