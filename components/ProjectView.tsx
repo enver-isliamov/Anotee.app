@@ -396,15 +396,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 {visibleAssets.length === 0 && !isDragging && (
                     <div 
                         onClick={() => fileInputRef.current?.click()}
-                        className="col-span-full h-[60vh] border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all cursor-pointer group"
+                        className="col-span-full h-[60vh] border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all cursor-pointer group relative overflow-hidden"
                     >
-                        <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                        <div className="absolute top-0 right-0 p-8 opacity-10 font-black text-9xl text-indigo-500 rotate-12 pointer-events-none">02</div>
+                        <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm relative z-10">
                             <Upload size={32} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
                         </div>
-                        <h3 className="text-xl font-bold mb-2">No videos yet</h3>
-                        <p className="text-sm max-w-xs text-center mb-6">Drag and drop video files here, or click to browse.</p>
-                        <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all pointer-events-none">
-                            Select Files
+                        <h3 className="text-xl font-bold mb-2 relative z-10">Step 2: Upload Video</h3>
+                        <p className="text-sm max-w-xs text-center mb-6 relative z-10 text-zinc-500">
+                            Drag and drop your video file here. <br/>
+                            <span className="text-xs opacity-70">Supports MP4, MOV, MKV</span>
+                        </p>
+                        <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all pointer-events-none relative z-10">
+                            Select File
                         </button>
                     </div>
                 )}

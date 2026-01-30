@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Project, User } from '../types';
-import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon } from 'lucide-react';
+import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
@@ -227,6 +227,74 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       setIsDeleting(null);
   };
 
+  const renderOnboarding = () => {
+      return (
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 mb-8 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
+              
+              <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">
+                      <Layout size={24} />
+                  </div>
+                  <div>
+                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with SmoTree</h3>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Follow these steps to set up your first review workflow.</p>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+                  {/* Step 1: Create Project (Active) */}
+                  <div className="border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl p-5 flex flex-col items-start relative group hover:shadow-md transition-all">
+                      <div className="absolute top-4 right-4 text-indigo-200 dark:text-indigo-800 font-black text-4xl opacity-20">01</div>
+                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-indigo-600 shadow-sm">
+                          <Plus size={20} />
+                      </div>
+                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">Create Project</h4>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed">
+                          Initialize a workspace for your media assets and team collaboration.
+                      </p>
+                      <button 
+                          onClick={() => setIsModalOpen(true)}
+                          className="mt-auto w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"
+                      >
+                          Start Here <ArrowRight size={12} />
+                      </button>
+                  </div>
+
+                  {/* Step 2: Upload (Pending) */}
+                  <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl p-5 flex flex-col items-start relative opacity-70 grayscale">
+                      <div className="absolute top-4 right-4 text-zinc-200 dark:text-zinc-800 font-black text-4xl opacity-20">02</div>
+                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
+                          <Upload size={20} />
+                      </div>
+                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Upload Media</h4>
+                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
+                          Drag & drop video files. We automatically generate proxies for smooth playback.
+                      </p>
+                      <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
+                          Waiting for Project...
+                      </div>
+                  </div>
+
+                  {/* Step 3: Invite (Pending) */}
+                  <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl p-5 flex flex-col items-start relative opacity-70 grayscale">
+                      <div className="absolute top-4 right-4 text-zinc-200 dark:text-zinc-800 font-black text-4xl opacity-20">03</div>
+                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
+                          <Share2 size={20} />
+                      </div>
+                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Invite Team</h4>
+                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
+                          Share a secure link with clients or editors for frame-accurate feedback.
+                      </p>
+                      <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
+                          Waiting for Upload...
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
   const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode) => {
       return (
           <div className="mb-8">
@@ -239,17 +307,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               </h2>
               
               {projectList.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[20vh] text-zinc-500 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-900/30">
-                        <Lock size={32} className="mb-2 opacity-50" />
-                        <h3 className="text-base font-medium text-zinc-400">{t('dash.no_projects')}</h3>
-                        {activeOrgId ? (
-                            <p className="text-xs text-zinc-500 mt-1 max-w-xs text-center">
-                                No projects in <strong>{organization?.name}</strong>. Create one or switch to Personal Workspace.
-                            </p>
-                        ) : (
-                            <p className="text-xs text-zinc-500 mt-1">Switch to Personal Workspace to see your private projects.</p>
-                        )}
-                 </div>
+                  // Use new Onboarding if generic empty state
+                  renderOnboarding()
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {projectList.map((project) => {
