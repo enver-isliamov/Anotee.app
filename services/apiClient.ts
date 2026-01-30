@@ -48,12 +48,15 @@ export const api = {
         clerkTokenProvider = provider;
     },
 
-    getProjects: async (user: User | null, explicitToken?: string | null, orgId?: string): Promise<Project[]> => {
+    getProjects: async (user: User | null, explicitToken?: string | null, orgId?: string, projectId?: string): Promise<Project[]> => {
         if (IS_MOCK_MODE) {
             // Simulate network delay
             await new Promise(r => setTimeout(r, 600));
             let data = getLocalData();
-            // Mock filter
+            if (projectId) {
+                const found = data.find(p => p.id === projectId);
+                return found ? [found] : [];
+            }
             if (orgId) {
                 data = data.filter(p => p.orgId === orgId);
             } else {
@@ -65,17 +68,22 @@ export const api = {
         if (!user) return [];
         
         try {
-            // Use explicit token if provided (fixes race condition), otherwise use provider
             const token = explicitToken || await getAuthToken();
             
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             
-            const url = orgId ? `/api/data?orgId=${orgId}` : '/api/data';
+            let url = '/api/data';
+            const params = new URLSearchParams();
+            if (orgId) params.append('orgId', orgId);
+            if (projectId) params.append('projectId', projectId);
+            
+            if (params.toString()) url += `?${params.toString()}`;
+
             const res = await fetch(url, { headers });
             
             if (res.status === 401) {
-                console.error("Unauthorized request to /api/data. Token present:", !!token);
+                console.error("Unauthorized request to /api/data");
                 throw new Error("Unauthorized");
             }
             

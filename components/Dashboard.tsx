@@ -60,6 +60,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       // 2. If Personal Workspace (no Org selected):
       // Show projects where orgId is missing, null, empty string OR 'null' string (legacy)
       // AND user has access (Owner or Team)
+      // NOTE: We generally hide public projects from the dashboard list unless explicitly joined
       const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
       const hasAccess = p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id);
       
@@ -86,11 +87,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       description,
       createdAt: Date.now(), 
       updatedAt: 'Just now',
-      team: [currentUser],
+      // If Org: Clean Team (Managed by Clerk). If Personal: Add Self.
+      team: activeOrgId ? [] : [currentUser],
       ownerId: currentUser.id,
-      orgId: activeOrgId || null, // Explicitly set null if personal
+      orgId: activeOrgId || null, 
       assets: [],
-      isLocked: false
+      isLocked: false,
+      publicAccess: 'none'
     };
 
     onAddProject(newProject);
@@ -124,8 +127,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
           }
 
-          // USE PATCH (Partial Update) instead of full update
-          // This prevents overwriting assets if someone else added one in the background
+          // USE PATCH (Partial Update)
           if (!isMockMode) {
               await api.patchProject(editingProject.id, {
                   name: editName,
@@ -161,9 +163,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       }
   };
 
-  const handleToggleLock = (e: React.MouseEvent, project: Project) => {
+  const handleToggleLock = async (e: React.MouseEvent, project: Project) => {
       e.stopPropagation();
-      onEditProject(project.id, { isLocked: !project.isLocked });
+      try {
+          if (!isMockMode) {
+              await api.patchProject(project.id, { isLocked: !project.isLocked }, project._version || 0);
+          }
+          onEditProject(project.id, { isLocked: !project.isLocked });
+      } catch(e) { notify("Failed to toggle lock", "error"); }
   };
 
   const handleShareClick = (e: React.MouseEvent, project: Project) => {

@@ -206,10 +206,26 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
 
       try {
+         // Check URL parameters for direct link access
+         const params = new URLSearchParams(window.location.search);
+         const directProjectId = params.get('projectId');
+
          setIsSyncing(true);
-         const data = await api.getProjects(userToUse, token, organization?.id);
+         // Pass explicit project ID to fetch it even if it's public/not in my list
+         const data = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
+         
          if (data && Array.isArray(data)) {
-            setProjects(data);
+            setProjects(prev => {
+                // STABILIZATION: Only update if data actually changed
+                // We use a simple hash of IDs + Versions + Count
+                const prevHash = prev.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+                const newHash = data.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+                
+                if (prevHash !== newHash || prev.length !== data.length) {
+                    return data;
+                }
+                return prev; // Return same reference to skip render
+            });
          }
       } catch (e) {
          console.error("Fetch failed", e);
@@ -218,6 +234,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   }, [currentUser, getToken, authMode, organization]);
 
+  // OPTIMIZED SYNC: Now accepts a single Project or Array
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
       
@@ -228,6 +245,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
       try {
           setIsSyncing(true);
+          // Only send the modified project(s) to server
           const updates = await api.syncProjects(projectsData, currentUser, token);
           
           if (updates && updates.length > 0) {
@@ -291,6 +309,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const aId = params.get('assetId');
 
     if (pId) {
+      // Find in existing or loaded projects
       const projectExists = projects.find(p => p.id === pId);
       
       if (projectExists) {
@@ -333,17 +352,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   const handleUpdateProject = (updatedProject: Project, skipSync = false) => {
-    const newProjects = projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    setProjects(newProjects);
+    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
     if (!skipSync) {
-        forceSync(newProjects);
+        // OPTIMIZATION: Only sync the specific project that changed
+        forceSync([updatedProject]);
     }
   };
   
   const handleEditProject = (projectId: string, data: Partial<Project>) => {
       const updated = projects.map(p => p.id === projectId ? { ...p, ...data, updatedAt: 'Just now' } : p);
       setProjects(updated);
-      forceSync(updated);
+      
+      const targetProject = updated.find(p => p.id === projectId);
+      if (targetProject) forceSync([targetProject]);
+      
       notify("Project updated", "success");
   };
 
@@ -352,6 +374,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const newProjects = [projectWithVersion, ...projects];
     setProjects(newProjects);
     notify("Project created successfully", "success");
+    // OPTIMIZATION: Only sync the new project
     forceSync([projectWithVersion]);
   };
 

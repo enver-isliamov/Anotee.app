@@ -62,6 +62,7 @@ export interface Project {
   ownerId?: string;
   orgId?: string; 
   isLocked?: boolean; 
+  publicAccess?: 'view' | 'none'; // New field for link sharing
   _version?: number; // Optimistic locking version
 }
 

@@ -21,7 +21,8 @@ export default async function handler(req, res) {
       // GET: Retrieve Projects
       if (req.method === 'GET') {
         try {
-          const targetOrgId = req.query.orgId; // Optional filter
+          const targetOrgId = req.query.orgId;
+          const specificProjectId = req.query.projectId;
 
           // 1. Fetch Org Memberships to verify access
           let userOrgIds = [];
@@ -35,25 +36,36 @@ export default async function handler(req, res) {
               }
           }
 
-          // Security: If requesting a specific Org, user MUST be a member
-          if (targetOrgId && !userOrgIds.includes(targetOrgId)) {
-              // Return empty if user tries to access an Org they are not part of
-              return res.status(200).json([]);
-          }
-
           let query;
-          
-          if (targetOrgId) {
-              // A. Organization View (Filtered)
+
+          if (specificProjectId) {
+              // --- SINGLE PROJECT FETCH (Permissive for Public Links) ---
+              // Returns project if: Owner OR Team OR Org Member OR Public Access
+              const { rows } = await sql`
+                SELECT data, org_id FROM projects 
+                WHERE id = ${specificProjectId}
+                AND (
+                    owner_id = ${user.id} 
+                    OR data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
+                    OR org_id = ANY(${userOrgIds}::text[])
+                    OR data->>'publicAccess' = 'view'
+                )
+              `;
+              query = rows;
+          } else if (targetOrgId) {
+              // --- ORG LIST FETCH (Restricted) ---
+              if (!userOrgIds.includes(targetOrgId)) {
+                  return res.status(200).json([]);
+              }
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
               `;
               query = rows;
           } else {
-              // B. Personal Workspace View (No Org)
-              // Show projects where org_id is NULL OR owner_id matches
-              // FIX: Also check if user is in 'team' JSON array for legacy shared projects
+              // --- PERSONAL WORKSPACE FETCH (Restricted) ---
+              // Only show projects I own or am explicitly part of the team.
+              // DO NOT show public projects here to avoid dashboard spam.
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE (org_id IS NULL OR org_id = '') 
@@ -66,7 +78,6 @@ export default async function handler(req, res) {
               query = rows;
           }
 
-          // Map and ensure orgId is present in JSON if DB column has it
           const projects = query.map(r => {
               const p = r.data;
               if (r.org_id && !p.orgId) p.orgId = r.org_id;
@@ -77,60 +88,50 @@ export default async function handler(req, res) {
 
         } catch (dbError) {
            if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline", code: "DB_OFFLINE" });
-           if (dbError.code === '42P01') return res.status(200).json([]); // Table doesn't exist yet
+           if (dbError.code === '42P01') return res.status(200).json([]); 
            console.error("DB GET Error:", dbError); 
            return res.status(500).json({ error: "Database error" });
         }
       } 
       
-      // PATCH: Partial Updates (Smart Merge)
-      // Allows updating specific fields (like name, description) without overwriting assets
+      // PATCH: Partial Updates
       if (req.method === 'PATCH') {
           const { projectId, updates, _version } = req.body;
-          
           if (!projectId || !updates) return res.status(400).json({ error: "Missing projectId or updates" });
 
-          // 1. Fetch current data
           const { rows } = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId}`;
-          
           if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
           
           const currentDbData = rows[0].data;
           const dbOwnerId = rows[0].owner_id;
           const dbOrgId = rows[0].org_id;
           
-          // 2. Permission Check
           let hasAccess = false;
           if (dbOwnerId === user.id) hasAccess = true;
-          else if (currentDbData.team && currentDbData.team.some(m => m.id === user.id)) hasAccess = true; // Check legacy team
+          else if (currentDbData.team && currentDbData.team.some(m => m.id === user.id)) hasAccess = true; 
           else if (dbOrgId) {
-               // Verify Org Access
                const clerk = getClerkClient();
                try {
                    const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
                    const userOrgs = memberships.data.map(m => m.organization.id);
                    if (userOrgs.includes(dbOrgId)) hasAccess = true;
-               } catch(e) { console.error(e); }
+               } catch(e) {}
           }
           
           if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
 
-          // 3. Version Check (Optimistic Locking)
           const currentVer = currentDbData._version || 0;
           if (_version !== undefined && currentVer !== _version) {
               return res.status(409).json({ error: "Conflict", serverVersion: currentVer, clientVersion: _version });
           }
 
-          // 4. Merge Data (Server-Side)
-          // This ensures that if 'assets' are NOT in updates, they remain untouched in DB
           const newData = {
               ...currentDbData,
               ...updates,
-              _version: currentVer + 1, // Increment version
+              _version: currentVer + 1, 
               updatedAt: 'Just now'
           };
 
-          // 5. Save
           await sql`
             UPDATE projects 
             SET data = ${JSON.stringify(newData)}::jsonb, updated_at = ${Date.now()}
@@ -140,14 +141,13 @@ export default async function handler(req, res) {
           return res.status(200).json({ success: true, project: newData });
       }
 
-      // POST: Full Sync / Create
+      // POST: Upsert (Single or Array)
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
         
-        if (!Array.isArray(projectsToSync)) return res.status(400).json({ error: "Expected array" });
+        if (!Array.isArray(projectsToSync)) projectsToSync = [projectsToSync]; // Handle single object
 
-        // Refresh permissions
         let orgIds = [];
         if (user.isVerified && user.userId) {
             try {
@@ -164,43 +164,28 @@ export default async function handler(req, res) {
 
             const clientVersion = project._version || 0;
             const newVersion = clientVersion + 1;
-            project._version = newVersion; // Inject new version into JSON
+            project._version = newVersion; 
 
             const projectJson = JSON.stringify(project);
             const orgId = project.orgId || null;
             
             try {
                 const hasOrgAccess = orgIds.length > 0 && orgId ? orgIds.includes(orgId) : false;
-
                 let updateResult;
                 
                 if (hasOrgAccess) {
-                     // If Org Match, we allow update
                      updateResult = await sql`
                         UPDATE projects 
-                        SET 
-                            data = ${projectJson}::jsonb,
-                            org_id = ${orgId},
-                            updated_at = ${Date.now()}
-                        WHERE id = ${project.id} 
-                        AND (org_id = ${orgId})
+                        SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
+                        WHERE id = ${project.id} AND (org_id = ${orgId})
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
                 } else {
-                    // Personal Project: Must be owner or in legacy team for update (strict update only for owner usually, but relaxed for legacy)
-                    // For security, usually only owner updates project meta, but team can update assets via other endpoints. 
-                    // Here we strictly enforce owner for full-object updates unless it's a new legacy fix.
                     updateResult = await sql`
                         UPDATE projects 
-                        SET 
-                            data = ${projectJson}::jsonb,
-                            org_id = ${orgId},
-                            updated_at = ${Date.now()}
+                        SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
                         WHERE id = ${project.id} 
-                        AND (
-                            owner_id = ${user.id}
-                            OR data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
-                        )
+                        AND (owner_id = ${user.id} OR data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb)
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
                 }
@@ -211,21 +196,12 @@ export default async function handler(req, res) {
                     const checkExists = await sql`SELECT data->>'_version' as ver, owner_id FROM projects WHERE id = ${project.id}`;
                     
                     if (checkExists.rowCount === 0) {
-                        // Does not exist -> INSERT
                         await sql`
                             INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
-                            VALUES (
-                                ${project.id}, 
-                                ${user.id}, 
-                                ${orgId},
-                                ${projectJson}::jsonb, 
-                                ${Date.now()}, 
-                                ${project.createdAt || Date.now()}
-                            );
+                            VALUES (${project.id}, ${user.id}, ${orgId}, ${projectJson}::jsonb, ${Date.now()}, ${project.createdAt || Date.now()});
                         `;
                         updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
                     } else {
-                        // Conflict
                         return res.status(409).json({ error: "Version Conflict", projectId: project.id });
                     }
                 }

@@ -46,6 +46,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       }
   };
 
+  // Check if migration has already run (via metadata)
+  const hasMigrated = (currentUser as any).unsafeMetadata?.migrated === true;
+
   return (
         <div className="max-w-5xl mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
@@ -95,41 +98,43 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                 />
             </div>
 
-            {/* Migration Tool (Admins Only) */}
-            <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
-                <div className="flex items-start gap-4">
-                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
-                        <Database size={24} />
-                    </div>
-                    <div className="flex-1">
-                        <h3 className="font-bold text-zinc-900 dark:text-white mb-1">Legacy Data Recovery</h3>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-                            If you created projects before the update, run this tool to link them to your new account.
-                        </p>
-                        
-                        {migrationStatus === 'success' ? (
-                            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-bold bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg border border-green-200 dark:border-green-800">
-                                <Check size={16} /> Optimization Complete ({migratedCount} projects scanned)
-                            </div>
-                        ) : migrationStatus === 'error' ? (
-                            <div className="flex flex-col gap-2">
-                                <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm font-bold bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
-                                    <AlertCircle size={16} /> Error: {errorMessage || "Unknown error"}
+            {/* Migration Tool (Admins Only) - Hidden if already done */}
+            {!hasMigrated && (
+                <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
+                            <Database size={24} />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="font-bold text-zinc-900 dark:text-white mb-1">Legacy Data Recovery</h3>
+                            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                                If you created projects before the update, run this tool to link them to your new account.
+                            </p>
+                            
+                            {migrationStatus === 'success' ? (
+                                <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-bold bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg border border-green-200 dark:border-green-800">
+                                    <Check size={16} /> Optimization Complete ({migratedCount} projects scanned)
                                 </div>
-                                <button onClick={handleMigrate} className="text-xs text-indigo-500 hover:underline text-left mt-1">Try again</button>
-                            </div>
-                        ) : (
-                            <button 
-                                onClick={handleMigrate} 
-                                disabled={migrationStatus === 'loading'}
-                                className="bg-zinc-900 dark:bg-zinc-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-zinc-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {migrationStatus === 'loading' ? 'Processing...' : 'Run Maintenance Script'}
-                            </button>
-                        )}
+                            ) : migrationStatus === 'error' ? (
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm font-bold bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                                        <AlertCircle size={16} /> Error: {errorMessage || "Unknown error"}
+                                    </div>
+                                    <button onClick={handleMigrate} className="text-xs text-indigo-500 hover:underline text-left mt-1">Try again</button>
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={handleMigrate} 
+                                    disabled={migrationStatus === 'loading'}
+                                    className="bg-zinc-900 dark:bg-zinc-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-zinc-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {migrationStatus === 'loading' ? 'Processing...' : 'Run Maintenance Script'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             <div>
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 px-1 mt-8">{t('profile.tiers')}</h3>

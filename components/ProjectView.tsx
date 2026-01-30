@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -254,6 +254,20 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       const updatedTeam = project.team.filter(m => m.id !== memberId);
       onUpdateProject({ ...project, team: updatedTeam });
       notify(t('common.success'), "info");
+  };
+
+  const togglePublicAccess = async () => {
+      const newAccess = project.publicAccess === 'view' ? 'none' : 'view';
+      if (!isMockMode) {
+          try {
+              await api.patchProject(project.id, { publicAccess: newAccess }, project._version || 0);
+          } catch(e) {
+              notify("Failed to update settings", "error");
+              return;
+          }
+      }
+      onUpdateProject({ ...project, publicAccess: newAccess });
+      notify(newAccess === 'view' ? "Link access enabled" : "Link access disabled", "info");
   };
 
   const handleCopyLink = () => {
@@ -564,6 +578,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                      {t('pv.share.desc')}
                   </p>
                   
+                  {/* Public Link Toggle for Personal Projects */}
+                  {!project.orgId && shareTarget.type === 'project' && isProjectOwner && (
+                      <div className="mb-4 bg-zinc-800/50 p-3 rounded-xl border border-zinc-700 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-zinc-300">
+                              <Globe size={16} className={project.publicAccess === 'view' ? 'text-green-400' : 'text-zinc-500'} />
+                              <div className="flex flex-col">
+                                  <span className="text-xs font-bold text-white">Public Access</span>
+                                  <span className="text-[9px] text-zinc-500">Anyone with link can view</span>
+                              </div>
+                          </div>
+                          <button 
+                            onClick={togglePublicAccess}
+                            className={`w-10 h-5 rounded-full relative transition-colors ${project.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}
+                          >
+                              <div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${project.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div>
+                          </button>
+                      </div>
+                  )}
+
                   <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
                     <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
                     <div className="flex items-center gap-2">
@@ -580,12 +613,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     </div>
                   </div>
                   
-                  <div className="flex items-start gap-2 bg-indigo-900/10 p-2 rounded border border-indigo-500/10">
-                      <Info size={14} className="text-indigo-400 mt-0.5 shrink-0" />
-                      <p className="text-[10px] text-indigo-200/70">
-                          {t('pv.share.info')}
-                      </p>
-                  </div>
+                  {project.orgId && (
+                      <div className="flex items-start gap-2 bg-indigo-900/10 p-2 rounded border border-indigo-500/10">
+                          <Info size={14} className="text-indigo-400 mt-0.5 shrink-0" />
+                          <p className="text-[10px] text-indigo-200/70">
+                              For Organization projects, users must be members of your Organization to access this link.
+                          </p>
+                      </div>
+                  )}
                 </>
               )}
 

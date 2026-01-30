@@ -4,6 +4,7 @@ import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
 import { upload } from '@vercel/blob/client';
+import { api } from '../services/apiClient';
 
 export const useUploadManager = (
     currentUser: User | null,
@@ -13,7 +14,7 @@ export const useUploadManager = (
     forceSync: (projects: Project[]) => Promise<void>,
     lastLocalUpdateRef: React.MutableRefObject<number>,
     isMockMode: boolean,
-    getToken: () => Promise<string | null> // New dependency
+    getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
@@ -40,7 +41,7 @@ export const useUploadManager = (
 
         try {
             // Block server polling to prevent overwriting
-            lastLocalUpdateRef.current = Date.now() + 60000; // Block for 1 min or until done
+            lastLocalUpdateRef.current = Date.now() + 60000; 
 
             // 1. Generate Thumbnail
             updateTask({ status: 'processing' });
@@ -91,12 +92,11 @@ export const useUploadManager = (
                     const token = await getToken();
                     if (!token) throw new Error("Authentication missing for upload");
 
-                    // IMPORTANT: Pass projectId AND token in clientPayload for security validation on server
                     const newBlob = await upload(file.name, file, {
                         access: 'public',
                         handleUploadUrl: '/api/upload',
                         clientPayload: JSON.stringify({ 
-                            token: token, // Pass Clerk Token here
+                            token: token, 
                             projectId: projectId 
                         }),
                         onUploadProgress: (p) => updateTask({ progress: Math.round((p.loaded / p.total) * 100) })
@@ -105,77 +105,95 @@ export const useUploadManager = (
                 }
             }
 
-            // 3. Update State & DB
-            setProjects(currentProjects => {
-                const projIndex = currentProjects.findIndex(p => p.id === projectId);
-                if (projIndex === -1) return currentProjects;
+            // 3. Construct New Project State
+            // We calculate the new state but don't set it yet to allow rollback logic
+            const projIndex = projects.findIndex(p => p.id === projectId);
+            if (projIndex === -1) throw new Error("Project not found during upload finalization");
 
-                const updatedProject = { ...currentProjects[projIndex] };
-                
-                // 3.1 Construct New Version Object
-                const newVersion = {
-                    id: generateId(),
-                    versionNumber: 1, 
-                    filename: finalFileName,
-                    url: assetUrl,
-                    storageType,
-                    googleDriveId,
-                    uploadedAt: 'Just now',
-                    comments: [],
-                    localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
-                    localFileName: isMockMode ? file.name : undefined
-                };
+            const updatedProject = { ...projects[projIndex] };
+            
+            const newVersion = {
+                id: generateId(),
+                versionNumber: 1, 
+                filename: finalFileName,
+                url: assetUrl,
+                storageType,
+                googleDriveId,
+                uploadedAt: 'Just now',
+                comments: [],
+                localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
+                localFileName: isMockMode ? file.name : undefined
+            };
 
-                // 3.2 Insert into Assets
-                if (targetAssetId) {
-                    // Adding Version
-                    const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
-                    if (assetIdx !== -1) {
-                        const asset = { ...updatedProject.assets[assetIdx] };
-                        newVersion.versionNumber = asset.versions.length + 1;
-                        
-                        if (!isMockMode && useDrive) {
-                            newVersion.filename = `${asset.title}_v${newVersion.versionNumber}.${file.name.split('.').pop()}`;
-                        }
-                        
-                        asset.versions = [...asset.versions, newVersion];
-                        asset.thumbnail = thumbnailDataUrl; // Update thumb to latest
-                        asset.currentVersionIndex = asset.versions.length - 1;
-                        updatedProject.assets[assetIdx] = asset;
+            if (targetAssetId) {
+                // Adding Version
+                const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
+                if (assetIdx !== -1) {
+                    const asset = { ...updatedProject.assets[assetIdx] };
+                    newVersion.versionNumber = asset.versions.length + 1;
+                    
+                    if (!isMockMode && useDrive) {
+                        newVersion.filename = `${asset.title}_v${newVersion.versionNumber}.${file.name.split('.').pop()}`;
                     }
-                } else {
-                    // New Asset
-                    const newAsset: ProjectAsset = {
-                        id: generateId(),
-                        title: assetTitle,
-                        thumbnail: thumbnailDataUrl,
-                        currentVersionIndex: 0,
-                        versions: [newVersion]
-                    };
-                    updatedProject.assets = [...updatedProject.assets, newAsset];
+                    
+                    asset.versions = [...asset.versions, newVersion];
+                    asset.thumbnail = thumbnailDataUrl;
+                    asset.currentVersionIndex = asset.versions.length - 1;
+                    updatedProject.assets[assetIdx] = asset;
+                }
+            } else {
+                // New Asset
+                const newAsset: ProjectAsset = {
+                    id: generateId(),
+                    title: assetTitle,
+                    thumbnail: thumbnailDataUrl,
+                    currentVersionIndex: 0,
+                    versions: [newVersion]
+                };
+                updatedProject.assets = [...updatedProject.assets, newAsset];
+            }
+            
+            updatedProject.updatedAt = 'Just now';
+
+            // 4. Try Sync
+            try {
+                // Optimistically update UI
+                setProjects(currentProjects => {
+                    const newAllProjects = [...currentProjects];
+                    const idx = newAllProjects.findIndex(p => p.id === projectId);
+                    if (idx !== -1) newAllProjects[idx] = updatedProject;
+                    return newAllProjects;
+                });
+
+                // Send to Server
+                await forceSync([updatedProject]);
+                
+                updateTask({ status: 'done', progress: 100 });
+                notify("Upload completed", "success");
+
+            } catch (syncError) {
+                console.error("Sync failed during upload finalization", syncError);
+                
+                // Rollback Blob if sync failed (to avoid orphans)
+                if (!isMockMode && storageType === 'vercel' && assetUrl) {
+                    try {
+                        console.log("Rolling back orphaned blob:", assetUrl);
+                        await api.deleteAssets([assetUrl], projectId);
+                    } catch(delErr) {
+                        console.error("Failed to rollback blob", delErr);
+                    }
                 }
                 
-                updatedProject.updatedAt = 'Just now';
-                
-                // 3.3 Trigger Sync
-                setTimeout(() => {
-                    forceSync([updatedProject]); 
-                }, 0);
-
-                const newAllProjects = [...currentProjects];
-                newAllProjects[projIndex] = updatedProject;
-                
-                return newAllProjects;
-            });
-
-            updateTask({ status: 'done', progress: 100 });
-            notify("Upload completed", "success");
+                // Revert UI State (Reload from server ideally, but basic revert here)
+                setProjects(projects); 
+                throw new Error("Failed to save project data. Upload cancelled.");
+            }
 
         } catch (e: any) {
             console.error("Upload failed", e);
             updateTask({ status: 'error', error: e.message || "Upload Failed" });
             notify(`Upload failed: ${e.message}`, "error");
-            lastLocalUpdateRef.current = Date.now(); // Unblock polling
+            lastLocalUpdateRef.current = Date.now(); 
         }
     };
 
