@@ -58,6 +58,61 @@ export const GoogleDriveService = {
       }
   },
 
+  /**
+   * Checks if the file is publicly accessible or shared with specific domain
+   */
+  getFilePermissions: async (fileId: string): Promise<{ isPublic: boolean, permissions: any[] }> => {
+      const accessToken = await GoogleDriveService.getToken();
+      if (!accessToken) return { isPublic: false, permissions: [] };
+
+      try {
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          
+          if (!res.ok) return { isPublic: false, permissions: [] };
+          
+          const data = await res.json();
+          const perms = data.permissions || [];
+          
+          const isPublic = perms.some((p: any) => p.type === 'anyone' || p.type === 'domain');
+          return { isPublic, permissions: perms };
+      } catch (e) {
+          console.error("Failed to check permissions", e);
+          return { isPublic: false, permissions: [] };
+      }
+  },
+
+  /**
+   * Attempts to make the file public (Anyone with link can view).
+   * Useful for retrying failed uploads or fixing permissions manually.
+   */
+  makeFilePublic: async (fileId: string): Promise<boolean> => {
+      const accessToken = await GoogleDriveService.getToken();
+      if (!accessToken) return false;
+
+      try {
+        const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ role: 'reader', type: 'anyone' })
+        });
+        
+        if (!permRes.ok) {
+            const err = await permRes.json();
+            console.warn("Make Public Failed:", err.error?.message);
+            return false;
+        }
+        return true;
+     } catch (e) {
+         console.warn("Failed to set public permission", e);
+         return false;
+     }
+  },
+
   renameProjectFolder: async (oldName: string, newName: string): Promise<boolean> => {
       const accessToken = await GoogleDriveService.getToken();
       if (!accessToken) return false;
@@ -210,24 +265,7 @@ export const GoogleDriveService = {
                      
                      // --- IMPORTANT: Set Public Permission (Safe Fail) ---
                      // Try to make file viewable by anyone with link. 
-                     // If organization policy blocks this, catch error and proceed anyway.
-                     try {
-                        const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${response.id}/permissions`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ role: 'reader', type: 'anyone' })
-                        });
-                        
-                        if (!permRes.ok) {
-                            const err = await permRes.json();
-                            console.warn("Permission Warning (Non-fatal):", err.error?.message || "Policy restricted");
-                        }
-                     } catch (e) {
-                         console.warn("Failed to set public permission (Network/Policy issue). Proceeding...", e);
-                     }
+                     await GoogleDriveService.makeFilePublic(response.id);
                      
                      resolve(response);
                  } catch (e) {

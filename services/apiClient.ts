@@ -9,7 +9,6 @@ const HAS_CLERK_KEY = ENV.VITE_CLERK_PUBLISHABLE_KEY && !ENV.VITE_CLERK_PUBLISHA
 const IS_MOCK_MODE = !HAS_CLERK_KEY;
 
 const STORAGE_KEY = 'smotree_projects_data';
-const GUEST_TOKEN_KEY = 'smotree_guest_token';
 
 // Helper to get local data
 const getLocalData = (): Project[] => {
@@ -29,7 +28,7 @@ const setLocalData = (data: Project[]) => {
 let clerkTokenProvider: (() => Promise<string | null>) | null = null;
 
 const getAuthToken = async (): Promise<string | null> => {
-    // 1. Try getting Clerk Token first
+    // Only use Clerk Token
     if (clerkTokenProvider) {
         try {
             const token = await clerkTokenProvider();
@@ -38,8 +37,7 @@ const getAuthToken = async (): Promise<string | null> => {
             console.warn("Failed to retrieve Clerk token", e);
         }
     }
-    // 2. Fallback to Guest Token
-    return localStorage.getItem(GUEST_TOKEN_KEY);
+    return null;
 };
 
 export const api = {

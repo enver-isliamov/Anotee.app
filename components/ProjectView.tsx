@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -232,6 +232,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       setTimeout(() => versionInputRef.current?.click(), 0);
   };
 
+  const handleFixPermissions = async (e: React.MouseEvent, driveId: string) => {
+      e.stopPropagation();
+      notify("Attempting to make file public...", "info");
+      const success = await GoogleDriveService.makeFilePublic(driveId);
+      if (success) notify("Success! File is now public.", "success");
+      else notify("Failed. Check Google Workspace settings.", "error");
+  };
+
   const handleRemoveMember = (memberId: string) => {
       // For Org projects, we can't remove members via this simple UI yet (need Clerk API)
       if (project.orgId) {
@@ -432,6 +440,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             
                             {canEditProject && !isLocked && (
                                 <>
+                                    {isProjectOwner && isDrive && lastVer.googleDriveId && (
+                                        <button 
+                                            onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)}
+                                            className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                            title="Fix Drive Permissions (Make Public)"
+                                        >
+                                            <Unlock size={12} />
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={(e) => handleAddVersionClick(e, asset.id)}
                                         className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md backdrop-blur-sm transition-colors"
