@@ -10,6 +10,7 @@ import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization } from '@clerk/clerk-react';
 import { useDrive } from '../services/driveContext';
+import { mapClerkUserToAppUser, isOrgAdmin } from '../services/userUtils';
 
 interface ProjectViewProps {
   project: Project;
@@ -34,15 +35,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   // Calculate the "Display Team"
   const displayTeam: User[] = useMemo(() => {
       if (project.orgId && organization && memberships?.data) {
-          // Map Clerk Members to App User Type
-          return memberships.data.map(m => ({
-              id: m.publicUserData.userId || m.id,
-              name: `${m.publicUserData.firstName || ''} ${m.publicUserData.lastName || ''}`.trim() || m.publicUserData.identifier,
-              avatar: m.publicUserData.imageUrl,
-          }));
+          return memberships.data.map(mapClerkUserToAppUser);
       }
       return [];
   }, [project.orgId, organization, memberships]);
+
+  const isAdmin = useMemo(() => {
+      if (!organization || !memberships?.data) return false;
+      return isOrgAdmin(currentUser.id, memberships.data);
+  }, [organization, memberships, currentUser.id]);
 
   // Is current user in the computed team? (For Org) OR is Owner (For Personal)
   const isProjectMember = project.orgId 
@@ -50,7 +51,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         : false;
         
   const isProjectOwner = project.ownerId === currentUser.id;
+  
+  // Permissions
   const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
+  
+  // Allow deletion if Owner or Admin OR if user is a member of the Org (Editor)
+  // Logic aligns with api/delete.js which allows 'org:member' to delete assets
+  const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
+
   const isLocked = project.isLocked;
 
   // Delete State
@@ -454,13 +462,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                     >
                                         <History size={12} />
                                     </button>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }}
-                                        className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
-                                        title={t('pv.delete_asset')}
-                                    >
-                                        <Trash2 size={12} />
-                                    </button>
+                                    
+                                    {/* DELETE BUTTON: Visible if canDeleteAssets is true */}
+                                    {canDeleteAssets && (
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }}
+                                            className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                            title={t('pv.delete_asset')}
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -486,7 +498,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       </div>
 
-      {/* MODALS RENDERED HERE... */}
+      {/* ... Modals (No changes needed except maybe refactoring map functions if any) ... */}
       {/* DELETE MODAL */}
       {deleteModalState.isOpen && deleteModalState.asset && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">

@@ -1,4 +1,5 @@
 
+// DEPRECATED: Guest access is no longer supported. Use Clerk Auth.
 export default function handler(req, res) {
-  res.status(404).json({ error: "Endpoint deprecated. Please use Clerk auth." });
+  res.status(410).json({ error: "Gone. Guest mode disabled." });
 }

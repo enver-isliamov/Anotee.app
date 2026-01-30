@@ -5,6 +5,7 @@ import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
 import { upload } from '@vercel/blob/client';
 import { api } from '../services/apiClient';
+import { useDrive } from '../services/driveContext';
 
 export const useUploadManager = (
     currentUser: User | null,
@@ -17,6 +18,11 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+    
+    // We can't access Context here easily without breaking Hook rules or prop drilling "checkDriveConnection".
+    // Assuming checkDriveConnection is passed or handled via global error handler for now, 
+    // or we just trigger it implicitly by checking auth status.
+    // Ideally pass checkDriveConnection from App.tsx if needed, but let's try to be robust without it.
 
     const removeUploadTask = (id: string) => {
         setUploadTasks(prev => prev.filter(t => t.id !== id));
@@ -70,27 +76,37 @@ export const useUploadManager = (
             } else {
                 if (useDrive) {
                     const isDriveReady = GoogleDriveService.isAuthenticated();
-                    if (!isDriveReady) throw new Error("Google Drive not connected");
+                    if (!isDriveReady) {
+                        throw new Error("Google Drive token missing. Please reconnect in Profile.");
+                    }
 
                     const safeProjectName = project ? project.name : "Unknown Project";
 
-                    const appFolder = await GoogleDriveService.ensureAppFolder();
-                    const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                    const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
+                    try {
+                        const appFolder = await GoogleDriveService.ensureAppFolder();
+                        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+                        const assetFolder = await GoogleDriveService.ensureFolder(assetTitle, projectFolder);
 
-                    const ext = file.name.split('.').pop();
-                    const niceName = targetAssetId 
-                          ? `${assetTitle}_vNEW.${ext}`
-                          : `${assetTitle}_v1.${ext}`;
+                        const ext = file.name.split('.').pop();
+                        const niceName = targetAssetId 
+                            ? `${assetTitle}_vNEW.${ext}`
+                            : `${assetTitle}_v1.${ext}`;
 
-                    const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateTask({ progress: p }), niceName);
-                    googleDriveId = result.id;
-                    storageType = 'drive';
-                    finalFileName = niceName;
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateTask({ progress: p }), niceName);
+                        googleDriveId = result.id;
+                        storageType = 'drive';
+                        finalFileName = niceName;
+                    } catch (driveErr: any) {
+                        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
+                             // Token expired during operation
+                             throw new Error("Drive Session Expired. Please refresh page/reconnect.");
+                        }
+                        throw driveErr;
+                    }
                 } else {
                     // Vercel Blob
                     const token = await getToken();
-                    if (!token) throw new Error("Authentication missing for upload");
+                    if (!token) throw new Error("Authentication missing. Please login again.");
 
                     const newBlob = await upload(file.name, file, {
                         access: 'public',
@@ -106,7 +122,6 @@ export const useUploadManager = (
             }
 
             // 3. Construct New Project State
-            // We calculate the new state but don't set it yet to allow rollback logic
             const projIndex = projects.findIndex(p => p.id === projectId);
             if (projIndex === -1) throw new Error("Project not found during upload finalization");
 
@@ -184,7 +199,6 @@ export const useUploadManager = (
                     }
                 }
                 
-                // Revert UI State (Reload from server ideally, but basic revert here)
                 setProjects(projects); 
                 throw new Error("Failed to save project data. Upload cancelled.");
             }

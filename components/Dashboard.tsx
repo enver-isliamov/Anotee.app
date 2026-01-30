@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Project, User } from '../types';
 import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
@@ -8,6 +8,7 @@ import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useUser } from '@clerk/clerk-react';
+import { isOrgAdmin } from '../services/userUtils';
 
 interface DashboardProps {
   projects: Project[];
@@ -27,7 +28,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const { t } = useLanguage();
   
   // CLERK ORG CONTEXT
-  const { organization } = useOrganization();
+  const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
+
+  // Determine if user is Admin in current Org
+  const isAdmin = useMemo(() => {
+      if (!organization || !memberships?.data) return false;
+      return isOrgAdmin(currentUser.id, memberships.data);
+  }, [organization, memberships, currentUser.id]);
 
   // Edit State
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -60,7 +67,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       // 2. If Personal Workspace (no Org selected):
       // Show projects where orgId is missing, null, empty string OR 'null' string (legacy)
       // AND user has access (Owner or Team)
-      // NOTE: We generally hide public projects from the dashboard list unless explicitly joined
       const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
       const hasAccess = p.ownerId === currentUser.id || p.team.some(m => m.id === currentUser.id);
       
@@ -71,8 +77,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
     ? (organization?.name || 'Organization') + ' Projects' 
     : t('dash.my_projects');
 
-  // PERMISSION CHECKS
-  const isOwner = (project: Project) => project.ownerId === currentUser.id || (activeOrgId && project.orgId === activeOrgId);
+  // PERMISSION CHECKS (Project Level)
+  const canManageProject = (project: Project) => {
+      // Personal: Only Owner
+      if (!project.orgId) return project.ownerId === currentUser.id;
+      // Org: Owner OR Admin
+      return project.ownerId === currentUser.id || isAdmin;
+  };
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,7 +244,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                         <h3 className="text-base font-medium text-zinc-400">{t('dash.no_projects')}</h3>
                         {activeOrgId ? (
                             <p className="text-xs text-zinc-500 mt-1 max-w-xs text-center">
-                                No projects in <strong>{organization.name}</strong>. Create one or switch to Personal Workspace.
+                                No projects in <strong>{organization?.name}</strong>. Create one or switch to Personal Workspace.
                             </p>
                         ) : (
                             <p className="text-xs text-zinc-500 mt-1">Switch to Personal Workspace to see your private projects.</p>
@@ -245,7 +256,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                         const expired = project.createdAt ? isExpired(project.createdAt) : false;
                         const daysLeft = project.createdAt ? getDaysRemaining(project.createdAt) : 7;
                         const locked = project.isLocked;
-                        const userIsOwner = isOwner(project);
+                        const canManage = canManageProject(project);
+                        const isOrgProject = !!project.orgId;
                         
                         return (
                         <div 
@@ -300,24 +312,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                             </p>
 
                             <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
-                                <div className="flex -space-x-2">
-                                    {project.team && project.team.slice(0, 4).map((member) => (
-                                        <img 
-                                        key={member.id} 
-                                        src={member.avatar} 
-                                        alt={member.name} 
-                                        title={member.name}
-                                        className="w-6 h-6 rounded-full border border-white dark:border-zinc-900 object-cover"
-                                        />
-                                    ))}
-                                    {project.team && project.team.length > 4 && (
-                                        <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-white dark:border-zinc-900 flex items-center justify-center text-[9px] text-zinc-500 dark:text-zinc-400 font-medium">
-                                        +{project.team.length - 4}
-                                        </div>
-                                    )}
-                                </div>
                                 
-                                {userIsOwner && (
+                                {/* TEAM / ORG DISPLAY */}
+                                {isOrgProject && organization ? (
+                                    <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+                                        <div className="w-5 h-5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border border-zinc-200 dark:border-zinc-700">
+                                            {organization.imageUrl ? (
+                                                <img src={organization.imageUrl} className="w-full h-full rounded object-cover" />
+                                            ) : (
+                                                <Building2 size={12} />
+                                            )}
+                                        </div>
+                                        <span className="text-[10px] font-bold max-w-[80px] truncate">{organization.name}</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex -space-x-2">
+                                        {project.team && project.team.slice(0, 3).map((member) => (
+                                            <img 
+                                            key={member.id} 
+                                            src={member.avatar} 
+                                            alt={member.name} 
+                                            title={member.name}
+                                            className="w-6 h-6 rounded-full border border-white dark:border-zinc-900 object-cover"
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {/* ACTIONS */}
+                                {canManage && (
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button 
                                             onClick={(e) => handleToggleLock(e, project)}
@@ -350,7 +373,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                                     </div>
                                 )}
                                 
-                                {!userIsOwner && (
+                                {!canManage && (
                                     <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-950 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-800">
                                         <FileVideo size={12} />
                                         <span>{project.assets.length}</span>
@@ -372,7 +395,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                 {activeOrgId ? (
                     <span className="flex items-center gap-2">
                         <Building2 size={24} className="text-indigo-600 dark:text-indigo-400" />
-                        {organization.name}
+                        {organization?.name}
                     </span>
                 ) : (
                     t('nav.dashboard')
@@ -460,7 +483,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               {activeOrgId && (
                   <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 rounded-lg flex items-center gap-2 text-xs text-indigo-700 dark:text-indigo-300">
                       <Building2 size={16} />
-                      Creating in <strong>{organization.name}</strong>
+                      Creating in <strong>{organization?.name}</strong>
                   </div>
               )}
 

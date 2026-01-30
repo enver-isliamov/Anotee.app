@@ -49,8 +49,6 @@ interface TranscriptChunk {
 }
 
 // --- OPTIMIZATION: Memoized Sidebar Component ---
-// This prevents the entire comment list from re-rendering on every video frame update (30-60fps)
-// We pass down necessary props and callbacks.
 const PlayerSidebar = React.memo(({ 
     sidebarTab, setSidebarTab, filteredComments, isManager, version, 
     handleToggleLock, setShowExportMenu, showExportMenu, handleExport, handleBulkResolve,
@@ -254,7 +252,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [driveUrlRetried, setDriveUrlRetried] = useState(false); 
   const [driveFileMissing, setDriveFileMissing] = useState(false); 
-  const [drivePermissionError, setDrivePermissionError] = useState(false); // NEW STATE
+  const [drivePermissionError, setDrivePermissionError] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [videoError, setVideoError] = useState(false);
 
@@ -338,8 +336,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   }, [controlsPos]);
 
   useEffect(() => {
+      // Lazy cleanup of worker on unmount
       return () => {
-          workerRef.current?.terminate();
+          if (workerRef.current) {
+              workerRef.current.terminate();
+              workerRef.current = null;
+          }
       };
   }, []);
 
@@ -369,6 +371,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     setTranscribeProgress({ status: 'init', progress: 0 });
 
     try {
+        // LAZY INIT: Only start worker when needed to save memory
         if (!workerRef.current) {
              workerRef.current = new Worker(new URL('../services/transcriptionWorker.ts', import.meta.url), { type: 'module' });
              
@@ -398,7 +401,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         }
 
         notify("Extracting audio from video...", "info");
-        const audioData = await extractAudioFromUrl(sourceUrl);
+        
+        // Pass strict limit flag if using Drive URL via proxy (to avoid serverless timeout)
+        const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
+        const audioData = await extractAudioFromUrl(sourceUrl, isProxy);
         
         notify(`Starting AI Model (${transcribeLanguage === 'auto' ? 'Auto-Detect' : transcribeLanguage.toUpperCase()})...`, "info");
         workerRef.current.postMessage({
@@ -425,58 +431,26 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
   };
 
+  // ... (Rest of useEffects and handlers same as before) ...
+  // Keeping them brief in this update to focus on the key changes above
+  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (isLocked) return;
-        
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable || target.tagName === 'SELECT') return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
-
         switch (e.code) {
-            case 'Space':
-                e.preventDefault();
-                togglePlay();
-                break;
-            case 'KeyI':
-                setMarkerInPoint(currentTime);
-                if (markerOutPoint !== null && markerOutPoint <= currentTime) setMarkerOutPoint(null);
-                break;
-            case 'KeyO':
-                const outTime = currentTime;
-                if (markerInPoint !== null && outTime > markerInPoint) setMarkerOutPoint(outTime);
-                else {
-                    if (markerInPoint === null) setMarkerInPoint(Math.max(0, outTime - 5));
-                    setMarkerOutPoint(outTime);
-                }
-                if (isPlaying) togglePlay();
-                if (isFullscreen) setShowVoiceModal(true);
-                else setTimeout(() => sidebarInputRef.current?.focus(), 100);
-                startListening();
-                break;
-            case 'KeyM':
-                setMarkerInPoint(currentTime);
-                setMarkerOutPoint(null);
-                if (isPlaying) togglePlay();
-                if (isFullscreen) setShowVoiceModal(true);
-                else setTimeout(() => sidebarInputRef.current?.focus(), 100);
-                startListening();
-                break;
-            case 'ArrowLeft':
-                e.preventDefault();
-                if (isPlaying) togglePlay(); 
-                seekByFrame(-1);
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                if (isPlaying) togglePlay(); 
-                seekByFrame(1);
-                break;
+            case 'Space': e.preventDefault(); togglePlay(); break;
+            case 'KeyI': setMarkerInPoint(currentTime); if (markerOutPoint !== null && markerOutPoint <= currentTime) setMarkerOutPoint(null); break;
+            case 'KeyO': const outTime = currentTime; if (markerInPoint !== null && outTime > markerInPoint) setMarkerOutPoint(outTime); else { if (markerInPoint === null) setMarkerInPoint(Math.max(0, outTime - 5)); setMarkerOutPoint(outTime); } if (isPlaying) togglePlay(); if (isFullscreen) setShowVoiceModal(true); else setTimeout(() => sidebarInputRef.current?.focus(), 100); startListening(); break;
+            case 'KeyM': setMarkerInPoint(currentTime); setMarkerOutPoint(null); if (isPlaying) togglePlay(); if (isFullscreen) setShowVoiceModal(true); else setTimeout(() => sidebarInputRef.current?.focus(), 100); startListening(); break;
+            case 'ArrowLeft': e.preventDefault(); if (isPlaying) togglePlay(); seekByFrame(-1); break;
+            case 'ArrowRight': e.preventDefault(); if (isPlaying) togglePlay(); seekByFrame(1); break;
             case 'KeyJ': seek(-5); break;
             case 'KeyL': seek(5); break;
         }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLocked, isPlaying, currentTime, markerInPoint, markerOutPoint, isFullscreen, videoFps, duration]);
@@ -491,8 +465,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     const uV = [...asset.versions];
     uV[currentVersionIdx] = { ...uV[currentVersionIdx], localFileUrl: url, localFileName: name };
     const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV } : a);
-    
-    // FIX: Do not implicitly add user to team. Just update the assets.
     onUpdateProject({ ...project, assets: uA });
   };
 
@@ -505,115 +477,55 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   const syncCommentAction = async (action: 'create' | 'update' | 'delete', payload: any) => { 
-      // Update local state first (Optimistic UI)
-      if (action === 'create') {
-          setComments(prev => [...prev, { ...payload, userId: currentUser.id, createdAt: 'Just now' }]);
-      } else if (action === 'update') {
-          setComments(prev => prev.map(c => c.id === payload.id ? { ...c, ...payload } : c));
-      } else if (action === 'delete') {
-          setComments(prev => prev.filter(c => c.id !== payload.id));
-      }
+      if (action === 'create') setComments(prev => [...prev, { ...payload, userId: currentUser.id, createdAt: 'Just now' }]);
+      else if (action === 'update') setComments(prev => prev.map(c => c.id === payload.id ? { ...c, ...payload } : c));
+      else if (action === 'delete') setComments(prev => prev.filter(c => c.id !== payload.id));
 
       const updatedVersions = [...asset.versions];
       const versionToUpdate = updatedVersions[currentVersionIdx];
-      
       let newComments = [...(versionToUpdate.comments || [])];
-      
-      if (action === 'create') {
-          newComments.push({ ...payload, userId: currentUser.id, createdAt: 'Just now' });
-      } else if (action === 'update') {
-          newComments = newComments.map(c => c.id === payload.id ? { ...c, ...payload } : c);
-      } else if (action === 'delete') {
-          newComments = newComments.filter(c => c.id !== payload.id);
-      }
-      
+      if (action === 'create') newComments.push({ ...payload, userId: currentUser.id, createdAt: 'Just now' });
+      else if (action === 'update') newComments = newComments.map(c => c.id === payload.id ? { ...c, ...payload } : c);
+      else if (action === 'delete') newComments = newComments.filter(c => c.id !== payload.id);
       versionToUpdate.comments = newComments;
       updatedVersions[currentVersionIdx] = versionToUpdate;
-      
       const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a);
       onUpdateProject({ ...project, assets: updatedAssets });
-
-      // If online and NOT mock mode, call API
-      if (!isDemo && currentUser) {
-          await api.comment(project.id, asset.id, version.id, action, payload, currentUser);
-      }
+      if (!isDemo && currentUser) await api.comment(project.id, asset.id, version.id, action, payload, currentUser);
   };
 
   useEffect(() => { setComments(version?.comments || []); }, [version?.comments]);
 
   const handleRemoveDeadVersion = async () => {
       if (!confirm("Are you sure you want to remove this version from the project history? This cannot be undone.")) return;
-      
       const uV = asset.versions.filter(v => v.id !== version.id);
-      if (uV.length === 0) {
-          onBack();
-          return;
-      }
-      
+      if (uV.length === 0) { onBack(); return; }
       let newIdx = Math.min(currentVersionIdx, uV.length - 1);
       if (newIdx < 0) newIdx = 0;
-
       const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a);
-      
-      setDriveUrl(null); 
-      setDriveFileMissing(false);
-      setDrivePermissionError(false);
-      setVideoError(false);
-      setDriveUrlRetried(false);
-      setLoadingDrive(true); 
-      
+      setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); 
       setCurrentVersionIdx(newIdx);
-      
       onUpdateProject({ ...project, assets: uA });
       notify("Version removed", "info");
   };
 
   useEffect(() => {
-    setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null);
-    setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
-    
-    setVideoError(false); 
-    setDriveFileMissing(false);
-    setDrivePermissionError(false);
-    setDriveUrlRetried(false); 
-    setDriveUrl(null); 
-    setLoadingDrive(false);
-    
-    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false);
-    setTranscript(null);
+    setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
+    setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
+    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null);
 
     const checkDriveStatus = async () => {
         if (!isMockMode && version?.storageType === 'drive' && version.googleDriveId) {
             setLoadingDrive(true);
             const status = await GoogleDriveService.checkFileStatus(version.googleDriveId);
-            if (status !== 'ok') {
-                console.warn(`File ${version.googleDriveId} is ${status}`);
-                setDriveFileMissing(true);
-                setLoadingDrive(false);
-                return;
-            }
-
-            // USE AUTHENTICATED STREAM URL to prevent 403s
+            if (status !== 'ok') { setDriveFileMissing(true); setLoadingDrive(false); return; }
             const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId);
             setDriveUrl(streamUrl);
             setLoadingDrive(false);
-        } else if (version?.localFileUrl) { 
-            setLocalFileSrc(version.localFileUrl); 
-            setLocalFileName(version.localFileName || 'Local File'); 
-        } else { 
-            setLocalFileSrc(null); 
-            setLocalFileName(null); 
-            if (version && !version.url) setVideoError(false); 
-        }
+        } else if (version?.localFileUrl) { setLocalFileSrc(version.localFileUrl); setLocalFileName(version.localFileName || 'Local File'); } else { setLocalFileSrc(null); setLocalFileName(null); if (version && !version.url) setVideoError(false); }
     };
-
     checkDriveStatus();
-
-    if (videoRef.current) { 
-        videoRef.current.pause();
-        videoRef.current.currentTime = 0; 
-        videoRef.current.load(); 
-    }
+    if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; videoRef.current.load(); }
   }, [version?.id, isMockMode]); 
 
   useEffect(() => {
@@ -624,8 +536,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const startFpsDetection = () => { if (isFpsDetected) return; fpsDetectionRef.current = { frames: [], lastTime: performance.now(), active: true }; };
 
-  // Use requestAnimationFrame ONLY for FPS detection logic, NOT for UI updates
-  // to prevent heavy re-renders. Use onTimeUpdate for UI.
   useEffect(() => {
     let handle: number;
     const detectLoop = () => {
@@ -633,297 +543,62 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             const now = performance.now(); 
             const delta = now - fpsDetectionRef.current.lastTime;
             fpsDetectionRef.current.lastTime = now;
-            
             if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta);
-            
             if (fpsDetectionRef.current.frames.length > 30) {
                 const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length;
                 const est = 1000 / avg;
                 const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p);
-                setVideoFps(closest); 
-                setIsFpsDetected(true); 
-                fpsDetectionRef.current.active = false;
-            } else {
-                handle = requestAnimationFrame(detectLoop);
-            }
+                setVideoFps(closest); setIsFpsDetected(true); fpsDetectionRef.current.active = false;
+            } else { handle = requestAnimationFrame(detectLoop); }
         }
     };
-
-    if (isPlaying && !isFpsDetected) {
-        startFpsDetection();
-        handle = requestAnimationFrame(detectLoop);
-    }
-
+    if (isPlaying && !isFpsDetected) { startFpsDetection(); handle = requestAnimationFrame(detectLoop); }
     return () => cancelAnimationFrame(handle);
   }, [isPlaying, isFpsDetected]);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const t = parseFloat(e.target.value); setCurrentTime(t);
-      if (videoRef.current) videoRef.current.currentTime = t;
-      if (compareVideoRef.current) compareVideoRef.current.currentTime = t;
-  };
-
-  const handleTimeUpdate = () => { 
-      if (!isScrubbing && videoRef.current) {
-          setCurrentTime(videoRef.current.currentTime);
-          
-          // Sync compare video if in side-by-side mode
-          if (viewMode === 'side-by-side' && compareVideoRef.current) {
-             if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) {
-                 compareVideoRef.current.currentTime = videoRef.current.currentTime;
-             }
-          }
-      }
-  };
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => { const t = parseFloat(e.target.value); setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (compareVideoRef.current) compareVideoRef.current.currentTime = t; };
+  const handleTimeUpdate = () => { if (!isScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
-  const handleFixPermissions = async () => {
-      if (!version.googleDriveId) return;
-      notify("Attempting to make file public...", "info");
-      const success = await GoogleDriveService.makeFilePublic(version.googleDriveId);
-      if (success) {
-          notify("Permissions fixed! Refreshing...", "success");
-          setVideoError(false);
-          setDrivePermissionError(false);
-          // Force refresh url
-          setDriveUrlRetried(false);
-          const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId);
-          setDriveUrl(`${streamUrl}&t=${Date.now()}`); // Bust cache
-      } else {
-          notify("Failed to fix permissions. Check Drive settings.", "error");
-      }
-  };
-
-  const handleVideoError = async () => {
-      if (loadingDrive) return;
-
-      const currentSrc = videoRef.current?.currentSrc;
-      console.warn("Video Error for:", currentSrc);
-
-      // Handle Drive URL Expiry / CORS issues
-      if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) {
-          // If we haven't tried the backup link yet
-          if (!driveUrlRetried) {
-              console.warn("Retrying with fallback Drive link...");
-              setDriveUrlRetried(true);
-              
-              // Use direct export link with timestamp to bust cache
-              // This often fixes 403s on the API link
-              const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`;
-              setDriveUrl(fallbackUrl);
-              return;
-          }
-
-          // If fallback also failed, check if file actually exists
-          setLoadingDrive(true);
-          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId);
-          setLoadingDrive(false);
-
-          if (status !== 'ok') {
-              setDriveFileMissing(true);
-          } else {
-              // File exists, but we can't play it. Likely 403 Permissions issue.
-              setDrivePermissionError(true);
-              setVideoError(true); 
-          }
-      } else {
-          // Local file or Vercel Blob error
-          setVideoError(true);
-      }
-  };
+  const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
+  const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
   
-  // PRECISE SCRUBBING LOGIC
-  const handlePointerDown = (e: React.PointerEvent) => {
-    isDragRef.current = true;
-    setIsScrubbing(true);
-    
-    // Pause immediately on touch
-    if (isPlaying) {
-        setIsPlaying(false);
-        videoRef.current?.pause();
-    }
-    
-    // Initial jump to tap position
-    updateScrubPosition(e);
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-      if (isDragRef.current) {
-          updateScrubPosition(e);
-      }
-  };
-
-  const updateScrubPosition = (e: React.PointerEvent) => {
-      if (!timelineRef.current || !videoRef.current) return;
-      
-      const rect = timelineRef.current.getBoundingClientRect();
-      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-      const percentage = x / rect.width;
-      const newTime = percentage * duration;
-      
-      // Immediate Update
-      setCurrentTime(newTime);
-      videoRef.current.currentTime = newTime;
-      
-      if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-      isDragRef.current = false;
-      setIsScrubbing(false);
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  };
-  
-  const toggleFullScreen = () => {
-      if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen();
-      else document.exitFullscreen();
-  };
-  
-  const cycleFps = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const idx = VALID_FPS.indexOf(videoFps);
-      setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]);
-      setIsFpsDetected(false); 
-  };
-
-  const handleDragStart = (e: React.PointerEvent) => {
-      isDraggingControls.current = true;
-      dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  };
-  const handleDragMove = (e: React.PointerEvent) => {
-      if (isDraggingControls.current) {
-          setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y });
-      }
-  };
-  const handleDragEnd = (e: React.PointerEvent) => {
-      isDraggingControls.current = false;
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  };
-
-  const seek = (delta: number) => {
-      if (videoRef.current) {
-          const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration);
-          videoRef.current.currentTime = t;
-          setCurrentTime(t);
-      }
-  };
-
-  const handleAddComment = () => {
-    if (!newCommentText.trim()) return;
-    const cId = generateId();
-    syncCommentAction('create', { id: cId, text: newCommentText, timestamp: markerInPoint !== null ? markerInPoint : currentTime, duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name });
-    setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null);
-    setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100);
-    sidebarInputRef.current?.blur();
-    playerContainerRef.current?.focus();
-  };
-  
+  const handlePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
+  const handlePointerMove = (e: React.PointerEvent) => { if (isDragRef.current) { updateScrubPosition(e); } };
+  const updateScrubPosition = (e: React.PointerEvent) => { if (!timelineRef.current || !videoRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const percentage = x / rect.width; const newTime = percentage * duration; setCurrentTime(newTime); videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
+  const handlePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+  const toggleFullScreen = () => { if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen(); else document.exitFullscreen(); };
+  const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
+  const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
+  const handleDragMove = (e: React.PointerEvent) => { if (isDraggingControls.current) { setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y }); } };
+  const handleDragEnd = (e: React.PointerEvent) => { isDraggingControls.current = false; (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+  const seek = (delta: number) => { if (videoRef.current) { const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); videoRef.current.currentTime = t; setCurrentTime(t); } };
+  const handleAddComment = () => { if (!newCommentText.trim()) return; const cId = generateId(); syncCommentAction('create', { id: cId, text: newCommentText, timestamp: markerInPoint !== null ? markerInPoint : currentTime, duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
   const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
   const handleResolveComment = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const c = comments.find(c => c.id === id); if (c) syncCommentAction('update', { id, status: c.status === CommentStatus.OPEN ? CommentStatus.RESOLVED : CommentStatus.OPEN }); };
   const startEditing = (comment: Comment) => { setEditingCommentId(comment.id); setEditText(comment.text); };
   const cancelEdit = () => { setEditingCommentId(null); setEditText(''); };
   const saveEdit = (id: string) => { syncCommentAction('update', { id, text: editText }); setEditingCommentId(null); setEditText(''); };
   const handleBulkResolve = () => { comments.filter(c => c.status === CommentStatus.OPEN).forEach(c => syncCommentAction('update', { id: c.id, status: CommentStatus.RESOLVED })); };
-
-  const handleToggleLock = () => {
-    const updatedVersions = [...asset.versions];
-    const versionToUpdate = { ...updatedVersions[currentVersionIdx] };
-    versionToUpdate.isLocked = !versionToUpdate.isLocked;
-    updatedVersions[currentVersionIdx] = versionToUpdate;
-    
-    const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a);
-    onUpdateProject({ ...project, assets: updatedAssets });
-    notify(versionToUpdate.isLocked ? t('player.lock_ver') : t('player.unlock_ver'), "info");
-  };
-
-  const startListening = () => {
-    if (!('webkitSpeechRecognition' in window)) { notify("Speech recognition not supported in this browser.", "error"); return; }
-    const SpeechRecognition = (window as any).webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
-    recognitionRef.current.lang = 'en-US'; 
-    recognitionRef.current.onstart = () => setIsListening(true);
-    recognitionRef.current.onend = () => setIsListening(false);
-    recognitionRef.current.onresult = (event: any) => { const t = event.results[0][0].transcript; setNewCommentText(prev => prev ? `${prev} ${t}` : t); };
-    recognitionRef.current.start();
-  };
+  const handleToggleLock = () => { const updatedVersions = [...asset.versions]; const versionToUpdate = { ...updatedVersions[currentVersionIdx] }; versionToUpdate.isLocked = !versionToUpdate.isLocked; updatedVersions[currentVersionIdx] = versionToUpdate; const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); onUpdateProject({ ...project, assets: updatedAssets }); notify(versionToUpdate.isLocked ? t('player.lock_ver') : t('player.unlock_ver'), "info"); };
+  const startListening = () => { if (!('webkitSpeechRecognition' in window)) { notify("Speech recognition not supported in this browser.", "error"); return; } const SpeechRecognition = (window as any).webkitSpeechRecognition; recognitionRef.current = new SpeechRecognition(); recognitionRef.current.continuous = false; recognitionRef.current.interimResults = false; recognitionRef.current.lang = 'en-US'; recognitionRef.current.onstart = () => setIsListening(true); recognitionRef.current.onend = () => setIsListening(false); recognitionRef.current.onresult = (event: any) => { const t = event.results[0][0].transcript; setNewCommentText(prev => prev ? `${prev} ${t}` : t); }; recognitionRef.current.start(); };
   const toggleListening = () => { if (isListening) recognitionRef.current?.stop(); else startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
-
   const handleQuickMarker = () => { setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
   const handleSetInPoint = () => { setMarkerInPoint(currentTime); notify("In Point Set", "info"); };
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
-
-  const handleExport = (format: 'xml' | 'csv' | 'edl') => {
-      let content = ''; let mime = 'text/plain'; let ext = '';
-      // Pass videoFps to export functions
-      if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; }
-      else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; }
-      else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; }
-      downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime);
-      setShowExportMenu(false);
-  };
-
-  const handleSelectCompareVersion = (idx: number | null) => {
-      setCompareVersionIdx(idx);
-      if (idx !== null) setViewMode('side-by-side');
-      else setViewMode('single');
-      setShowCompareMenu(false);
-  };
-
-  const handleSwitchVersion = (idx: number) => {
-      setDriveUrl(null); 
-      setVideoError(false);
-      setDriveFileMissing(false);
-      setDrivePermissionError(false);
-      setDriveUrlRetried(false);
-      setLoadingDrive(true);
-      
-      setCurrentVersionIdx(idx);
-      setShowVersionSelector(false);
-      
-      if (compareVersionIdx === idx) {
-          setCompareVersionIdx(null);
-          setViewMode('single');
-      }
-  };
+  const handleExport = (format: 'xml' | 'csv' | 'edl') => { let content = ''; let mime = 'text/plain'; let ext = ''; if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); setShowExportMenu(false); };
+  const handleSelectCompareVersion = (idx: number | null) => { setCompareVersionIdx(idx); if (idx !== null) setViewMode('side-by-side'); else setViewMode('single'); setShowCompareMenu(false); };
+  const handleSwitchVersion = (idx: number) => { setDriveUrl(null); setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(idx); setShowVersionSelector(false); if (compareVersionIdx === idx) { setCompareVersionIdx(null); setViewMode('single'); } };
 
   const filteredComments = comments.filter(c => c.text.toLowerCase().includes(searchQuery.toLowerCase()));
-  const activeOverlayComments = comments.filter(c => {
-      const s = c.timestamp; const e = c.duration ? (s + c.duration) : (s + 4);
-      return currentTime >= s && currentTime <= e;
-  });
+  const activeOverlayComments = comments.filter(c => { const s = c.timestamp; const e = c.duration ? (s + c.duration) : (s + 4); return currentTime >= s && currentTime <= e; });
 
   const getSourceBadge = () => {
-      if (localFileName) {
-          return (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20">
-                  <HardDrive size={10} /> Local
-              </div>
-          );
-      }
-      if (version?.storageType === 'drive' && !isMockMode) {
-          return (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
-                  <HardDrive size={10} /> Drive
-              </div>
-          );
-      }
-      if (isMockMode) {
-           return (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20">
-                  <HardDrive size={10} /> Mock
-              </div>
-          );
-      }
-      return (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20">
-              <Cloud size={10} /> Cloud
-          </div>
-      );
+      if (localFileName) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20"><HardDrive size={10} /> Local</div>);
+      if (version?.storageType === 'drive' && !isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"><HardDrive size={10} /> Drive</div>);
+      if (isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20"><HardDrive size={10} /> Mock</div>);
+      return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20"><Cloud size={10} /> Cloud</div>);
   };
 
   if (!version) return null; 
@@ -1040,24 +715,29 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         </header>
       )}
 
+      {/* ... Player Content (Video, Controls) ... */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
         <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
+             {/* Fullscreen Toggle */}
              <div className="absolute bottom-4 right-4 z-50 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300">
                 <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
              </div>
              
+             {/* Timecode & FPS */}
              <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
                 <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime)}</div>
                 <div className="h-6 w-px bg-white/20"></div>
                 <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
+             {/* Overlay Comments */}
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
-                 {activeOverlayComments.map(c => { const a = {name: 'User', role: 'Viewer'}; const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
+                 {activeOverlayComments.map(c => { const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
              </div>
 
+             {/* Voice Modal (Fullscreen) */}
              {showVoiceModal && isFullscreen && (
                  <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4">
@@ -1074,30 +754,27 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
+             {/* Center Controls (Play/Pause, Loading) */}
              {!isPlaying && !isScrubbing && !videoError && !showVoiceModal && !driveFileMissing && !loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center shadow-xl animate-in fade-in zoom-in duration-200">{isPlaying ? <Pause size={32} fill="white" className="text-white"/> : <Play size={32} fill="white" className="ml-1 text-white" />}</div></div>)}
-
              {loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><Loader2 size={48} className="animate-spin text-white/50"/></div>)}
 
+             {/* Error States */}
              {videoError && !driveFileMissing && (
                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-6 text-center animate-in fade-in duration-300">
                     <div className="bg-zinc-800 p-4 rounded-full mb-4 ring-1 ring-zinc-700">
                         {drivePermissionError ? <ShieldAlert size={32} className="text-orange-500" /> : <FileVideo size={32} className="text-zinc-400" />}
                     </div>
-                    
                     <p className="text-zinc-300 font-bold text-lg mb-2">
                         {drivePermissionError ? "Access Restricted" : t('player.media_offline')}
                     </p>
-                    
                     <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
                         {drivePermissionError ? "You need public access to view this Drive file in the player." : t('player.offline_desc')}
                     </p>
-
                     {drivePermissionError && isManager && (
                          <button onClick={(e) => { e.stopPropagation(); handleFixPermissions(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
                              <Unlock size={16} /> Fix Permissions (Make Public)
                          </button>
                     )}
-
                     <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm border border-zinc-700 cursor-pointer">
                         <Upload size={16} /> {t('player.link_local')}
                     </button>
@@ -1124,6 +801,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
+             {/* Video Elements */}
              <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
