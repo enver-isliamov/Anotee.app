@@ -316,6 +316,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       return t('pv.role.creator');
   };
 
+  // Handler for Org Invite click
+  const handleOrgInviteClick = () => {
+      // Close share modal if open
+      setIsShareModalOpen(false);
+      // Open Clerk Org Settings
+      setIsOrgSettingsOpen(true);
+  };
+
   return (
     <div 
         className="flex flex-col h-screen bg-zinc-950 relative"
@@ -372,14 +380,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           {!isLocked && !restrictedAssetId && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
-              <button 
-                onClick={handleShareProject}
-                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                title={project.orgId ? "Invite Organization Members" : "Share via Public Link"}
-              >
-                {project.orgId ? <UserPlus size={16} /> : <Globe size={16} />}
-                <span className="hidden md:inline">{t('pv.invite')}</span>
-              </button>
+              {project.orgId ? (
+                  <button 
+                    onClick={handleOrgInviteClick}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
+                    title="Manage Organization Members"
+                  >
+                    <UserPlus size={16} />
+                    <span className="hidden md:inline">Manage Team</span>
+                  </button>
+              ) : (
+                  <button 
+                    onClick={handleShareProject}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
+                    title="Share via Public Link"
+                  >
+                    <Globe size={16} />
+                    <span className="hidden md:inline">{t('pv.invite')}</span>
+                  </button>
+              )}
             </>
           )}
         </div>
@@ -410,7 +429,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-[1600px] mx-auto">
-            {/* Same asset grid rendering as before ... */}
+            {/* Asset Grid */}
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-sm md:text-base font-semibold text-zinc-200">{t('pv.assets')} <span className="text-zinc-500 ml-1">{visibleAssets.length}</span></h2>
                 

@@ -13,9 +13,11 @@ const isDbConnectionError = (err) => {
 
 export default async function handler(req, res) {
   try {
-      // OPTIMIZATION: Only require full profile (email) for GET requests (to check sharing)
-      // For DELETE/PATCH, ID is enough.
-      const requireEmail = req.method === 'GET';
+      // OPTIMIZATION: Always use lightweight auth (no external API calls) for generic data fetching.
+      // This prevents "Too Many Requests" (429) errors from Clerk during polling.
+      // We accept that 'user.email' will be null, so legacy email-based sharing 
+      // will rely on the migration script having run (converting email->id).
+      const requireEmail = false; 
       const user = await verifyUser(req, requireEmail);
       
       if (!user) {
@@ -34,15 +36,13 @@ export default async function handler(req, res) {
           
           let canDelete = false;
           
-          // 1. Universal Owner Override: If I created it, I can delete it.
-          // This fixes the issue where Creator cannot delete their own project in an Org.
+          // 1. Universal Owner Override
           if (projectRow.owner_id === user.id) {
               canDelete = true;
           }
-          // 2. Org Admin Check (if not owner)
+          // 2. Org Admin Check
           else if (projectRow.org_id) {
               try {
-                  // We need to fetch roles here, which is an API call, but DELETE is rare, so it's okay.
                   const clerk = getClerkClient();
                   const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
                   const membership = memberships.data.find(m => m.organization.id === projectRow.org_id);
@@ -85,9 +85,6 @@ export default async function handler(req, res) {
 
           } else if (targetOrgId) {
               // --- ORG LIST FETCH ---
-              // For lists, we assume the frontend checked the Org context via Clerk hooks.
-              // We do a basic check if possible, or trust the query for speed if user is authenticated.
-              // (Strictly speaking we should verify membership, but let's trust the auth token context for list speed)
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
@@ -96,7 +93,11 @@ export default async function handler(req, res) {
               query = rows;
           } else {
               // --- PERSONAL WORKSPACE FETCH ---
-              // Requires user.email to be present (requireEmail=true passed above)
+              // FIXED SQL SYNTAX: Removed dynamic template literal injection to prevent syntax errors.
+              // Now using standard SQL logic with parameters. 
+              // Passing user.email (which might be null) as $2 safely.
+              const userEmail = user.email || null;
+              
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE (org_id IS NULL OR org_id = '') 
@@ -104,7 +105,13 @@ export default async function handler(req, res) {
                     owner_id = ${user.id} 
                     OR 
                     data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
-                    ${user.email ? sql`OR EXISTS (SELECT 1 FROM jsonb_array_elements(data->'team') AS member WHERE member->>'email' = ${user.email})` : sql``}
+                    OR (
+                        ${userEmail}::text IS NOT NULL 
+                        AND EXISTS (
+                            SELECT 1 FROM jsonb_array_elements(data->'team') AS member 
+                            WHERE member->>'email' = ${userEmail}
+                        )
+                    )
                 )
                 ORDER BY updated_at DESC
               `;
@@ -121,9 +128,11 @@ export default async function handler(req, res) {
 
         } catch (dbError) {
            if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline", code: "DB_OFFLINE" });
+           // Check for missing table error
            if (dbError.code === '42P01') return res.status(200).json([]); 
+           
            console.error("DB GET Error:", dbError); 
-           return res.status(500).json({ error: "Database error" });
+           return res.status(500).json({ error: "Database error", code: dbError.code });
         }
       } 
       
@@ -194,8 +203,6 @@ export default async function handler(req, res) {
                     `;
                     updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
                 } else {
-                    // Note: We skip strict Org membership check on creation to rely on frontend state 
-                    // and allow optimistic creation. Access will be enforced on read.
                     await sql`
                         INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)
                         VALUES (${project.id}, ${user.id}, ${orgId}, ${projectJson}::jsonb, ${Date.now()}, ${project.createdAt || Date.now()});
@@ -215,7 +222,7 @@ export default async function handler(req, res) {
       return res.status(405).send("Method not allowed");
 
   } catch (globalError) {
-      console.error("API Error:", globalError);
+      console.error("API Fatal Error:", globalError);
       return res.status(500).json({ error: "Server Error" });
   }
 }
