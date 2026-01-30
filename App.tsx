@@ -262,7 +262,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       notify,
       forceSync,
       lastLocalUpdateRef,
-      isMockMode
+      isMockMode,
+      getToken // Pass auth method
   );
 
   useEffect(() => {

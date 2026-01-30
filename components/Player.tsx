@@ -304,8 +304,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     const uV = [...asset.versions];
     uV[currentVersionIdx] = { ...uV[currentVersionIdx], localFileUrl: url, localFileName: name };
     const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV } : a);
-    let uT = project.team; if (!uT.some(u => u.id === currentUser.id)) uT = [...uT, currentUser];
-    onUpdateProject({ ...project, assets: uA, team: uT });
+    
+    // FIX: Do not implicitly add user to team. Just update the assets.
+    onUpdateProject({ ...project, assets: uA });
   };
 
   const handleLocalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

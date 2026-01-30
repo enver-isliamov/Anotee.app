@@ -52,11 +52,16 @@ export default async function handler(req, res) {
               query = rows;
           } else {
               // B. Personal Workspace View (No Org)
-              // Show projects where org_id is NULL OR owner_id matches (legacy support)
+              // Show projects where org_id is NULL OR owner_id matches
+              // FIX: Also check if user is in 'team' JSON array for legacy shared projects
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE (org_id IS NULL OR org_id = '') 
-                AND (owner_id = ${user.id})
+                AND (
+                    owner_id = ${user.id} 
+                    OR 
+                    data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
+                )
               `;
               query = rows;
           }
@@ -97,6 +102,7 @@ export default async function handler(req, res) {
           // 2. Permission Check
           let hasAccess = false;
           if (dbOwnerId === user.id) hasAccess = true;
+          else if (currentDbData.team && currentDbData.team.some(m => m.id === user.id)) hasAccess = true; // Check legacy team
           else if (dbOrgId) {
                // Verify Org Access
                const clerk = getClerkClient();
@@ -181,7 +187,9 @@ export default async function handler(req, res) {
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
                 } else {
-                    // Personal Project: Must be owner
+                    // Personal Project: Must be owner or in legacy team for update (strict update only for owner usually, but relaxed for legacy)
+                    // For security, usually only owner updates project meta, but team can update assets via other endpoints. 
+                    // Here we strictly enforce owner for full-object updates unless it's a new legacy fix.
                     updateResult = await sql`
                         UPDATE projects 
                         SET 
@@ -189,7 +197,10 @@ export default async function handler(req, res) {
                             org_id = ${orgId},
                             updated_at = ${Date.now()}
                         WHERE id = ${project.id} 
-                        AND owner_id = ${user.id}
+                        AND (
+                            owner_id = ${user.id}
+                            OR data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
+                        )
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
                 }
@@ -215,8 +226,6 @@ export default async function handler(req, res) {
                         updatesResults.push({ id: project.id, _version: newVersion, status: 'created' });
                     } else {
                         // Conflict
-                        const dbRow = checkExists.rows[0];
-                        const dbVer = parseInt(dbRow.ver || '0');
                         return res.status(409).json({ error: "Version Conflict", projectId: project.id });
                     }
                 }

@@ -1,7 +1,8 @@
 
 import { handleUpload } from '@vercel/blob';
-import { verifyUser, getClerkClient } from './_auth.js';
+import { verifyToken } from '@clerk/backend';
 import { sql } from '@vercel/postgres';
+import { getClerkClient } from './_auth.js';
 
 export default async function handler(req, res) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -14,16 +15,30 @@ export default async function handler(req, res) {
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        // 1. Auth Check using Clerk
-        const user = await verifyUser(req);
-        if (!user) {
-             throw new Error("Unauthorized: Invalid Token");
+        // 1. Extract Token from Payload
+        // Vercel Blob client-side SDK doesn't support custom headers easily, so we pass it in payload.
+        let payload;
+        try {
+            payload = JSON.parse(clientPayload || '{}');
+        } catch (e) {
+            throw new Error("Invalid clientPayload");
         }
 
-        // 2. Parse Payload
-        const { projectId } = JSON.parse(clientPayload || '{}');
-        if (!projectId) {
-            throw new Error("Forbidden: Project ID required");
+        const { token, projectId } = payload;
+        
+        if (!token) throw new Error("Unauthorized: Missing Token in Payload");
+        if (!projectId) throw new Error("Forbidden: Project ID required");
+
+        // 2. Verify Token with Clerk
+        let user;
+        try {
+            const verified = await verifyToken(token, {
+                secretKey: process.env.CLERK_SECRET_KEY,
+                clockSkewInMs: 60000 
+            });
+            user = { id: verified.sub, userId: verified.sub };
+        } catch (e) {
+            throw new Error("Unauthorized: Invalid Token Verification");
         }
 
         // 3. Verify Project Access in DB

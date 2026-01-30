@@ -12,7 +12,8 @@ export const useUploadManager = (
     notify: (msg: string, type: 'info' | 'success' | 'error' | 'warning') => void,
     forceSync: (projects: Project[]) => Promise<void>,
     lastLocalUpdateRef: React.MutableRefObject<number>,
-    isMockMode: boolean
+    isMockMode: boolean,
+    getToken: () => Promise<string | null> // New dependency
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
 
@@ -56,7 +57,6 @@ export const useUploadManager = (
             let googleDriveId = undefined;
             let storageType: StorageType = 'vercel';
             let finalFileName = file.name;
-            const token = localStorage.getItem('smotree_auth_token');
 
             // 2. Upload Process
             if (isMockMode) {
@@ -88,13 +88,15 @@ export const useUploadManager = (
                     finalFileName = niceName;
                 } else {
                     // Vercel Blob
-                    // IMPORTANT: Pass projectId in clientPayload for security validation on server
+                    const token = await getToken();
+                    if (!token) throw new Error("Authentication missing for upload");
+
+                    // IMPORTANT: Pass projectId AND token in clientPayload for security validation on server
                     const newBlob = await upload(file.name, file, {
                         access: 'public',
                         handleUploadUrl: '/api/upload',
                         clientPayload: JSON.stringify({ 
-                            token: token, 
-                            user: currentUser?.id || 'anon',
+                            token: token, // Pass Clerk Token here
                             projectId: projectId 
                         }),
                         onUploadProgress: (p) => updateTask({ progress: Math.round((p.loaded / p.total) * 100) })

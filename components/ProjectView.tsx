@@ -323,10 +323,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               <button 
                 onClick={handleShareProject}
                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                title={t('pv.invite')}
+                title={project.orgId ? "Invite Organization Members" : "Share via Public Link"}
               >
                 <UserPlus size={16} />
                 <span className="hidden md:inline">{t('pv.invite')}</span>
+                {!project.orgId && <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[9px] font-bold uppercase">Link</span>}
               </button>
             </>
           )}
