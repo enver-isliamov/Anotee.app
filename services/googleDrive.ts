@@ -208,8 +208,9 @@ export const GoogleDriveService = {
                  try {
                      const response = JSON.parse(xhr.responseText);
                      
-                     // --- IMPORTANT: Set Public Permission ---
-                     // Required for <video> playback via 'drive.google.com/uc' without auth headers
+                     // --- IMPORTANT: Set Public Permission (Safe Fail) ---
+                     // Try to make file viewable by anyone with link. 
+                     // If organization policy blocks this, catch error and proceed anyway.
                      try {
                         const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${response.id}/permissions`, {
                             method: 'POST',
@@ -219,9 +220,13 @@ export const GoogleDriveService = {
                             },
                             body: JSON.stringify({ role: 'reader', type: 'anyone' })
                         });
-                        if (!permRes.ok) console.warn("Permission setting warning:", await permRes.text());
+                        
+                        if (!permRes.ok) {
+                            const err = await permRes.json();
+                            console.warn("Permission Warning (Non-fatal):", err.error?.message || "Policy restricted");
+                        }
                      } catch (e) {
-                         console.warn("Failed to set public permission", e);
+                         console.warn("Failed to set public permission (Network/Policy issue). Proceeding...", e);
                      }
                      
                      resolve(response);

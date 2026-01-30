@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Player } from './Player';
-import { Project, User, UserRole, CommentStatus } from '../types';
+import { Project, User, CommentStatus } from '../types';
 import { ToastContainer, ToastMessage, ToastType } from './Toast';
 import { generateId } from '../services/utils';
 import { useLanguage } from '../services/i18n';
@@ -13,8 +13,7 @@ interface LiveDemoProps {
 const DEMO_USER: User = {
     id: 'demo-user',
     name: 'You (Demo)',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=DemoUser',
-    role: UserRole.CREATOR
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=DemoUser'
 };
 
 const INITIAL_DEMO_PROJECT: Project = {
@@ -27,7 +26,7 @@ const INITIAL_DEMO_PROJECT: Project = {
     ownerId: 'demo-owner',
     team: [
         DEMO_USER,
-        { id: 'u2', name: 'Director', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Director', role: UserRole.ADMIN }
+        { id: 'u2', name: 'Director', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Director' }
     ],
     assets: [
         {

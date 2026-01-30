@@ -1,20 +1,21 @@
 
-// @deprecated - Roles are now handled by Clerk Organizations context
-export enum UserRole {
-  ADMIN = 'Admin',
-  CREATOR = 'Creator'
-}
-
 export enum CommentStatus {
   OPEN = 'open',
   RESOLVED = 'resolved'
+}
+
+export enum UserRole {
+  ADMIN = 'Admin',
+  CREATOR = 'Creator',
+  VIEWER = 'Viewer'
 }
 
 export interface User {
   id: string;
   name: string;
   avatar: string;
-  role?: string; // Made optional, as we move away from internal role management
+  // Role is deprecated. Permissions are now derived from Project ownership or Organization membership.
+  role?: string; 
 }
 
 export interface Comment {
@@ -63,6 +64,8 @@ export interface Project {
   createdAt: number; 
   updatedAt: string;
   assets: ProjectAsset[];
+  // Team array is legacy/cached representation. 
+  // Real-time access control is handled via Clerk Organizations (orgId).
   team: User[]; 
   ownerId?: string;
   orgId?: string; 

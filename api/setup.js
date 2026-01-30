@@ -13,6 +13,14 @@ export default async function handler(req, res) {
       });
   }
 
+  // SECURITY: Require secret to run setup
+  const providedSecret = req.query.secret;
+  const expectedSecret = process.env.CLERK_SECRET_KEY; // Re-use Clerk secret as admin password
+
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+      return res.status(403).json({ error: "Forbidden. Invalid or missing secret." });
+  }
+
   try {
     console.log("🛠 Connection Test...");
     

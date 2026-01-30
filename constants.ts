@@ -1,25 +1,22 @@
 
-import { Project, UserRole, CommentStatus, User } from './types';
+import { Project, CommentStatus, User } from './types';
 
 // Internal mocks for initial project data
 const INTERNAL_MOCK_USERS: User[] = [
   {
     id: 'u1',
     name: 'Andrey (Creator)',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop&crop=faces',
-    role: UserRole.CREATOR
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop&crop=faces'
   },
   {
     id: 'u2',
     name: 'Olga (Editor)',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50&h=50&fit=crop&crop=faces',
-    role: UserRole.CREATOR
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50&h=50&fit=crop&crop=faces'
   },
   {
     id: 'u3',
     name: 'Mike (Producer)',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop&crop=faces',
-    role: UserRole.ADMIN
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop&crop=faces'
   }
 ];
 
