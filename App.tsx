@@ -212,19 +212,52 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
          setIsSyncing(true);
          // Pass explicit project ID to fetch it even if it's public/not in my list
-         const data = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
+         const serverData = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
          
-         if (data && Array.isArray(data)) {
-            setProjects(prev => {
-                // STABILIZATION: Only update if data actually changed
-                // We use a simple hash of IDs + Versions + Count
-                const prevHash = prev.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
-                const newHash = data.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+         if (serverData && Array.isArray(serverData)) {
+            setProjects(currentLocalProjects => {
+                // 1. Comparison Hash to avoid unnecessary re-renders
+                const prevHash = currentLocalProjects.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+                const newHash = serverData.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
                 
-                if (prevHash !== newHash || prev.length !== data.length) {
-                    return data;
+                // If versions match exactly, do nothing
+                if (prevHash === newHash && currentLocalProjects.length === serverData.length) {
+                    return currentLocalProjects;
                 }
-                return prev; // Return same reference to skip render
+
+                // 2. SMART MERGE: Preserve Local Files
+                // Server data does NOT contain localFileUrl (security/blob rules).
+                // We must restore them from our current local state if the IDs match.
+                const mergedProjects = serverData.map(serverProj => {
+                    const localProj = currentLocalProjects.find(p => p.id === serverProj.id);
+                    
+                    if (localProj) {
+                        // Deep merge assets/versions to keep localFileUrl
+                        const mergedAssets = serverProj.assets.map(serverAsset => {
+                            const localAsset = localProj.assets.find(a => a.id === serverAsset.id);
+                            if (!localAsset) return serverAsset;
+
+                            const mergedVersions = serverAsset.versions.map(serverVer => {
+                                const localVer = localAsset.versions.find(v => v.id === serverVer.id);
+                                if (localVer && localVer.localFileUrl) {
+                                    // RESTORE LOCAL REFERENCE
+                                    return {
+                                        ...serverVer,
+                                        localFileUrl: localVer.localFileUrl,
+                                        localFileName: localVer.localFileName
+                                    };
+                                }
+                                return serverVer;
+                            });
+
+                            return { ...serverAsset, versions: mergedVersions };
+                        });
+                        return { ...serverProj, assets: mergedAssets };
+                    }
+                    return serverProj;
+                });
+
+                return mergedProjects;
             });
          }
       } catch (e) {

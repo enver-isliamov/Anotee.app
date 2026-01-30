@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2 } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -32,7 +32,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   // Calculate the "Display Team"
   // If this is an Org project, we fetch real-time members from Clerk
-  // If this is a personal project, we fallback to the legacy 'team' array in DB
   const displayTeam: User[] = useMemo(() => {
       if (project.orgId && organization && memberships?.data) {
           // Map Clerk Members to App User Type
@@ -40,14 +39,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               id: m.publicUserData.userId || m.id,
               name: `${m.publicUserData.firstName || ''} ${m.publicUserData.lastName || ''}`.trim() || m.publicUserData.identifier,
               avatar: m.publicUserData.imageUrl,
-              // We could map roles here if needed (m.role)
           }));
       }
-      return project.team;
-  }, [project.orgId, project.team, organization, memberships]);
+      // If personal, we don't show a team list anymore (Solo Mode)
+      return [];
+  }, [project.orgId, organization, memberships]);
 
-  // Is current user in the computed team?
-  const isProjectMember = displayTeam.some(m => m.id === currentUser.id);
+  // Is current user in the computed team? (For Org) OR is Owner (For Personal)
+  const isProjectMember = project.orgId 
+        ? displayTeam.some(m => m.id === currentUser.id)
+        : false;
+        
   const isProjectOwner = project.ownerId === currentUser.id;
   
   // Can Upload/Delete? Owner OR Team Member
@@ -246,14 +248,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           notify("Please manage team members in your Organization Settings.", "info");
           return;
       }
-
-      if (!isProjectOwner) return;
-      if (memberId === project.ownerId) { notify(t('common.error'), "error"); return; }
-      if (!confirm(t('pv.remove_confirm'))) return;
-      
-      const updatedTeam = project.team.filter(m => m.id !== memberId);
-      onUpdateProject({ ...project, team: updatedTeam });
-      notify(t('common.success'), "info");
   };
 
   const togglePublicAccess = async () => {
@@ -317,7 +311,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
         <div className="flex items-center gap-3 shrink-0">
           <LanguageSelector />
-          {!restrictedAssetId && (
+          
+          {/* TEAM AVATARS (Only for Org Projects) */}
+          {!restrictedAssetId && project.orgId && (
             <div 
               onClick={() => setIsParticipantsModalOpen(true)}
               className="flex -space-x-2 cursor-pointer hover:opacity-80 transition-opacity ml-2"
@@ -331,6 +327,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               </div>
             </div>
           )}
+
           {!isLocked && !restrictedAssetId && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
@@ -339,7 +336,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
                 title={project.orgId ? "Invite Organization Members" : "Share via Public Link"}
               >
-                <UserPlus size={16} />
+                {project.orgId ? <UserPlus size={16} /> : <Globe size={16} />}
                 <span className="hidden md:inline">{t('pv.invite')}</span>
                 {!project.orgId && <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[9px] font-bold uppercase">Link</span>}
               </button>
@@ -569,7 +566,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 <>
                   <div className="flex items-center gap-2 mb-1">
                       <div className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400">
-                          <UserPlus size={18} />
+                          {project.orgId ? <UserPlus size={18} /> : <Globe size={18} />}
                       </div>
                       <h2 className="text-lg font-bold text-white">{t('pv.share.title')}</h2>
                   </div>
@@ -613,25 +610,32 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     </div>
                   </div>
                   
+                  {!project.orgId && (
+                      <div className="flex items-start gap-2 bg-yellow-900/10 p-2 rounded border border-yellow-500/10 mt-3">
+                          <Info size={14} className="text-yellow-500 mt-0.5 shrink-0" />
+                          <p className="text-[10px] text-yellow-200/70">
+                              Personal projects are for solo use or public viewing. To add editors and collaborate privately, please <strong className="text-yellow-100">create an Organization</strong>.
+                          </p>
+                      </div>
+                  )}
+
                   {project.orgId && (
-                      <div className="flex items-start gap-2 bg-indigo-900/10 p-2 rounded border border-indigo-500/10">
-                          <Info size={14} className="text-indigo-400 mt-0.5 shrink-0" />
+                      <div className="flex items-start gap-2 bg-indigo-900/10 p-2 rounded border border-indigo-500/10 mt-3">
+                          <Building2 size={14} className="text-indigo-400 mt-0.5 shrink-0" />
                           <p className="text-[10px] text-indigo-200/70">
-                              For Organization projects, users must be members of your Organization to access this link.
+                              This project belongs to an Organization. Only organization members can access the private link.
                           </p>
                       </div>
                   )}
                 </>
               )}
 
-              {isParticipantsModalOpen && (
+              {isParticipantsModalOpen && project.orgId && (
                 <>
                   <h2 className="text-lg font-bold text-white mb-4">{t('pv.team')}</h2>
-                  {project.orgId && (
-                      <div className="mb-4 text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded">
-                          Managed by Organization. Add/Remove users in your Team Settings.
-                      </div>
-                  )}
+                  <div className="mb-4 text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded">
+                      Managed by Organization. Add/Remove users in your Team Settings.
+                  </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                     {displayTeam.map(member => (
                         <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">
@@ -647,16 +651,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                 </div>
                               </div>
                           </div>
-                          
-                          {!project.orgId && isProjectOwner && member.id !== currentUser.id && member.id !== project.ownerId && (
-                              <button 
-                                onClick={() => handleRemoveMember(member.id)}
-                                className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                title={t('pv.remove_user')}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                          )}
                         </div>
                     ))}
                   </div>
