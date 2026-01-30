@@ -74,11 +74,12 @@ export const useUploadManager = (
                     nextVersionNumber = existingAsset.versions.length + 1;
                     // FORCE NAMING CONSISTENCY: Use the existing Asset Title as the base
                     // This ensures "Reels-Hudenie.mp4" + new upload becomes "Reels-Hudenie_v2.mp4"
-                    assetTitle = existingAsset.title.replace(/[^\w\s-]/gi, ''); // Sanitize strictly
+                    // Remove special chars but keep spaces and hyphens
+                    assetTitle = existingAsset.title.replace(/[^\w\s-]/gi, ''); 
                 }
             }
 
-            // Correct Naming: _v2, _v3 instead of _vNEW
+            // Correct Naming: _v2, _v3 instead of random names
             // If it's a new version, strictly append _vX. If it's the first one, stick to original name or append _v1
             const finalFileName = targetAssetId 
                 ? `${assetTitle}_v${nextVersionNumber}.${ext}`
