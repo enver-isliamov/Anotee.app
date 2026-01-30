@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -247,7 +248,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   const isDriveReady = GoogleDriveService.isAuthenticated();
                   if (!isDriveReady) throw new Error("Google Drive not connected");
 
-                  // Re-fetch project name if needed to ensure folders
                   const safeProjectName = project ? project.name : "Unknown Project";
 
                   const appFolder = await GoogleDriveService.ensureAppFolder();
@@ -265,10 +265,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   finalFileName = niceName;
               } else {
                   // Vercel Blob
+                  // IMPORTANT: Pass projectId in clientPayload for security validation on server
                   const newBlob = await upload(file.name, file, {
                       access: 'public',
                       handleUploadUrl: '/api/upload',
-                      clientPayload: JSON.stringify({ token: token, user: currentUser?.id || 'anon' }),
+                      clientPayload: JSON.stringify({ 
+                          token: token, 
+                          user: currentUser?.id || 'anon',
+                          projectId: projectId 
+                      }),
                       onUploadProgress: (p) => updateTask({ progress: Math.round((p.loaded / p.total) * 100) })
                   });
                   assetUrl = newBlob.url;
@@ -304,7 +309,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                       const asset = { ...updatedProject.assets[assetIdx] };
                       newVersion.versionNumber = asset.versions.length + 1;
                       
-                      // Fix name for non-mock drive uploads if needed
                       if (!isMockMode && useDrive) {
                           newVersion.filename = `${asset.title}_v${newVersion.versionNumber}.${file.name.split('.').pop()}`;
                       }
@@ -345,7 +349,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       } catch (e: any) {
           console.error("Upload failed", e);
           updateTask({ status: 'error', error: e.message || "Upload Failed" });
-          notify("Upload failed", "error");
+          notify(`Upload failed: ${e.message}`, "error");
           lastLocalUpdateRef.current = Date.now(); // Unblock polling
       }
   };
@@ -366,7 +370,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
       try {
          setIsSyncing(true);
-         // Pass organization ID to fetch specific org projects
          const data = await api.getProjects(userToUse, token, organization?.id);
          if (data && Array.isArray(data)) {
             setProjects(data);
@@ -390,7 +393,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           setIsSyncing(true);
           const updates = await api.syncProjects(projectsData, currentUser, token);
           
-          // Apply returned versions to local state for Optimistic Locking
           if (updates && updates.length > 0) {
               setProjects(current => current.map(p => {
                   const update = updates.find((u: any) => u.id === p.id);
@@ -432,7 +434,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
-  // Handle URL navigation
   useEffect(() => {
     if (!currentUser) return;
 
@@ -441,7 +442,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const aId = params.get('assetId');
 
     if (pId) {
-      // We only switch view if the project is actually available in the current context
       const projectExists = projects.find(p => p.id === pId);
       
       if (projectExists) {
@@ -456,7 +456,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     }
   }, [currentUser, projects]); 
 
-  // ... [Handlers: handleSelectProject, etc. remain the same]
   const handleSelectProject = (project: Project) => {
     setView({ type: 'PROJECT_VIEW', projectId: project.id });
     const newUrl = `${window.location.pathname}?projectId=${project.id}`;

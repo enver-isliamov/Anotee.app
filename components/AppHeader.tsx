@@ -5,7 +5,7 @@ import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { ThemeToggle } from './ThemeToggle';
 import { User } from '../types';
-import { OrganizationSwitcher } from '@clerk/clerk-react';
+import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react';
 
 interface AppHeaderProps {
   currentUser: User | null;
@@ -111,18 +111,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </div>
                 )}
 
-                {/* User Profile Chip (If Logged In) */}
+                {/* Standardized User Button (Replaces manual profile chip) */}
                 {currentUser && (
-                    <div 
-                        onClick={() => onNavigate('PROFILE')}
-                        className="hidden md:flex items-center gap-3 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 py-1.5 px-2 rounded-lg transition-colors group"
-                    >
-                        <div className="text-right hidden lg:block">
-                            <div className="text-xs font-semibold text-zinc-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{currentUser.name}</div>
-                            <div className="text-[10px] text-zinc-500">{currentUser.role}</div>
-                        </div>
-                        <img src={currentUser.avatar} className="w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-700 group-hover:border-indigo-500 transition-colors object-cover" alt="User" />
-                    </div>
+                    <UserButton 
+                        afterSignOutUrl="/"
+                        userProfileMode="modal"
+                        appearance={{
+                            elements: {
+                                avatarBox: "w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 transition-colors"
+                            }
+                        }}
+                    />
                 )}
 
                 {/* Login Button (If Logged Out) */}
@@ -191,16 +190,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>
                 
                 {currentUser ? (
-                    <button 
-                        onClick={() => {
-                            setIsMobileMenuOpen(false);
-                            onNavigate('PROFILE');
-                        }}
-                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold text-zinc-800 dark:text-white bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
-                    >
-                        <img src={currentUser.avatar} className="w-6 h-6 rounded-full" alt="User" />
-                        {currentUser.name}
-                    </button>
+                    <div className="flex items-center gap-2 px-4 py-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                        <UserButton afterSignOutUrl="/" />
+                        <span className="text-sm font-bold text-zinc-800 dark:text-white">{currentUser.name}</span>
+                    </div>
                 ) : (
                     <button 
                         onClick={() => {
