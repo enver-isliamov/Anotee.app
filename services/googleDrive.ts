@@ -282,19 +282,15 @@ export const GoogleDriveService = {
 
   /**
    * Generates a stream URL. 
-   * Tries to use the authenticated API endpoint first (more reliable for private files).
+   * REVERTED to use the legacy export link because the API endpoint (googleapis.com)
+   * does not reliably support Range requests in <video> tags due to CORS.
+   * 
+   * This relies on the file being Public (which we try to enforce via upload/fix permissions).
    */
   getAuthenticatedStreamUrl: async (fileId: string): Promise<string> => {
-      const accessToken = await GoogleDriveService.getToken();
-      
-      // If we have a token, append it to the API URL.
-      // NOTE: Passing access_token in URL is generally discouraged but necessary for <video src> 
-      // where we cannot control headers.
-      if (accessToken) {
-          return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
-      }
-
-      // Fallback to legacy method (for public files or cached sessions)
+      // Revert to legacy logic.
+      // Do NOT append access_token here as it can conflict with cookie-based auth on the UC endpoint
+      // and typically requires the file to be public anyway.
       return GoogleDriveService.getVideoStreamUrlLegacy(fileId);
   },
 
