@@ -178,6 +178,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [isScrubbing, setIsScrubbing] = useState(false);
   const isDragRef = useRef(false); 
   
+  // VIDEO SCRUBBING STATE
+  const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
+  const videoScrubRef = useRef<{ startX: number, startTime: number }>({ startX: 0, startTime: 0 });
+
   const [controlsPos, setControlsPos] = useState(() => {
     try {
         const saved = localStorage.getItem('smotree_controls_pos');
@@ -235,12 +239,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   
   const fpsDetectionRef = useRef<{ frames: number[], lastTime: number, active: boolean }>({ frames: [], lastTime: 0, active: false });
 
+  // REFACTORED TIMECODE FORMATTER
   const formatTimecode = (seconds: number) => {
-    const fps = videoFps;
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    const f = Math.floor((seconds % 1) * fps);
+    const fps = videoFps || 30; // Fallback to 30 if undefined
+    
+    // Calculate total frames first to avoid floating point math weirdness on fractional frames
+    const totalFrames = Math.floor(seconds * fps);
+    
+    const h = Math.floor(totalFrames / (3600 * fps));
+    const m = Math.floor((totalFrames % (3600 * fps)) / (60 * fps));
+    const s = Math.floor((totalFrames % (60 * fps)) / fps);
+    const f = Math.floor(totalFrames % fps);
 
     const hh = h.toString().padStart(2, '0');
     const mm = m.toString().padStart(2, '0');
@@ -381,15 +390,48 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const startFpsDetection = () => { if (isFpsDetected) return; fpsDetectionRef.current = { frames: [], lastTime: performance.now(), active: true }; };
   useEffect(() => { let handle: number; const detectLoop = () => { if (fpsDetectionRef.current.active && isPlaying) { const now = performance.now(); const delta = now - fpsDetectionRef.current.lastTime; fpsDetectionRef.current.lastTime = now; if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta); if (fpsDetectionRef.current.frames.length > 30) { const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length; const est = 1000 / avg; const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p); setVideoFps(closest); setIsFpsDetected(true); fpsDetectionRef.current.active = false; } else { handle = requestAnimationFrame(detectLoop); } } }; if (isPlaying && !isFpsDetected) { startFpsDetection(); handle = requestAnimationFrame(detectLoop); } return () => cancelAnimationFrame(handle); }, [isPlaying, isFpsDetected]);
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => { const t = parseFloat(e.target.value); setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (compareVideoRef.current) compareVideoRef.current.currentTime = t; };
-  const handleTimeUpdate = () => { if (!isScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
+  const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
   const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
   
-  const handlePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
-  const handlePointerMove = (e: React.PointerEvent) => { if (isDragRef.current) { updateScrubPosition(e); } };
+  // TIMELINE SCRUBBING
+  const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
+  const handleTimelinePointerMove = (e: React.PointerEvent) => { if (isDragRef.current) { updateScrubPosition(e); } };
   const updateScrubPosition = (e: React.PointerEvent) => { if (!timelineRef.current || !videoRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const percentage = x / rect.width; const newTime = percentage * duration; setCurrentTime(newTime); videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handlePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+  const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+
+  // VIDEO PRECISION SCRUBBING
+  const handleVideoDragStart = (e: React.PointerEvent) => {
+      e.preventDefault();
+      setIsVideoScrubbing(true);
+      if (isPlaying) togglePlay(); 
+      videoScrubRef.current = { startX: e.clientX, startTime: currentTime };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleVideoDragMove = (e: React.PointerEvent) => {
+      if (!isVideoScrubbing) return;
+      const deltaX = e.clientX - videoScrubRef.current.startX;
+      
+      // Precision scrubbing: 5 pixels = 1 frame
+      // This allows precise frame-by-frame adjustment by dragging slowly
+      const pixelsPerFrame = 5; 
+      const framesMoved = deltaX / pixelsPerFrame;
+      const timeChange = framesMoved * (1 / videoFps);
+      
+      const newTime = Math.max(0, Math.min(duration, videoScrubRef.current.startTime + timeChange));
+      
+      setCurrentTime(newTime);
+      if(videoRef.current) videoRef.current.currentTime = newTime;
+      if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
+  };
+
+  const handleVideoDragEnd = (e: React.PointerEvent) => {
+      setIsVideoScrubbing(false);
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
   const toggleFullScreen = () => { if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen(); else document.exitFullscreen(); };
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
   const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
@@ -583,7 +625,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
-             {!isPlaying && !isScrubbing && !videoError && !showVoiceModal && !driveFileMissing && !loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center shadow-xl animate-in fade-in zoom-in duration-200">{isPlaying ? <Pause size={32} fill="white" className="text-white"/> : <Play size={32} fill="white" className="ml-1 text-white" />}</div></div>)}
+             {!isPlaying && !isScrubbing && !videoError && !showVoiceModal && !driveFileMissing && !loadingDrive && !isVideoScrubbing && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center shadow-xl animate-in fade-in zoom-in duration-200">{isPlaying ? <Pause size={32} fill="white" className="text-white"/> : <Play size={32} fill="white" className="ml-1 text-white" />}</div></div>)}
              {loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><Loader2 size={48} className="animate-spin text-white/50"/></div>)}
 
              {videoError && !driveFileMissing && (
@@ -646,13 +688,25 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
-                <div className="absolute inset-0 z-30 touch-none" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp}></div>
+                <div 
+                    className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`}
+                    onPointerDown={handleVideoDragStart} 
+                    onPointerMove={handleVideoDragMove} 
+                    onPointerUp={handleVideoDragEnd}
+                    onPointerLeave={handleVideoDragEnd}
+                ></div>
              </div>
           </div>
 
           <div className={`${isVerticalVideo ? 'absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pb-6 pt-10' : 'bg-zinc-900 border-t border-zinc-800 pb-2'} p-2 lg:p-4 shrink-0 transition-transform duration-300`}>
-             <div className="relative h-6 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef}>
-                <input type="range" min={0} max={duration || 100} step={0.01} value={currentTime} onChange={handleSeek} disabled={videoError || driveFileMissing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30 disabled:cursor-not-allowed pointer-events-auto" />
+             <div 
+                className="relative h-6 md:h-8 group cursor-pointer flex items-center touch-none" 
+                ref={timelineRef}
+                onPointerDown={handleTimelinePointerDown} 
+                onPointerMove={handleTimelinePointerMove} 
+                onPointerUp={handleTimelinePointerUp}
+                onPointerLeave={handleTimelinePointerUp}
+             >
                 <div className="w-full h-1.5 bg-zinc-700/50 rounded-full overflow-hidden relative"><div className="h-full bg-indigo-500" style={{ width: `${(currentTime / duration) * 100}%` }} /></div>
                 {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: c.status === 'resolved' ? '#22c55e' : cl }} />); })}
              </div>
