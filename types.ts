@@ -4,8 +4,6 @@ export enum CommentStatus {
   RESOLVED = 'resolved'
 }
 
-// UserRole enum removed. Role logic replaced by Organization/Ownership checks.
-
 export interface User {
   id: string;
   name: string;
