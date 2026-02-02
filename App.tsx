@@ -176,8 +176,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   const fetchCloudData = useCallback(async (userOverride?: User, force = false) => {
+      // Check URL parameters for direct link access
+      const params = new URLSearchParams(window.location.search);
+      const directProjectId = params.get('projectId');
+
       const userToUse = userOverride || currentUser;
-      if (!userToUse) return;
+      
+      // ALLOW ACCESS if directProjectId exists, even if user is null
+      if (!userToUse && !directProjectId) return;
       
       // Don't fetch if we just modified data locally to prevent flickering
       if (Date.now() - lastLocalUpdateRef.current < 2000) {
@@ -188,10 +194,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       if (authMode === 'clerk') {
           try { token = await getToken(); } catch (e) {}
       }
-
-      // Check URL parameters for direct link access
-      const params = new URLSearchParams(window.location.search);
-      const directProjectId = params.get('projectId');
 
       // OPTIMIZATION: Check if we need to fetch full data
       if (!force && !directProjectId && !isMockMode) {
@@ -215,9 +217,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   }, [currentUser, isMockMode, authMode, organization?.id, getToken]);
 
   // Initial Fetch & Polling
+  // Trigger fetch if User logs in OR if URL has Project ID (Guest)
   useEffect(() => {
-      if (currentUser) {
-          fetchCloudData(currentUser, true);
+      const params = new URLSearchParams(window.location.search);
+      const directProjectId = params.get('projectId');
+
+      if (currentUser || directProjectId) {
+          fetchCloudData(currentUser || undefined, true);
           
           if (!isMockMode) {
               const interval = setInterval(() => fetchCloudData(), POLLING_INTERVAL_MS);
@@ -278,11 +284,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const renderContent = () => {
     // If not logged in and not in a public view, show Login (Landing)
     const publicViews = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'LIVE_DEMO', 'DASHBOARD'];
-    if (!isSignedIn && !isMockMode && !publicViews.includes(view.type) && view.type !== 'PROJECT_VIEW' && view.type !== 'PLAYER') {
+    
+    // GUEST ACCESS: If viewing project/player and not signed in, check if project is loaded (Public Access)
+    const isPublicProjectView = (view.type === 'PROJECT_VIEW' || view.type === 'PLAYER') && projects.length > 0;
+
+    if (!isSignedIn && !isMockMode && !publicViews.includes(view.type) && !isPublicProjectView) {
         return <Login onLogin={() => {}} onNavigate={(page) => setView({ type: page as any })} />;
     }
 
-    if (!isSignedIn && !isMockMode && view.type === 'DASHBOARD') {
+    if (!isSignedIn && !isMockMode && view.type === 'DASHBOARD' && !isPublicProjectView) {
          return <Login onLogin={() => {}} onNavigate={(page) => setView({ type: page as any })} />;
     }
     
@@ -327,7 +337,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
     if (view.type === 'PROJECT_VIEW') {
        const project = projects.find(p => p.id === view.projectId);
-       if (!project) return <div className="p-8 text-center"><Loader2 className="animate-spin inline mr-2"/> Loading Project...</div>;
+       if (!project) return <div className="p-8 text-center text-zinc-500"><Loader2 className="animate-spin inline mr-2"/> Loading Project...</div>;
        
        return (
           <ProjectView 
@@ -353,7 +363,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
     if (view.type === 'PLAYER') {
         const project = projects.find(p => p.id === view.projectId);
-        if (!project) return <div className="p-8 text-center"><Loader2 className="animate-spin inline mr-2"/> Loading...</div>;
+        if (!project) return <div className="p-8 text-center text-zinc-500"><Loader2 className="animate-spin inline mr-2"/> Loading...</div>;
         
         const asset = project.assets.find(a => a.id === view.assetId);
         if (!asset) return <div className="p-8 text-center text-red-500">Asset not found</div>;

@@ -84,7 +84,8 @@ export const api = {
             return data;
         }
 
-        if (!user) return [];
+        // --- CHANGE: Allow fetch if user is missing BUT projectId is present (Public Link) ---
+        if (!user && !projectId) return [];
         
         try {
             const token = explicitToken || await getAuthToken();
