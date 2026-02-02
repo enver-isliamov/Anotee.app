@@ -1,0 +1,36 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Rainbow gradient for the border -->
+    <linearGradient id="rainbowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ade80;stop-opacity:1" />
+      <stop offset="25%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#fb923c;stop-opacity:1" />
+      <stop offset="75%" style="stop-color:#f87171;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c084fc;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Grid pattern -->
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#374151" stroke-width="1"/>
+    </pattern>
+  </defs>
+  
+  <!-- Outer rounded square with gradient -->
+  <rect width="200" height="200" rx="45" fill="url(#rainbowGradient)"/>
+  
+  <!-- Inner dark rounded square -->
+  <rect x="10" y="10" width="180" height="180" rx="38" fill="#1e293b"/>
+  
+  <!-- Grid pattern overlay -->
+  <rect x="26" y="26" width="148" height="148" rx="25" fill="url(#grid)"/>
+  
+  <!-- Lowercase letter "a" in print form -->
+  <g transform="translate(100, 100)">
+    <!-- Circle/bowl of "a" -->
+    <circle cx="0" cy="8" r="28" fill="none" stroke="#ffffff" stroke-width="6"/>
+    <!-- Vertical stem on the right -->
+    <path d="M 28,-20 L 28,36" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square"/>
+    <!-- Dot above the "a" on the right -->
+    <circle cx="28" cy="-38" r="9" fill="#ffffff"/>
+  </g>
+</svg>

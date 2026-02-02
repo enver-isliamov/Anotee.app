@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings } from 'lucide-react';
@@ -335,9 +334,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       <header className="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-hidden flex-1">
           <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-white shrink-0 p-1 mr-1">
-              <div className="flex items-center justify-center w-8 h-8 bg-zinc-800 rounded-lg shrink-0 border border-zinc-700">
-                <Clapperboard size={16} className="text-zinc-400" />
-              </div>
+              <img src="/logo.svg" alt="Back" className="w-8 h-8 shrink-0 hover:opacity-80 transition-opacity" />
           </button>
           <div className="flex flex-col truncate">
             <span className="font-bold text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-1">

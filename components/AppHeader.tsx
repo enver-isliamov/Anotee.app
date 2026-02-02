@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Clapperboard, Menu, X, PlayCircle } from 'lucide-react';
+import { Menu, X, PlayCircle } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { ThemeToggle } from './ThemeToggle';
@@ -49,9 +48,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
                     onClick={handleLogoClick}
                 >
-                    <div className="flex items-center justify-center w-8 h-8 bg-indigo-600 rounded-lg shrink-0 shadow-lg shadow-indigo-900/20 group-hover:scale-105 transition-transform">
-                        <Clapperboard size={18} className="text-white" />
-                    </div>
+                    <img 
+                        src="/logo.svg" 
+                        alt={t('app.name')} 
+                        className="w-10 h-10 shrink-0 group-hover:scale-105 transition-transform" 
+                    />
                     <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{t('app.name')}</span>
                 </div>
 
