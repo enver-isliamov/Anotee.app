@@ -87,7 +87,7 @@ const PlayerSidebar = React.memo(({
                     </div>
                 )}
                 
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-900 z-0 relative">
                     {sidebarTab === 'comments' && filteredComments.map((comment: any) => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; const isS = swipeCommentId === comment.id; const o = isS ? swipeOffset : 0; const isA = currentTime >= comment.timestamp && currentTime < (comment.timestamp + (comment.duration || 3)); const cC = stringToColor(comment.userId); const canD = isManager || isCO; const canEd = isCO || (isManager);
                         return (
@@ -441,7 +441,44 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify(t('notify.perm_attempt'), "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify(t('notify.perm_fixed'), "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify(t('notify.perm_fail'), "error"); } };
-  const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
+  
+  // FIXED: Explicit Permission Check on Error
+  const handleVideoError = async () => { 
+      if (loadingDrive) return; 
+      
+      if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
+          // 1. Retry with standard link if first attempt failed
+          if (!driveUrlRetried) { 
+              setDriveUrlRetried(true); 
+              const fallbackUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&t=${Date.now()}`; 
+              setDriveUrl(fallbackUrl); 
+              return; 
+          } 
+          
+          setLoadingDrive(true); 
+          
+          // 2. Check File Existence
+          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
+          
+          // 3. Check File Permissions (Is it Public?)
+          // We assume "ok" status means file exists, but player fail means CORS/Permission
+          const perms = await GoogleDriveService.getFilePermissions(version.googleDriveId);
+          
+          setLoadingDrive(false); 
+          
+          if (status !== 'ok') { 
+              setDriveFileMissing(true); 
+          } else { 
+              // If file exists but failed to play, AND isn't public, it's a permission error
+              if (!perms.isPublic) {
+                  setDrivePermissionError(true); 
+              }
+              setVideoError(true); 
+          } 
+      } else { 
+          setVideoError(true); 
+      } 
+  };
   
   // TIMELINE SCRUBBING
   const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
