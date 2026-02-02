@@ -250,7 +250,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleInviteUser = async () => {
       if (!inviteEmail.trim()) return;
       if (!inviteEmail.includes('@')) {
-          notify("Invalid email format", "error");
+          notify(t('notify.invalid_email'), "error");
           return;
       }
 
@@ -262,7 +262,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
       const currentTeam = project.team || [];
       if (currentTeam.some(m => m.id === newMember.id || (m as any).email === inviteEmail)) {
-          notify("User already in team", "warning");
+          notify(t('notify.user_exists'), "warning");
           return;
       }
 
@@ -279,7 +279,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       
       onUpdateProject({ ...project, team: newTeam });
       setInviteEmail('');
-      notify("User added to project", "success");
+      notify(t('notify.user_added'), "success");
   };
 
   const handleRemoveUser = async (userId: string) => {
@@ -294,7 +294,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           }
       }
       onUpdateProject({ ...project, team: newTeam });
-      notify("User removed", "info");
+      notify(t('notify.user_removed'), "info");
   };
 
   const handleCopyLink = () => {
@@ -468,10 +468,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm relative z-10">
                             <Upload size={32} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
                         </div>
-                        <h3 className="text-xl font-bold mb-2 relative z-10">Step 2: Upload Video</h3>
+                        <h3 className="text-xl font-bold mb-2 relative z-10">{t('pv.step2.title')}</h3>
                         <p className="text-sm max-w-xs text-center mb-6 relative z-10 text-zinc-500">
-                            Drag and drop your video file here. <br/>
-                            <span className="text-xs opacity-70">Supports MP4, MOV, MKV</span>
+                            {t('pv.step2.desc')} <br/>
+                            <span className="text-xs opacity-70">{t('pv.step2.formats')}</span>
                         </p>
                         <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all pointer-events-none relative z-10">
                             {t('pv.upload_asset')}
@@ -579,7 +579,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   
                   {project.orgId ? (
                       <div className="mt-4">
-                          <p className="text-xs text-zinc-400 mb-4">This project belongs to an organization. Manage access in settings.</p>
+                          <p className="text-xs text-zinc-400 mb-4">{t('pv.share.org_notice')}</p>
                           <button onClick={() => { setIsShareModalOpen(false); setIsOrgSettingsOpen(true); }} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
                               <Settings size={14} /> {t('pv.org_settings')}
                           </button>
@@ -608,10 +608,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         
                         {shareTarget.type === 'project' && (
                             <div className="mt-4 border-t border-zinc-800 pt-4">
-                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Invite Collaborator (Personal)</div>
+                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">{t('pv.share.invite_personal')}</div>
                                 <div className="flex gap-2">
-                                    <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
-                                    <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                    <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder={t('pv.share.email_placeholder')} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
+                                    <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">{t('pv.share.add')}</button>
                                 </div>
                             </div>
                         )}
@@ -643,15 +643,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 <>
                   <h2 className="text-lg font-bold text-white mb-4">{t('pv.team')}</h2>
                   <div className="mb-4 text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded flex items-center justify-between">
-                      <span>Managed by Organization</span>
-                      <button onClick={() => { setIsParticipantsModalOpen(false); setIsOrgSettingsOpen(true); }} className="text-indigo-400 hover:text-indigo-300 font-bold">Manage</button>
+                      <span>{t('pv.team.managed')}</span>
+                      <button onClick={() => { setIsParticipantsModalOpen(false); setIsOrgSettingsOpen(true); }} className="text-indigo-400 hover:text-indigo-300 font-bold">{t('pv.team.manage_btn')}</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                     {displayTeam.map(member => (
                         <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">
                           <div className="flex items-center gap-2">
                               <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-zinc-800" />
-                              <div><div className="text-sm text-zinc-200 font-medium flex items-center gap-2">{member.name}{member.id === currentUser.id && <span className="text-[10px] text-zinc-500">(You)</span>}</div><div className={`text-[10px] uppercase font-bold text-indigo-400`}>{getDisplayRole(member)}</div></div>
+                              <div><div className="text-sm text-zinc-200 font-medium flex items-center gap-2">{member.name}{member.id === currentUser.id && <span className="text-[10px] text-zinc-500">{t('pv.team.you')}</span>}</div><div className={`text-[10px] uppercase font-bold text-indigo-400`}>{getDisplayRole(member)}</div></div>
                           </div>
                         </div>
                     ))}

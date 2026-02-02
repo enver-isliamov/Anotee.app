@@ -10,7 +10,7 @@ import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId } from './services/utils';
-import { LanguageProvider, LanguageCloudSync } from './services/i18n';
+import { LanguageProvider, LanguageCloudSync, useLanguage } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
@@ -38,13 +38,14 @@ const POLLING_INTERVAL_MS = 20000;
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
+    const { t } = useLanguage();
     if (tasks.length === 0) return null;
 
     return (
         <div className="fixed bottom-4 right-4 z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300">
             <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700">
                 <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
-                    <UploadCloud size={14} /> Uploads ({tasks.length})
+                    <UploadCloud size={14} /> {t('app.uploads')} ({tasks.length})
                 </span>
             </div>
             <div className="max-h-60 overflow-y-auto">
@@ -53,7 +54,7 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
                         <div className="flex justify-between items-start mb-1">
                             <div className="truncate pr-4">
                                 <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate" title={task.file.name}>{task.file.name}</div>
-                                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">in {task.projectName}</div>
+                                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{task.projectName}</div>
                             </div>
                             <div className="shrink-0">
                                 {task.status === 'done' && <CheckCircle size={14} className="text-green-500" />}
@@ -73,7 +74,7 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
                         )}
                         {task.status === 'processing' && (
                             <div className="flex items-center gap-1 text-[10px] text-indigo-500 mt-1">
-                                <Loader2 size={10} className="animate-spin" /> Processing...
+                                <Loader2 size={10} className="animate-spin" /> {t('app.processing')}
                             </div>
                         )}
                         {task.status === 'error' && <div className="text-[10px] text-red-500 mt-1">{task.error}</div>}
@@ -97,6 +98,7 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization }) => {
   const isMockMode = authMode === 'mock';
+  const { t } = useLanguage();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
@@ -352,7 +354,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           console.error("Sync failed", e);
           
           if (e.code === 'CONFLICT') {
-              notify("Conflict detected. Reloading...", "warning");
+              notify(t('notify.conflict'), "warning");
               lastLocalUpdateRef.current = 0; // Allow immediate poll
               fetchCloudData(undefined, true); 
           } else {
@@ -455,21 +457,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const targetProject = updated.find(p => p.id === projectId);
       if (targetProject) forceSync([targetProject]);
       
-      notify("Project updated", "success");
+      notify(t('notify.proj_updated'), "success");
   };
 
   const handleAddProject = (newProject: Project) => {
     const projectWithVersion = { ...newProject, _version: 0 };
     const newProjects = [projectWithVersion, ...projects];
     setProjects(newProjects);
-    notify("Project created successfully", "success");
+    notify(t('notify.proj_created'), "success");
     // OPTIMIZATION: Only sync the new project
     forceSync([projectWithVersion]);
   };
 
   const handleDeleteProject = async (projectId: string) => {
       setProjects(prev => prev.filter(p => p.id !== projectId));
-      notify("Project deleted", "info");
+      notify(t('notify.proj_deleted'), "info");
       
       if ((view.type === 'PROJECT_VIEW' || view.type === 'PLAYER') && view.projectId === projectId) {
           handleBackToDashboard();
@@ -525,7 +527,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
                 {isMockMode && (
                     <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm">
-                        PREVIEW MODE: No Backend (Data saved to LocalStorage)
+                        {t('app.preview_mode')}
                     </div>
                 )}
             </div>
@@ -539,7 +541,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             />
             {isMockMode && (
                 <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100]">
-                    PREVIEW MODE: Login to test
+                    {t('app.preview_login')}
                 </div>
             )}
         </>
@@ -622,7 +624,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         
         {isMockMode && (
             <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] pointer-events-none">
-                PREVIEW MODE: Local Data Only
+                {t('app.preview_local')}
             </div>
         )}
       </main>

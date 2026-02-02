@@ -80,7 +80,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   });
   
   const sectionTitle = activeOrgId 
-    ? (organization?.name || 'Organization') + ' Projects' 
+    ? (organization?.name || 'Organization') + ' ' + t('dash.org_projects') 
     : t('dash.my_projects');
 
   // PERMISSION CHECKS (Project Level)
@@ -166,10 +166,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               });
           }
           
-          notify("Project updated", "success");
+          notify(t('notify.proj_updated'), "success");
       } catch (err: any) {
           if (err.code === 'CONFLICT') {
-             notify("Conflict detected! Someone modified this project. Please refresh.", "error");
+             notify(t('notify.conflict'), "error");
           } else {
              notify("Failed to update project", "error");
              console.error(err);
@@ -245,7 +245,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           }
 
           onDeleteProject(project.id);
-          notify("Project deleted successfully", "success");
+          notify(t('notify.proj_deleted'), "success");
       } catch(e) {
           console.error("Delete failed", e);
           notify("Failed to delete project completely", "error");
@@ -264,8 +264,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <Layout size={24} />
                   </div>
                   <div>
-                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with SmoTree</h3>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Follow these steps to set up your first review workflow.</p>
+                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{t('dash.onboard.title')}</h3>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('dash.onboard.subtitle')}</p>
                   </div>
               </div>
 
@@ -276,15 +276,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-indigo-600 shadow-sm">
                           <Plus size={20} />
                       </div>
-                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">Create Project</h4>
+                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">{t('dash.onboard.step1')}</h4>
                       <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed">
-                          Initialize a workspace for your media assets and team collaboration.
+                          {t('dash.onboard.step1_desc')}
                       </p>
                       <button 
                           onClick={() => setIsModalOpen(true)}
                           className="mt-auto w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"
                       >
-                          Start Here <ArrowRight size={12} />
+                          {t('dash.onboard.step1_btn')} <ArrowRight size={12} />
                       </button>
                   </div>
 
@@ -294,12 +294,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
                           <Upload size={20} />
                       </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Upload Media</h4>
+                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">{t('dash.onboard.step2')}</h4>
                       <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          Drag & drop video files. We automatically generate proxies for smooth playback.
+                          {t('dash.onboard.step2_desc')}
                       </p>
                       <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          Waiting for Project...
+                          {t('dash.onboard.step2_wait')}
                       </div>
                   </div>
 
@@ -309,12 +309,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
                           <Share2 size={20} />
                       </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Invite Team</h4>
+                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">{t('dash.onboard.step3')}</h4>
                       <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          Share a secure link with clients or editors for frame-accurate feedback.
+                          {t('dash.onboard.step3_desc')}
                       </p>
                       <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          Waiting for Upload...
+                          {t('dash.onboard.step3_wait')}
                       </div>
                   </div>
               </div>
@@ -394,7 +394,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                                 {project.name}
                             </h3>
                             <p className="text-xs text-zinc-500 mb-4 line-clamp-2 leading-relaxed">
-                                {project.description || 'No description provided.'}
+                                {project.description || t('dash.no_desc')}
                             </p>
 
                             <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
@@ -569,7 +569,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               {activeOrgId && (
                   <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 rounded-lg flex items-center gap-2 text-xs text-indigo-700 dark:text-indigo-300">
                       <Building2 size={16} />
-                      Creating in <strong>{organization?.name}</strong>
+                      {t('dash.creating_in')} <strong>{organization?.name}</strong>
                   </div>
               )}
 
