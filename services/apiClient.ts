@@ -202,26 +202,6 @@ export const api = {
         return data.project;
     },
 
-    deleteAssets: async (urls: string[], projectId: string, explicitToken?: string | null): Promise<void> => {
-        if (IS_MOCK_MODE) {
-            return; // Nothing to delete on server
-        }
-
-        try {
-            const token = explicitToken || await getAuthToken();
-            await fetch('/api/delete', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': token ? `Bearer ${token}` : ''
-                },
-                body: JSON.stringify({ urls, projectId })
-            });
-        } catch (e) {
-            console.error("Delete API Error", e);
-        }
-    },
-
     comment: async (projectId: string, assetId: string, versionId: string, action: string, payload: any, user: User, explicitToken?: string | null) => {
         if (IS_MOCK_MODE) {
             return; 

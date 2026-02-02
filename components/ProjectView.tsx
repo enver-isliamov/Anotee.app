@@ -95,6 +95,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const newAssetTasks = activeTasks.filter(t => !t.targetAssetId);
   // Version tasks are handled inside the map of existing assets
 
+  // Always enforce Drive Storage if available, else local/mock
   useEffect(() => {
     if (isDriveReady) {
         setUseDriveStorage(true);
@@ -140,31 +141,20 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           if (files.length > 0) notify(t('notify.video_only'), "warning");
           return;
       }
-      onUploadAsset(videoFiles[0], project.id, useDriveStorage);
-  };
-
-  const toggleStorage = () => {
-      if (isMockMode) {
-          notify("Drive Storage unavailable in Mock Mode", "info");
-          return;
-      }
-      if (!isDriveReady && !useDriveStorage) {
-          notify(t('notify.connect_drive'), "info");
-          return;
-      }
-      setUseDriveStorage(!useDriveStorage);
+      // Implicitly use Drive if not mock
+      onUploadAsset(videoFiles[0], project.id, !isMockMode);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      onUploadAsset(e.target.files[0], project.id, useDriveStorage);
+      onUploadAsset(e.target.files[0], project.id, !isMockMode);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleVersionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && uploadingVersionFor) {
-        onUploadAsset(e.target.files[0], project.id, useDriveStorage, uploadingVersionFor);
+        onUploadAsset(e.target.files[0], project.id, !isMockMode, uploadingVersionFor);
     }
     setUploadingVersionFor(null);
     if (versionInputRef.current) versionInputRef.current.value = '';
@@ -186,17 +176,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     }
                 }
             }
-
-            const urlsToDelete: string[] = [];
-            asset.versions.forEach(v => {
-                if (v.storageType === 'vercel' && v.url.startsWith('http')) {
-                    urlsToDelete.push(v.url);
-                }
-            });
-
-            if (urlsToDelete.length > 0) {
-                await api.deleteAssets(urlsToDelete, project.id);
-            }
+            // No Vercel Blob deletion needed anymore
         }
 
         const updatedAssets = project.assets.filter(a => a.id !== asset.id);
@@ -432,7 +412,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           <div className="absolute inset-0 z-50 bg-indigo-600/90 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-200 border-4 border-white/20 border-dashed m-4 rounded-3xl">
               <FileVideo size={64} className="mb-4 animate-bounce" />
               <h2 className="text-3xl font-bold mb-2">{t('pv.drop.title')}</h2>
-              <p className="text-white/80">{t('pv.drop.desc')} {useDriveStorage ? 'Google Drive' : 'Cloud Storage'}</p>
+              <p className="text-white/80">{t('pv.drop.desc')} Google Drive</p>
           </div>
       )}
 
@@ -447,14 +427,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileSelect}/>
                     <input type="file" ref={versionInputRef} className="hidden" accept="video/*" onChange={handleVersionFileSelect}/>
                     
-                    <button
-                        onClick={toggleStorage}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${useDriveStorage && isDriveReady ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                        title={isMockMode ? t('player.source.mock') : (isDriveReady ? t('pv.storage.drive') : t('pv.drive_disconnected'))}
+                    {/* Static Storage Indicator */}
+                    <div
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border select-none ${isDriveReady ? 'bg-green-900/30 text-green-400 border-green-800' : 'bg-zinc-800 text-zinc-500 border border-zinc-700'}`}
+                        title={isDriveReady ? t('pv.storage.drive') : t('pv.drive_disconnected')}
                     >
-                        {useDriveStorage && isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
-                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? t('pv.storage.drive') : (isMockMode ? t('pv.storage.local') : t('pv.storage.cloud'))}</span>
-                    </button>
+                        {isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
+                        <span className="hidden md:inline">{isDriveReady ? t('pv.storage.drive') : "Connect Drive"}</span>
+                    </div>
 
                     <button 
                         onClick={() => fileInputRef.current?.click()}

@@ -217,21 +217,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       setIsDeleting(project.id);
       
       try {
-          // 1. Delete Assets (Blobs)
-          const urlsToDelete: string[] = [];
-          project.assets.forEach(asset => {
-              asset.versions.forEach(v => {
-                  if (v.url.startsWith('http')) {
-                      urlsToDelete.push(v.url);
-                  }
-              });
-          });
+          // Note: We no longer delete Vercel Blobs here since that storage is deprecated.
+          // Google Drive files are left intact unless deleted manually or via asset-level delete in ProjectView (if implemented).
+          // We only clean up the database row.
 
-          if (!isMockMode && urlsToDelete.length > 0) {
-              await api.deleteAssets(urlsToDelete, project.id);
-          }
-
-          // 2. Delete Project Row (DB)
+          // Delete Project Row (DB)
           if (!isMockMode) {
               const res = await fetch(`/api/data?projectId=${project.id}`, {
                   method: 'DELETE',

@@ -3,7 +3,6 @@ import { useState, useRef } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
-import { upload } from '@vercel/blob/client';
 import { api } from '../services/apiClient';
 import { useDrive } from '../services/driveContext';
 import { useLanguage } from '../services/i18n';
@@ -109,7 +108,7 @@ export const useUploadManager = (
 
             let assetUrl = '';
             let googleDriveId = undefined;
-            let storageType: StorageType = 'vercel';
+            let storageType: StorageType = 'drive';
 
             // 3. Upload Process
             if (isMockMode) {
@@ -120,55 +119,41 @@ export const useUploadManager = (
                 assetUrl = URL.createObjectURL(file);
                 storageType = 'local';
             } else {
-                if (useDrive) {
-                    const isDriveReady = GoogleDriveService.isAuthenticated();
-                    if (!isDriveReady) {
-                        throw new Error("Google Drive token missing. Please reconnect in Profile.");
+                // Google Drive Upload Only
+                const isDriveReady = GoogleDriveService.isAuthenticated();
+                if (!isDriveReady) {
+                    throw new Error("Google Drive token missing. Please reconnect in Profile.");
+                }
+
+                const safeProjectName = project ? project.name : "Unknown Project";
+
+                try {
+                    const appFolder = await GoogleDriveService.ensureAppFolder();
+                    const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+                    
+                    // Decide folder structure. 
+                    // If targetAssetId exists, find that asset title for folder.
+                    let folderName = assetTitle;
+                    if (targetAssetId && project) {
+                            const existingAsset = project.assets.find(a => a.id === targetAssetId);
+                            if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
                     }
 
-                    const safeProjectName = project ? project.name : "Unknown Project";
+                    const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
 
-                    try {
-                        const appFolder = await GoogleDriveService.ensureAppFolder();
-                        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                        
-                        // Decide folder structure. 
-                        // If targetAssetId exists, find that asset title for folder.
-                        let folderName = assetTitle;
-                        if (targetAssetId && project) {
-                             const existingAsset = project.assets.find(a => a.id === targetAssetId);
-                             if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
-                        }
+                    const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
+                    googleDriveId = result.id;
+                    storageType = 'drive';
+                    
+                    await GoogleDriveService.makeFilePublic(result.id);
+                    // Use standard UC link for URL immediately
+                    assetUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${result.id}`;
 
-                        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
-
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
-                        googleDriveId = result.id;
-                        storageType = 'drive';
-                        
-                        await GoogleDriveService.makeFilePublic(result.id);
-
-                    } catch (driveErr: any) {
-                        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
-                             throw new Error("Drive Session Expired. Please refresh page/reconnect.");
-                        }
-                        throw driveErr;
+                } catch (driveErr: any) {
+                    if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
+                            throw new Error("Drive Session Expired. Please refresh page/reconnect.");
                     }
-                } else {
-                    // Vercel Blob
-                    const token = await getToken();
-                    if (!token) throw new Error("Authentication missing. Please login again.");
-
-                    const newBlob = await upload(finalFileName, file, {
-                        access: 'public',
-                        handleUploadUrl: '/api/upload',
-                        clientPayload: JSON.stringify({ 
-                            token: token, 
-                            projectId: projectId 
-                        }),
-                        onUploadProgress: (p) => updateProgress(Math.round((p.loaded / p.total) * 100))
-                    });
-                    assetUrl = newBlob.url;
+                    throw driveErr;
                 }
             }
 
@@ -239,15 +224,8 @@ export const useUploadManager = (
 
             } catch (syncError) {
                 console.error("Sync failed during upload finalization", syncError);
-                
-                if (!isMockMode && storageType === 'vercel' && assetUrl) {
-                    try {
-                        await api.deleteAssets([assetUrl], projectId);
-                    } catch(delErr) {
-                        console.error("Failed to rollback blob", delErr);
-                    }
-                }
-                
+                // Rollback not needed for Drive usually as it's separate system, 
+                // but local state might be out of sync.
                 setProjects(projects); 
                 throw new Error("Failed to save project data. Upload cancelled.");
             }

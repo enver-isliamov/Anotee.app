@@ -22,7 +22,7 @@ export interface Comment {
   replies?: Comment[];
 }
 
-export type StorageType = 'vercel' | 'drive' | 'local';
+export type StorageType = 'drive' | 'local';
 
 export interface VideoVersion {
   id: string;
