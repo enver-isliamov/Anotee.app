@@ -174,7 +174,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [drivePermissionError, setDrivePermissionError] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [videoError, setVideoError] = useState(false);
-  const [videoCors, setVideoCors] = useState<string | undefined>('anonymous');
+  
+  // FIX: Default videoCors to undefined (No CORS) for maximum Drive compatibility
+  // This adheres to SETTINGS.md by prioritizing playback stability over advanced canvas features
+  const [videoCors, setVideoCors] = useState<string | undefined>(undefined);
 
   // ... (State definitions same as before) ...
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -390,7 +393,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
     setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null);
-    setVideoCors('anonymous'); // Reset CORS strategy
+    
+    // FIX: Always reset to undefined (No CORS) when loading a new file to prevent persistent error state
+    setVideoCors(undefined); 
 
     const checkDriveStatus = async () => {
         if (!isMockMode && version?.storageType === 'drive' && version.googleDriveId) {
@@ -449,14 +454,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       if (loadingDrive) return; 
       
       // 1. CORS Retry Strategy
-      // If video failed with 'anonymous' CORS, try removing the attribute. 
-      // Public Drive files sometimes serve redirects without CORS headers.
+      // If video failed with undefined (no-cors), it means the file is truly dead or inaccessible.
+      // If it failed with 'anonymous' (default), we might want to try without CORS just in case,
+      // but since we switched default to undefined, we are likely here because undefined failed.
+      
       if (videoCors === 'anonymous') {
           console.warn("Video load failed with CORS, retrying without...");
-          setVideoCors(undefined); // Remove crossOrigin attribute
-          if (videoRef.current) {
-              videoRef.current.load();
-          }
+          setVideoCors(undefined); 
+          if (videoRef.current) videoRef.current.load();
           return;
       }
 
@@ -466,8 +471,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
               setDriveUrlRetried(true); 
               const fallbackUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&t=${Date.now()}`; 
               setDriveUrl(fallbackUrl); 
-              // Reset CORS to anonymous for the retry to see if the new link works with it
-              setVideoCors('anonymous');
+              // Note: Keep CORS undefined for the retry to maximize success chance
               return; 
           } 
           
@@ -592,7 +596,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setDrivePermissionError(false); 
       setDriveUrlRetried(false); 
       setLoadingDrive(true); 
-      setVideoCors('anonymous'); // Reset CORS for new version
+      setVideoCors(undefined); // FIX: Reset CORS strategy to undefined (safe default)
       setCurrentVersionIdx(idx); 
       setShowVersionSelector(false); 
       
