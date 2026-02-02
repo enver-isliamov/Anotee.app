@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -38,17 +39,22 @@ const POLLING_INTERVAL_MS = 20000;
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
     const { t } = useLanguage();
-    if (tasks.length === 0) return null;
+    // Only show global widget for completed/errored tasks, or tasks not belonging to current view
+    // Actually, let's just show it for errors or completions, active ones are in ProjectView now
+    const relevantTasks = tasks.filter(t => t.status === 'error' || t.status === 'done');
+    
+    if (relevantTasks.length === 0) return null;
 
     return (
         <div className="fixed bottom-4 right-4 z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300">
             <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700">
                 <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
-                    <UploadCloud size={14} /> {t('app.uploads')} ({tasks.length})
+                    <UploadCloud size={14} /> {t('app.uploads')}
                 </span>
+                <button onClick={() => relevantTasks.forEach(t => onClose(t.id))} className="text-zinc-400 hover:text-zinc-600"><X size={12}/></button>
             </div>
             <div className="max-h-60 overflow-y-auto">
-                {tasks.map(task => (
+                {relevantTasks.map(task => (
                     <div key={task.id} className="p-3 border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 relative">
                         <div className="flex justify-between items-start mb-1">
                             <div className="truncate pr-4">
@@ -58,7 +64,6 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
                             <div className="shrink-0">
                                 {task.status === 'done' && <CheckCircle size={14} className="text-green-500" />}
                                 {task.status === 'error' && <AlertCircle size={14} className="text-red-500" />}
-                                {task.status === 'uploading' && <span className="text-[10px] font-mono font-bold text-indigo-500">{task.progress}%</span>}
                                 {(task.status === 'done' || task.status === 'error') && (
                                     <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
                                         <X size={12} />
@@ -66,16 +71,6 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
                                 )}
                             </div>
                         </div>
-                        {task.status === 'uploading' && (
-                            <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1 mt-1 overflow-hidden">
-                                <div className="bg-indigo-500 h-full transition-all duration-300" style={{ width: `${task.progress}%` }}></div>
-                            </div>
-                        )}
-                        {task.status === 'processing' && (
-                            <div className="flex items-center gap-1 text-[10px] text-indigo-500 mt-1">
-                                <Loader2 size={10} className="animate-spin" /> {t('app.processing')}
-                            </div>
-                        )}
                         {task.status === 'error' && <div className="text-[10px] text-red-500 mt-1">{task.error}</div>}
                     </div>
                 ))}
@@ -394,6 +389,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
              isMockMode={isMockMode}
              restrictedAssetId={view.restrictedAssetId}
              onUploadAsset={handleUploadAsset}
+             uploadTasks={uploadTasks} // Pass upload tasks to ProjectView
           />
        );
     }

@@ -31,12 +31,17 @@ export const useUploadManager = (
     const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
         const taskId = generateId();
         
+        // Find Project to get name
+        const project = projects.find(p => p.id === projectId);
+
+        // Initial Task State
         const newTask: UploadTask = {
             id: taskId,
             file,
-            projectName: t('common.uploading'), // Placeholder
+            projectName: project ? project.name : t('common.uploading'),
+            projectId: projectId,
             progress: 0,
-            status: 'uploading'
+            status: 'processing' // Start with processing to generate thumb
         };
 
         setUploadTasks(prev => [...prev, newTask]);
@@ -57,21 +62,28 @@ export const useUploadManager = (
         };
 
         try {
-            // Block server polling to prevent overwriting
+            // Block server polling
             lastLocalUpdateRef.current = Date.now() + 60000; 
 
-            // Find Project & Determine Version Number BEFORE Upload
-            const project = projects.find(p => p.id === projectId);
-            if (project) updateTask({ projectName: project.name });
+            // 1. Generate Thumbnail IMMEDIATELY for UI feedback
+            const thumbnailDataUrl = await generateVideoThumbnail(file);
+            updateTask({ 
+                thumbnail: thumbnailDataUrl,
+                status: 'uploading'
+            });
 
-            // 1. Calculate Naming & Version
+            // 2. Calculate Naming & Version
             let nextVersionNumber = 1;
             
-            // Extract base name and extension
             // Remove extension
             let rawTitle = file.name.replace(/\.[^/.]+$/, "");
-            // Sanitize: Keep alphanumeric, spaces, dashes, underscores. Remove others to prevent FS/URL issues.
-            let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
+            
+            // Clean specific version suffixes if present in the uploaded file (e.g. "MyVideo_v2" -> "MyVideo")
+            // This prevents "MyVideo_v2_v3.mp4"
+            let baseTitle = rawTitle.replace(/_v\d+$/, '');
+            
+            // Sanitize slightly but keep readability
+            let assetTitle = baseTitle; 
             if (!assetTitle) assetTitle = "Video_Asset";
 
             const ext = file.name.split('.').pop();
@@ -80,20 +92,17 @@ export const useUploadManager = (
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
                 if (existingAsset) {
                     nextVersionNumber = existingAsset.versions.length + 1;
-                    // NOTE: We now use the UPLOADED FILE NAME as the base for the new version filename
-                    // This allows keeping context like "Cut_v2_ColorGraded" instead of forcing "AssetTitle_v3"
+                    // If adding to existing asset, we might want to stick to the Asset's naming convention
+                    // OR allow the new file's name to take precedence. 
+                    // Per request: "Save file name". We use the uploaded file's base name.
                 }
+            } else {
+                // Check if an asset with this name already exists to auto-group? 
+                // For now, we create new asset.
             }
 
-            // Construct Filename: {SanitizedName}_v{Number}.{ext}
-            // If it's a fresh upload, it gets _v1. 
-            // If it's a version, it gets _vX based on count.
+            // Construct Filename: {BaseName}_v{Number}.{ext}
             const finalFileName = `${assetTitle}_v${nextVersionNumber}.${ext}`;
-
-            // 2. Generate Thumbnail
-            updateTask({ status: 'processing' });
-            const thumbnailDataUrl = await generateVideoThumbnail(file);
-            updateTask({ status: 'uploading' });
 
             let assetUrl = '';
             let googleDriveId = undefined;
@@ -119,12 +128,9 @@ export const useUploadManager = (
                     try {
                         const appFolder = await GoogleDriveService.ensureAppFolder();
                         const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                        // For assets, we might want to group by Asset Title folder, but if we change names, 
-                        // flat project folder or asset-specific folder is fine. 
-                        // To keep it clean, we'll use the Asset Title from the *Asset Object* if updating, or new name if new.
-                        // But finding the "Asset Folder" by name is tricky if we rename things. 
-                        // For now, let's create/find folder based on the *Target Asset Title* if it exists, or the new file name.
                         
+                        // Decide folder structure. 
+                        // If targetAssetId exists, find that asset title for folder.
                         let folderName = assetTitle;
                         if (targetAssetId && project) {
                              const existingAsset = project.assets.find(a => a.id === targetAssetId);
@@ -137,8 +143,6 @@ export const useUploadManager = (
                         googleDriveId = result.id;
                         storageType = 'drive';
                         
-                        // CRITICAL: Ensure Permissions are Public immediately after upload
-                        // This prevents "Access Denied" when the player tries to load it via 'uc' link
                         await GoogleDriveService.makeFilePublic(result.id);
 
                     } catch (driveErr: any) {
@@ -152,7 +156,7 @@ export const useUploadManager = (
                     const token = await getToken();
                     if (!token) throw new Error("Authentication missing. Please login again.");
 
-                    const newBlob = await upload(file.name, file, {
+                    const newBlob = await upload(finalFileName, file, {
                         access: 'public',
                         handleUploadUrl: '/api/upload',
                         clientPayload: JSON.stringify({ 
@@ -201,7 +205,7 @@ export const useUploadManager = (
                 // New Asset
                 const newAsset: ProjectAsset = {
                     id: generateId(),
-                    title: assetTitle, // Use the sanitized name as title
+                    title: assetTitle, // Use cleaned name as title
                     thumbnail: thumbnailDataUrl,
                     currentVersionIndex: 0,
                     versions: [newVersion]
@@ -224,16 +228,17 @@ export const useUploadManager = (
                 // Send to Server
                 await forceSync([updatedProject]);
                 
+                // Keep the success task briefly then remove
                 updateTask({ status: 'done', progress: 100 });
+                setTimeout(() => removeUploadTask(taskId), 2000); // Auto remove after 2s
+                
                 notify(t('notify.upload_complete'), "success");
 
             } catch (syncError) {
                 console.error("Sync failed during upload finalization", syncError);
                 
-                // Rollback Blob if sync failed (to avoid orphans)
                 if (!isMockMode && storageType === 'vercel' && assetUrl) {
                     try {
-                        console.log("Rolling back orphaned blob:", assetUrl);
                         await api.deleteAssets([assetUrl], projectId);
                     } catch(delErr) {
                         console.error("Failed to rollback blob", delErr);

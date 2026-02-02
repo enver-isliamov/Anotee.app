@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Project, ProjectAsset, User, StorageType } from '../types';
+import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
@@ -22,9 +22,10 @@ interface ProjectViewProps {
   restrictedAssetId?: string;
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
+  uploadTasks?: UploadTask[];
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks = [] }) => {
   const { t } = useLanguage();
   
   // --- CLERK ORGANIZATION LOGIC ---
@@ -85,6 +86,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const visibleAssets = restrictedAssetId 
     ? project.assets.filter(a => a.id === restrictedAssetId)
     : project.assets;
+
+  // Filter tasks for this project that are active
+  const pendingUploads = uploadTasks.filter(task => 
+      task.projectId === project.id && (task.status === 'uploading' || task.status === 'processing')
+  );
 
   useEffect(() => {
     if (isDriveReady) {
@@ -459,7 +465,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                {visibleAssets.length === 0 && !isDragging && (
+                {visibleAssets.length === 0 && pendingUploads.length === 0 && !isDragging && (
                     <div 
                         onClick={() => fileInputRef.current?.click()}
                         className="col-span-full h-[60vh] border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all cursor-pointer group relative overflow-hidden"
@@ -478,6 +484,33 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         </button>
                     </div>
                 )}
+
+                {/* GHOST TILES FOR UPLOADS */}
+                {pendingUploads.map(task => (
+                    <div key={task.id} className="group bg-zinc-900 rounded-lg overflow-hidden border border-indigo-500/50 relative shadow-sm animate-pulse">
+                        <div className="aspect-video bg-zinc-950 relative overflow-hidden flex items-center justify-center">
+                            {task.thumbnail ? (
+                                <img src={task.thumbnail} className="w-full h-full object-cover opacity-50 blur-[2px]" />
+                            ) : (
+                                <div className="bg-zinc-800 w-full h-full flex items-center justify-center">
+                                    <FileVideo size={32} className="text-zinc-700" />
+                                </div>
+                            )}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+                                <Loader2 size={24} className="text-indigo-500 animate-spin mb-2" />
+                                <span className="text-xs font-bold text-white shadow-black drop-shadow-md">{task.progress}%</span>
+                            </div>
+                            {/* Progress Overlay */}
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800">
+                                <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${task.progress}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="p-3">
+                            <h3 className="font-medium text-zinc-400 text-xs md:text-sm truncate mb-1">{task.file.name}</h3>
+                            <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">{t('common.uploading')}</div>
+                        </div>
+                    </div>
+                ))}
 
                 {visibleAssets.map((asset) => {
                     const lastVer = asset.versions[asset.versions.length-1];

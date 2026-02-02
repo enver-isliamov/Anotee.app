@@ -70,7 +70,9 @@ export interface UploadTask {
   id: string;
   file: File;
   projectName: string;
+  projectId: string; // Ensure projectId is tracked
   progress: number;
   status: 'uploading' | 'processing' | 'done' | 'error';
+  thumbnail?: string; // New field for optimistic UI
   error?: string;
 }
