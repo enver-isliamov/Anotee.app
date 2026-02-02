@@ -16,7 +16,7 @@ import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider, useOrganization } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
-import { Loader2 } from 'lucide-react';
+import { Loader2, User as UserIcon, ArrowRight } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
@@ -51,6 +51,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const isMockMode = authMode === 'mock';
   const { t } = useLanguage();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // GUEST STATE
+  const [guestName, setGuestName] = useState(() => localStorage.getItem('smotree_guest_name') || '');
+  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
@@ -65,6 +70,26 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   
   // Track last known server data timestamp to minimize fetching
   const lastServerTimestampRef = useRef<number>(0);
+
+  // COMPUTED USER (Real or Guest)
+  const effectiveUser: User | null = React.useMemo(() => {
+      if (currentUser) return currentUser;
+      
+      // If we are in public mode (projects loaded) but no login, return Guest User
+      // Only if guestName is set, otherwise we might return a temp placeholder or null
+      if (!isSignedIn && guestName) {
+          return {
+              id: `guest-${guestName.replace(/\s+/g, '-').toLowerCase()}-${localStorage.getItem('smotree_guest_id') || generateId()}`,
+              name: guestName,
+              avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${guestName}&backgroundColor=e5e7eb`
+          };
+      }
+      // Temporary fallback to prevent crashes before name entry
+      if (!isSignedIn && projects.length > 0) {
+           return { id: 'guest-pending', name: 'Guest', avatar: '' };
+      }
+      return null;
+  }, [currentUser, isSignedIn, guestName, projects.length]);
 
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
@@ -170,7 +195,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleLogout = async () => {
     if (isSignedIn) {
         await signOut();
-    } 
+    } else {
+        // Guest Logout
+        localStorage.removeItem('smotree_guest_name');
+        setGuestName('');
+    }
     setView({ type: 'DASHBOARD' });
     window.history.pushState({}, '', '/');
   };
@@ -180,7 +209,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const params = new URLSearchParams(window.location.search);
       const directProjectId = params.get('projectId');
 
-      const userToUse = userOverride || currentUser;
+      const userToUse = userOverride || effectiveUser; // Use effective user (Guest or Real)
       
       // ALLOW ACCESS if directProjectId exists, even if user is null
       if (!userToUse && !directProjectId) return;
@@ -209,15 +238,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
 
       try {
-        const data = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
+        // Pass null as user if using guest link to trigger public logic
+        const fetchUser = isSignedIn ? userToUse : null;
+        const data = await api.getProjects(fetchUser, token, organization?.id, directProjectId || undefined);
         setProjects(data);
       } catch (e) {
         console.error("Fetch failed", e);
       }
-  }, [currentUser, isMockMode, authMode, organization?.id, getToken]);
+  }, [effectiveUser, isSignedIn, isMockMode, authMode, organization?.id, getToken]);
 
   // Initial Fetch & Polling
-  // Trigger fetch if User logs in OR if URL has Project ID (Guest)
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const directProjectId = params.get('projectId');
@@ -234,9 +264,31 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   }, [currentUser, fetchCloudData, isMockMode]);
 
+  // --- GUEST MODAL LOGIC ---
+  useEffect(() => {
+      // If user is NOT signed in, but has loaded projects (via public link), 
+      // AND hasn't set a name yet -> Show Modal
+      const isPublicAccess = !isSignedIn && projects.length > 0;
+      if (isPublicAccess && !guestName) {
+          setIsGuestModalOpen(true);
+      } else {
+          setIsGuestModalOpen(false);
+      }
+  }, [isSignedIn, projects.length, guestName]);
+
+  const handleSetGuestName = (name: string) => {
+      if (!name.trim()) return;
+      localStorage.setItem('smotree_guest_name', name);
+      if (!localStorage.getItem('smotree_guest_id')) {
+          localStorage.setItem('smotree_guest_id', generateId());
+      }
+      setGuestName(name);
+      setIsGuestModalOpen(false);
+  };
+
   const { uploadTasks, handleUploadAsset, removeUploadTask } = useUploadManager(
-      currentUser, projects, setProjects, notify, 
-      async (p) => { await api.syncProjects(p, currentUser, null); }, 
+      effectiveUser, projects, setProjects, notify, 
+      async (p) => { await api.syncProjects(p, effectiveUser, null); }, 
       lastLocalUpdateRef, isMockMode, getToken
   );
 
@@ -247,7 +299,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       
       if (!isMockMode) {
           try {
-              await api.syncProjects([project], currentUser);
+              await api.syncProjects([project], effectiveUser);
           } catch(e) { 
               notify("Failed to sync new project", "error"); 
           }
@@ -268,13 +320,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
       lastLocalUpdateRef.current = Date.now();
       
-      if (!skipSync && !isMockMode && currentUser) {
+      if (!skipSync && !isMockMode && effectiveUser) {
           setIsSyncing(true);
           try {
-              await api.syncProjects([updatedProject], currentUser);
+              // Note: Guests usually can't save project-level changes (DB checks rights), 
+              // but can save comments (handled in Player.tsx via api.comment)
+              await api.syncProjects([updatedProject], effectiveUser);
           } catch (e) {
               console.error("Sync error", e);
-              notify("Failed to save changes", "error");
+              // Don't show error for guests if it's just a permission issue on full project sync
+              if (isSignedIn) notify("Failed to save changes", "error");
           } finally {
               setIsSyncing(false);
           }
@@ -282,7 +337,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   const renderContent = () => {
-    // If not logged in and not in a public view, show Login (Landing)
     const publicViews = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'LIVE_DEMO', 'DASHBOARD'];
     
     // GUEST ACCESS: If viewing project/player and not signed in, check if project is loaded (Public Access)
@@ -304,7 +358,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     // STATIC PAGES
     if (['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type)) {
         return (
-             <MainLayout currentUser={currentUser} currentView={view.type} onNavigate={(p) => setView({ type: p as any })} onBack={() => setView({ type: 'DASHBOARD' })}>
+             <MainLayout currentUser={effectiveUser} currentView={view.type} onNavigate={(p) => setView({ type: p as any })} onBack={() => setView({ type: 'DASHBOARD' })}>
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
                 {view.type === 'ABOUT' && <AboutPage />}
                 {view.type === 'PRICING' && <PricingPage />}
@@ -316,10 +370,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     // AUTHENTICATED VIEWS
     if (view.type === 'DASHBOARD') {
        return (
-         <MainLayout currentUser={currentUser} currentView="DASHBOARD" onNavigate={(p) => setView({ type: p as any })} onBack={() => {}}>
+         <MainLayout currentUser={effectiveUser} currentView="DASHBOARD" onNavigate={(p) => setView({ type: p as any })} onBack={() => {}}>
            <Dashboard 
              projects={projects}
-             currentUser={currentUser || { id: 'guest', name: 'Guest', avatar: '' }}
+             currentUser={effectiveUser || { id: 'guest', name: 'Guest', avatar: '' }}
              onSelectProject={(p) => { 
                  setView({ type: 'PROJECT_VIEW', projectId: p.id });
                  window.history.pushState({}, '', `?projectId=${p.id}`);
@@ -342,7 +396,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
        return (
           <ProjectView 
              project={project}
-             currentUser={currentUser || { id: 'guest', name: 'Guest', avatar: '' }}
+             currentUser={effectiveUser || { id: 'guest', name: 'Guest', avatar: '' }}
              onBack={() => {
                  setView({ type: 'DASHBOARD' });
                  window.history.pushState({}, '', '/');
@@ -372,7 +426,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             <Player 
               asset={asset}
               project={project}
-              currentUser={currentUser || { id: 'guest', name: 'Guest', avatar: '' }}
+              currentUser={effectiveUser || { id: 'guest', name: 'Guest', avatar: '' }}
               onBack={() => {
                   setView({ type: 'PROJECT_VIEW', projectId: project.id });
                   window.history.pushState({}, '', `?projectId=${project.id}`);
@@ -386,10 +440,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         );
     }
 
-    if (view.type === 'PROFILE' && currentUser) {
+    if (view.type === 'PROFILE' && effectiveUser) {
         return (
-             <MainLayout currentUser={currentUser} currentView="PROFILE" onNavigate={(p) => setView({ type: p as any })} onBack={() => setView({ type: 'DASHBOARD' })}>
-                 <Profile currentUser={currentUser} onLogout={handleLogout} />
+             <MainLayout currentUser={effectiveUser} currentView="PROFILE" onNavigate={(p) => setView({ type: p as any })} onBack={() => setView({ type: 'DASHBOARD' })}>
+                 <Profile currentUser={effectiveUser} onLogout={handleLogout} />
              </MainLayout>
         );
     }
@@ -405,6 +459,38 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             
             {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
+            {/* GUEST NAME MODAL */}
+            {isGuestModalOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative animate-in zoom-in-95">
+                        <div className="flex flex-col items-center text-center mb-6">
+                            <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-4">
+                                <UserIcon size={32} className="text-zinc-400" />
+                            </div>
+                            <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Welcome</h2>
+                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
+                                Please enter your name to join the review. This name will appear on your comments.
+                            </p>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); handleSetGuestName((e.target as any).elements.name.value); }}>
+                            <input 
+                                name="name"
+                                type="text" 
+                                autoFocus 
+                                placeholder="Your Name" 
+                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-center font-bold text-lg outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all mb-4"
+                            />
+                            <button 
+                                type="submit" 
+                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-500/20"
+                            >
+                                Continue to Review <ArrowRight size={18} />
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     </ErrorBoundary>
   );

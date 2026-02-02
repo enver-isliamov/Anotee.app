@@ -420,7 +420,25 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const startFpsDetection = () => { if (isFpsDetected) return; fpsDetectionRef.current = { frames: [], lastTime: performance.now(), active: true }; };
   useEffect(() => { let handle: number; const detectLoop = () => { if (fpsDetectionRef.current.active && isPlaying) { const now = performance.now(); const delta = now - fpsDetectionRef.current.lastTime; fpsDetectionRef.current.lastTime = now; if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta); if (fpsDetectionRef.current.frames.length > 30) { const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length; const est = 1000 / avg; const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p); setVideoFps(closest); setIsFpsDetected(true); fpsDetectionRef.current.active = false; } else { handle = requestAnimationFrame(detectLoop); } } }; if (isPlaying && !isFpsDetected) { startFpsDetection(); handle = requestAnimationFrame(detectLoop); } return () => cancelAnimationFrame(handle); }, [isPlaying, isFpsDetected]);
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => { const t = parseFloat(e.target.value); setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (compareVideoRef.current) compareVideoRef.current.currentTime = t; };
-  const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
+  
+  // --- ENHANCED VIDEO SYNC ---
+  const handleTimeUpdate = () => { 
+      if (!isScrubbing && !isVideoScrubbing && videoRef.current) { 
+          const currentT = videoRef.current.currentTime;
+          setCurrentTime(currentT); 
+          
+          if (viewMode === 'side-by-side' && compareVideoRef.current) { 
+              // Hard Sync: If drift > 0.05s, force correction
+              if (Math.abs(compareVideoRef.current.currentTime - currentT) > 0.05) { 
+                  compareVideoRef.current.currentTime = currentT; 
+              } 
+              // Sync Play State
+              if (compareVideoRef.current.paused !== videoRef.current.paused) {
+                  videoRef.current.paused ? compareVideoRef.current.pause() : compareVideoRef.current.play().catch(() => {});
+              }
+          } 
+      } 
+  };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify(t('notify.perm_attempt'), "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify(t('notify.perm_fixed'), "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify(t('notify.perm_fail'), "error"); } };
   const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
@@ -467,7 +485,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
   const handleDragMove = (e: React.PointerEvent) => { if (isDraggingControls.current) { setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y }); } };
   const handleDragEnd = (e: React.PointerEvent) => { isDraggingControls.current = false; (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
-  const seek = (delta: number) => { if (videoRef.current) { const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); videoRef.current.currentTime = t; setCurrentTime(t); } };
+  const seek = (delta: number) => { 
+      if (videoRef.current) { 
+          const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); 
+          videoRef.current.currentTime = t; 
+          if(compareVideoRef.current) compareVideoRef.current.currentTime = t;
+          setCurrentTime(t); 
+      } 
+  };
   const handleAddComment = () => { if (!newCommentText.trim()) return; const cId = generateId(); syncCommentAction('create', { id: cId, text: newCommentText, timestamp: markerInPoint !== null ? markerInPoint : currentTime, duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
   const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
   const handleResolveComment = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const c = comments.find(c => c.id === id); if (c) syncCommentAction('update', { id, status: c.status === CommentStatus.OPEN ? CommentStatus.RESOLVED : CommentStatus.OPEN }); };
@@ -484,7 +509,23 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
   const handleExport = (format: 'xml' | 'csv' | 'edl') => { let content = ''; let mime = 'text/plain'; let ext = ''; if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); setShowExportMenu(false); };
-  const handleSelectCompareVersion = (idx: number | null) => { setCompareVersionIdx(idx); if (idx !== null) setViewMode('side-by-side'); else setViewMode('single'); setShowCompareMenu(false); };
+  
+  // Comparison Logic
+  const handleSelectCompareVersion = (idx: number | null) => { 
+      setCompareVersionIdx(idx); 
+      if (idx !== null) {
+          setViewMode('side-by-side');
+          // Force sync immediately
+          setTimeout(() => {
+              if (compareVideoRef.current && videoRef.current) {
+                  compareVideoRef.current.currentTime = videoRef.current.currentTime;
+              }
+          }, 100);
+      } else {
+          setViewMode('single');
+      }
+      setShowCompareMenu(false); 
+  };
   
   // FIXED SWITCH: Reset Drive URL to force reload
   const handleSwitchVersion = (idx: number) => { 
@@ -584,20 +625,25 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                    
                    <div className="flex items-center gap-2">
                        {asset.versions.length > 1 && (
-                            <div className="relative hidden md:block">
+                            <div className="relative">
                                 <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>
                                     {compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : t('player.compare')} <ChevronDown size={10} />
                                 </button>
                                 {showCompareMenu && (
-                                    <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 py-2">
+                                    <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 py-2">
                                         <div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{t('player.compare_with')}</div>
-                                        <button onClick={() => handleSelectCompareVersion(null)} className="w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300">{t('player.single_view')}</button>
+                                        <button onClick={() => handleSelectCompareVersion(null)} className="w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 flex items-center justify-between">
+                                            <span>{t('player.single_view')}</span>
+                                            {compareVersionIdx === null && <CheckCircle size={12} className="text-indigo-500" />}
+                                        </button>
                                         <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1"></div>
-                                        {asset.versions.map((v, idx) => (idx !== currentVersionIdx && (
-                                            <button key={v.id} onClick={() => handleSelectCompareVersion(idx)} className={`w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 flex justify-between ${compareVersionIdx === idx ? 'text-indigo-600 font-bold' : 'text-zinc-600 dark:text-zinc-300'}`}>
+                                        {asset.versions.map((v, idx) => {
+                                            if (idx === currentVersionIdx) return null;
+                                            return (
+                                            <button key={v.id} onClick={() => handleSelectCompareVersion(idx)} className={`w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 flex justify-between ${compareVersionIdx === idx ? 'text-indigo-600 font-bold bg-indigo-50 dark:bg-indigo-900/10' : 'text-zinc-600 dark:text-zinc-300'}`}>
                                                 <span>Version {v.versionNumber}</span>{compareVersionIdx === idx && <CheckCircle size={12} />}
                                             </button>
-                                        )))}
+                                        )})}
                                     </div>
                                 )}
                                 {showCompareMenu && <div className="fixed inset-0 z-40" onClick={() => setShowCompareMenu(false)}></div>}
@@ -712,7 +758,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
              <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-                    {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
+                    {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">Left: v{version.versionNumber}</div>}
                     <video 
                         key={version.id} 
                         ref={videoRef} 
@@ -727,7 +773,19 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         crossOrigin="anonymous" 
                     />
                 </div>
-                {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
+                {viewMode === 'side-by-side' && compareVersion && (
+                    <div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800">
+                        <div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none border border-indigo-500/30">Right: v{compareVersion.versionNumber}</div>
+                        <video 
+                            ref={compareVideoRef} 
+                            src={compareVersion.url} 
+                            className="w-full h-full object-contain pointer-events-none" 
+                            muted 
+                            playsInline 
+                            controls={false} 
+                        />
+                    </div>
+                )}
                 <div 
                     className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`}
                     onPointerDown={handleVideoDragStart} 
