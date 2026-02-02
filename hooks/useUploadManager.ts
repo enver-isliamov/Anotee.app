@@ -3,9 +3,9 @@ import { useState, useRef } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
+import { upload } from '@vercel/blob/client';
 import { api } from '../services/apiClient';
 import { useDrive } from '../services/driveContext';
-import { useLanguage } from '../services/i18n';
 
 export const useUploadManager = (
     currentUser: User | null,
@@ -18,7 +18,6 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
-    const { t } = useLanguage();
     
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
@@ -30,18 +29,12 @@ export const useUploadManager = (
     const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
         const taskId = generateId();
         
-        // Find Project to get name
-        const project = projects.find(p => p.id === projectId);
-
-        // Initial Task State
         const newTask: UploadTask = {
             id: taskId,
             file,
-            projectName: project ? project.name : t('common.uploading'),
-            projectId: projectId,
-            targetAssetId: targetAssetId, // Track if this is a version update
+            projectName: 'Uploading...', // Placeholder
             progress: 0,
-            status: 'processing' // Start with processing to generate thumb
+            status: 'uploading'
         };
 
         setUploadTasks(prev => [...prev, newTask]);
@@ -62,28 +55,21 @@ export const useUploadManager = (
         };
 
         try {
-            // Block server polling
+            // Block server polling to prevent overwriting
             lastLocalUpdateRef.current = Date.now() + 60000; 
 
-            // 1. Generate Thumbnail IMMEDIATELY for UI feedback
-            const thumbnailDataUrl = await generateVideoThumbnail(file);
-            updateTask({ 
-                thumbnail: thumbnailDataUrl,
-                status: 'uploading'
-            });
+            // Find Project & Determine Version Number BEFORE Upload
+            const project = projects.find(p => p.id === projectId);
+            if (project) updateTask({ projectName: project.name });
 
-            // 2. Calculate Naming & Version
+            // 1. Calculate Naming & Version
             let nextVersionNumber = 1;
             
+            // Extract base name and extension
             // Remove extension
             let rawTitle = file.name.replace(/\.[^/.]+$/, "");
-            
-            // Clean specific version suffixes if present in the uploaded file (e.g. "MyVideo_v2" -> "MyVideo")
-            // This prevents "MyVideo_v2_v3.mp4"
-            let baseTitle = rawTitle.replace(/_v\d+$/, '');
-            
-            // Sanitize slightly but keep readability
-            let assetTitle = baseTitle; 
+            // Sanitize: Keep alphanumeric, spaces, dashes, underscores. Remove others to prevent FS/URL issues.
+            let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
             if (!assetTitle) assetTitle = "Video_Asset";
 
             const ext = file.name.split('.').pop();
@@ -92,23 +78,24 @@ export const useUploadManager = (
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
                 if (existingAsset) {
                     nextVersionNumber = existingAsset.versions.length + 1;
-                    // If adding to existing asset, we might want to stick to the Asset's naming convention
-                    // OR allow the new file's name to take precedence. 
-                    // Per request: "Save file name". We use the uploaded file's base name.
-                    // Actually per SETTINGS.MD: MUST use AssetTitle + index.
-                    assetTitle = existingAsset.title; // Override with existing asset title for naming consistency
+                    // NOTE: We now use the UPLOADED FILE NAME as the base for the new version filename
+                    // This allows keeping context like "Cut_v2_ColorGraded" instead of forcing "AssetTitle_v3"
                 }
-            } else {
-                // Check if an asset with this name already exists to auto-group? 
-                // For now, we create new asset.
             }
 
-            // Construct Filename: {BaseName}_v{Number}.{ext}
+            // Construct Filename: {SanitizedName}_v{Number}.{ext}
+            // If it's a fresh upload, it gets _v1. 
+            // If it's a version, it gets _vX based on count.
             const finalFileName = `${assetTitle}_v${nextVersionNumber}.${ext}`;
+
+            // 2. Generate Thumbnail
+            updateTask({ status: 'processing' });
+            const thumbnailDataUrl = await generateVideoThumbnail(file);
+            updateTask({ status: 'uploading' });
 
             let assetUrl = '';
             let googleDriveId = undefined;
-            let storageType: StorageType = 'drive';
+            let storageType: StorageType = 'vercel';
 
             // 3. Upload Process
             if (isMockMode) {
@@ -119,41 +106,60 @@ export const useUploadManager = (
                 assetUrl = URL.createObjectURL(file);
                 storageType = 'local';
             } else {
-                // Google Drive Upload Only
-                const isDriveReady = GoogleDriveService.isAuthenticated();
-                if (!isDriveReady) {
-                    throw new Error("Google Drive token missing. Please reconnect in Profile.");
-                }
-
-                const safeProjectName = project ? project.name : "Unknown Project";
-
-                try {
-                    const appFolder = await GoogleDriveService.ensureAppFolder();
-                    const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                    
-                    // Decide folder structure. 
-                    // If targetAssetId exists, find that asset title for folder.
-                    let folderName = assetTitle;
-                    if (targetAssetId && project) {
-                            const existingAsset = project.assets.find(a => a.id === targetAssetId);
-                            if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+                if (useDrive) {
+                    const isDriveReady = GoogleDriveService.isAuthenticated();
+                    if (!isDriveReady) {
+                        throw new Error("Google Drive token missing. Please reconnect in Profile.");
                     }
 
-                    const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
+                    const safeProjectName = project ? project.name : "Unknown Project";
 
-                    const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
-                    googleDriveId = result.id;
-                    storageType = 'drive';
-                    
-                    await GoogleDriveService.makeFilePublic(result.id);
-                    // Use standard UC link for URL immediately
-                    assetUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${result.id}`;
+                    try {
+                        const appFolder = await GoogleDriveService.ensureAppFolder();
+                        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+                        // For assets, we might want to group by Asset Title folder, but if we change names, 
+                        // flat project folder or asset-specific folder is fine. 
+                        // To keep it clean, we'll use the Asset Title from the *Asset Object* if updating, or new name if new.
+                        // But finding the "Asset Folder" by name is tricky if we rename things. 
+                        // For now, let's create/find folder based on the *Target Asset Title* if it exists, or the new file name.
+                        
+                        let folderName = assetTitle;
+                        if (targetAssetId && project) {
+                             const existingAsset = project.assets.find(a => a.id === targetAssetId);
+                             if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+                        }
 
-                } catch (driveErr: any) {
-                    if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
-                            throw new Error("Drive Session Expired. Please refresh page/reconnect.");
+                        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
+
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
+                        googleDriveId = result.id;
+                        storageType = 'drive';
+                        
+                        // CRITICAL: Ensure Permissions are Public immediately after upload
+                        // This prevents "Access Denied" when the player tries to load it via 'uc' link
+                        await GoogleDriveService.makeFilePublic(result.id);
+
+                    } catch (driveErr: any) {
+                        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
+                             throw new Error("Drive Session Expired. Please refresh page/reconnect.");
+                        }
+                        throw driveErr;
                     }
-                    throw driveErr;
+                } else {
+                    // Vercel Blob
+                    const token = await getToken();
+                    if (!token) throw new Error("Authentication missing. Please login again.");
+
+                    const newBlob = await upload(file.name, file, {
+                        access: 'public',
+                        handleUploadUrl: '/api/upload',
+                        clientPayload: JSON.stringify({ 
+                            token: token, 
+                            projectId: projectId 
+                        }),
+                        onUploadProgress: (p) => updateProgress(Math.round((p.loaded / p.total) * 100))
+                    });
+                    assetUrl = newBlob.url;
                 }
             }
 
@@ -193,7 +199,7 @@ export const useUploadManager = (
                 // New Asset
                 const newAsset: ProjectAsset = {
                     id: generateId(),
-                    title: assetTitle, // Use cleaned name as title
+                    title: assetTitle, // Use the sanitized name as title
                     thumbnail: thumbnailDataUrl,
                     currentVersionIndex: 0,
                     versions: [newVersion]
@@ -216,16 +222,22 @@ export const useUploadManager = (
                 // Send to Server
                 await forceSync([updatedProject]);
                 
-                // Keep the success task briefly then remove
                 updateTask({ status: 'done', progress: 100 });
-                setTimeout(() => removeUploadTask(taskId), 2000); // Auto remove after 2s
-                
-                notify(t('notify.upload_complete'), "success");
+                notify("Upload completed", "success");
 
             } catch (syncError) {
                 console.error("Sync failed during upload finalization", syncError);
-                // Rollback not needed for Drive usually as it's separate system, 
-                // but local state might be out of sync.
+                
+                // Rollback Blob if sync failed (to avoid orphans)
+                if (!isMockMode && storageType === 'vercel' && assetUrl) {
+                    try {
+                        console.log("Rolling back orphaned blob:", assetUrl);
+                        await api.deleteAssets([assetUrl], projectId);
+                    } catch(delErr) {
+                        console.error("Failed to rollback blob", delErr);
+                    }
+                }
+                
                 setProjects(projects); 
                 throw new Error("Failed to save project data. Upload cancelled.");
             }
@@ -233,7 +245,7 @@ export const useUploadManager = (
         } catch (e: any) {
             console.error("Upload failed", e);
             updateTask({ status: 'error', error: e.message || "Upload Failed" });
-            notify(`${t('notify.upload_fail')}: ${e.message}`, "error");
+            notify(`Upload failed: ${e.message}`, "error");
             lastLocalUpdateRef.current = Date.now(); 
         }
     };

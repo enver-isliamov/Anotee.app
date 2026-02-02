@@ -18,17 +18,13 @@ export default async function handler(req, res) {
       const requireEmail = true; 
       const user = await verifyUser(req, requireEmail);
       
-      const { projectId } = req.query;
-      const isPublicReadCheck = req.method === 'GET' && projectId;
-
-      // SECURITY: If no user, block request UNLESS it is a specific GET request for a project (Public Link Check)
-      if (!user && !isPublicReadCheck) {
+      if (!user) {
           return res.status(401).json({ error: "Unauthorized" });
       }
 
       // --- DELETE: Remove Project Row ---
       if (req.method === 'DELETE') {
-          if (!user) return res.status(401).json({ error: "Unauthorized" }); // Double check for write ops
+          const { projectId } = req.query;
           if (!projectId) return res.status(400).json({ error: "Missing projectId" });
 
           const { rows } = await sql`SELECT owner_id, org_id, data FROM projects WHERE id = ${projectId}`;
@@ -79,12 +75,9 @@ export default async function handler(req, res) {
                   
                   // Public Access Check
                   let hasAccess = false;
-                  
                   if (projectData.publicAccess === 'view') {
                       hasAccess = true;
                   } else {
-                      // If private, User MUST be present
-                      if (!user) return res.status(401).json({ error: "Unauthorized: Private Project" });
                       hasAccess = await checkProjectAccess(user, projectRow);
                   }
 
@@ -92,8 +85,9 @@ export default async function handler(req, res) {
                       query = [projectRow];
 
                       // --- AUTO-JOIN LOGIC ---
-                      // Only run if we have a logged-in user
-                      if (user && !projectRow.org_id) { 
+                      // If user accessed via link (Public) or Email Invite, but is not fully in DB 'team' array with ID, add them.
+                      // This ensures the project appears in their Dashboard later.
+                      if (!projectRow.org_id) { // Only for Personal projects (Orgs use Clerk members)
                           const currentTeam = projectData.team || [];
                           const alreadyInTeamById = currentTeam.some(m => m.id === user.id);
                           
@@ -140,14 +134,13 @@ export default async function handler(req, res) {
                           }
                       }
                   } else {
-                      return res.status(403).json({ error: "Forbidden" });
+                      query = [];
                   }
               } else {
-                  return res.status(404).json({ error: "Project not found" });
+                  query = [];
               }
 
           } else if (targetOrgId) {
-              if (!user) return res.status(401).json({ error: "Unauthorized" });
               // --- ORG LIST FETCH ---
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
@@ -156,7 +149,6 @@ export default async function handler(req, res) {
               `;
               query = rows;
           } else {
-              if (!user) return res.status(401).json({ error: "Unauthorized" });
               // --- PERSONAL WORKSPACE FETCH ---
               // Uses user.email to match "Shared with Me" projects via invites
               const userEmail = user.email || null;
@@ -199,9 +191,6 @@ export default async function handler(req, res) {
         }
       } 
       
-      // --- WRITE OPS REQUIRE USER ---
-      if (!user) return res.status(401).json({ error: "Unauthorized" });
-
       // --- PATCH: Partial Updates ---
       if (req.method === 'PATCH') {
           const { projectId, updates, _version } = req.body;

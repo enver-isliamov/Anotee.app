@@ -80,7 +80,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   });
   
   const sectionTitle = activeOrgId 
-    ? (organization?.name || 'Organization') + ' ' + t('dash.org_projects') 
+    ? (organization?.name || 'Organization') + ' Projects' 
     : t('dash.my_projects');
 
   // PERMISSION CHECKS (Project Level)
@@ -140,7 +140,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       try {
           // Attempt to rename Drive Folder if name changed
           if (editingProject.name !== editName && GoogleDriveService.isAuthenticated()) {
-              notify(t('notify.sync_drive'), "info");
+              notify("Syncing name change to Google Drive...", "info");
               await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
           }
 
@@ -166,12 +166,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               });
           }
           
-          notify(t('notify.proj_updated'), "success");
+          notify("Project updated", "success");
       } catch (err: any) {
           if (err.code === 'CONFLICT') {
-             notify(t('notify.conflict'), "error");
+             notify("Conflict detected! Someone modified this project. Please refresh.", "error");
           } else {
-             notify(t('notify.update_fail'), "error");
+             notify("Failed to update project", "error");
              console.error(err);
           }
       } finally {
@@ -187,7 +187,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               await api.patchProject(project.id, { isLocked: !project.isLocked }, project._version || 0);
           }
           onEditProject(project.id, { isLocked: !project.isLocked });
-      } catch(e) { notify(t('notify.lock_fail'), "error"); }
+      } catch(e) { notify("Failed to toggle lock", "error"); }
   };
 
   const handleShareClick = (e: React.MouseEvent, project: Project) => {
@@ -217,11 +217,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       setIsDeleting(project.id);
       
       try {
-          // Note: We no longer delete Vercel Blobs here since that storage is deprecated.
-          // Google Drive files are left intact unless deleted manually or via asset-level delete in ProjectView (if implemented).
-          // We only clean up the database row.
+          // 1. Delete Assets (Blobs)
+          const urlsToDelete: string[] = [];
+          project.assets.forEach(asset => {
+              asset.versions.forEach(v => {
+                  if (v.url.startsWith('http')) {
+                      urlsToDelete.push(v.url);
+                  }
+              });
+          });
 
-          // Delete Project Row (DB)
+          if (!isMockMode && urlsToDelete.length > 0) {
+              await api.deleteAssets(urlsToDelete, project.id);
+          }
+
+          // 2. Delete Project Row (DB)
           if (!isMockMode) {
               const res = await fetch(`/api/data?projectId=${project.id}`, {
                   method: 'DELETE',
@@ -235,10 +245,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           }
 
           onDeleteProject(project.id);
-          notify(t('notify.proj_deleted'), "success");
+          notify("Project deleted successfully", "success");
       } catch(e) {
           console.error("Delete failed", e);
-          notify(t('notify.delete_fail'), "error");
+          notify("Failed to delete project completely", "error");
       } finally {
           setIsDeleting(null);
       }
@@ -254,8 +264,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <Layout size={24} />
                   </div>
                   <div>
-                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{t('dash.onboard.title')}</h3>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('dash.onboard.subtitle')}</p>
+                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with SmoTree</h3>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Follow these steps to set up your first review workflow.</p>
                   </div>
               </div>
 
@@ -266,15 +276,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-indigo-600 shadow-sm">
                           <Plus size={20} />
                       </div>
-                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">{t('dash.onboard.step1')}</h4>
+                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">Create Project</h4>
                       <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed">
-                          {t('dash.onboard.step1_desc')}
+                          Initialize a workspace for your media assets and team collaboration.
                       </p>
                       <button 
                           onClick={() => setIsModalOpen(true)}
                           className="mt-auto w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"
                       >
-                          {t('dash.onboard.step1_btn')} <ArrowRight size={12} />
+                          Start Here <ArrowRight size={12} />
                       </button>
                   </div>
 
@@ -284,12 +294,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
                           <Upload size={20} />
                       </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">{t('dash.onboard.step2')}</h4>
+                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Upload Media</h4>
                       <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          {t('dash.onboard.step2_desc')}
+                          Drag & drop video files. We automatically generate proxies for smooth playback.
                       </p>
                       <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          {t('dash.onboard.step2_wait')}
+                          Waiting for Project...
                       </div>
                   </div>
 
@@ -299,12 +309,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
                           <Share2 size={20} />
                       </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">{t('dash.onboard.step3')}</h4>
+                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Invite Team</h4>
                       <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          {t('dash.onboard.step3_desc')}
+                          Share a secure link with clients or editors for frame-accurate feedback.
                       </p>
                       <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          {t('dash.onboard.step3_wait')}
+                          Waiting for Upload...
                       </div>
                   </div>
               </div>
@@ -384,7 +394,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                                 {project.name}
                             </h3>
                             <p className="text-xs text-zinc-500 mb-4 line-clamp-2 leading-relaxed">
-                                {project.description || t('dash.no_desc')}
+                                {project.description || 'No description provided.'}
                             </p>
 
                             <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
@@ -464,7 +474,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       );
   };
 
-  // ... (rest of the file remains the same)
   return (
     <>
       <div className="flex justify-between items-center mb-8">
@@ -497,7 +506,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           activeOrgId ? <Building2 size={18} className="text-indigo-500"/> : <UserIcon size={18} className="text-indigo-500"/>
       )}
       
-      {/* ... (Upsell Block) ... */}
+      {/* UPSELL BLOCK */}
       <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
           <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-50 dark:from-indigo-900/10 to-transparent pointer-events-none"></div>
           
@@ -543,7 +552,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           </div>
       </div>
 
-      {/* CREATE MODAL ... (Existing code) */}
+      {/* CREATE MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -560,18 +569,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               {activeOrgId && (
                   <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 rounded-lg flex items-center gap-2 text-xs text-indigo-700 dark:text-indigo-300">
                       <Building2 size={16} />
-                      {t('dash.creating_in')} <strong>{organization?.name}</strong>
+                      Creating in <strong>{organization?.name}</strong>
                   </div>
               )}
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.name')}</label>
-                  <input autoFocus type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder={t('dash.placeholder.name')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
+                  <input autoFocus type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Summer Campaign 2024" className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.client')}</label>
-                  <input type="text" required value={client} onChange={(e) => setClient(e.target.value)} placeholder={t('dash.placeholder.client')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
+                  <input type="text" required value={client} onChange={(e) => setClient(e.target.value)} placeholder="e.g. Acme Corp" className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.desc')}</label>
@@ -587,7 +596,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
         </div>
       )}
 
-      {/* EDIT MODAL ... (Existing code) */}
+      {/* EDIT MODAL */}
       {editingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -619,7 +628,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           </div>
       )}
 
-      {/* SHARE MODAL ... (Existing code) */}
+      {/* SHARE MODAL */}
       {sharingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200 p-6">

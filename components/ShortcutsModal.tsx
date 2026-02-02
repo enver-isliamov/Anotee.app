@@ -1,41 +1,38 @@
 
 import React from 'react';
 import { X, Keyboard, Command } from 'lucide-react';
-import { useLanguage } from '../services/i18n';
 
 interface Props {
   onClose: () => void;
 }
 
 export const ShortcutsModal: React.FC<Props> = ({ onClose }) => {
-  const { t } = useLanguage();
-
   const sections = [
     {
-      title: t('shortcuts.player'),
+      title: 'Player Controls',
       items: [
-        { keys: ['Space'], desc: t('shortcuts.play') },
-        { keys: ['J'], desc: t('shortcuts.rewind') },
+        { keys: ['Space'], desc: 'Play / Pause' },
+        { keys: ['J'], desc: 'Rewind 10s (Double speed)' },
         { keys: ['K'], desc: 'Pause' },
-        { keys: ['L'], desc: t('shortcuts.forward') },
-        { keys: ['←', '→'], desc: t('shortcuts.frame') },
-        { keys: ['F'], desc: t('shortcuts.fullscreen') },
+        { keys: ['L'], desc: 'Forward 10s (Double speed)' },
+        { keys: ['←', '→'], desc: 'Frame Step' },
+        { keys: ['F'], desc: 'Toggle Fullscreen' },
       ]
     },
     {
-      title: t('shortcuts.markers'),
+      title: 'Markers & Comments',
       items: [
-        { keys: ['M'], desc: t('shortcuts.marker') },
-        { keys: ['I'], desc: t('shortcuts.in') },
-        { keys: ['O'], desc: t('shortcuts.out') },
-        { keys: ['Enter'], desc: t('shortcuts.save') },
-        { keys: ['Esc'], desc: t('shortcuts.cancel') },
+        { keys: ['M'], desc: 'Quick Marker (Add Comment)' },
+        { keys: ['I'], desc: 'Set In Point' },
+        { keys: ['O'], desc: 'Set Out Point' },
+        { keys: ['Enter'], desc: 'Save Comment' },
+        { keys: ['Esc'], desc: 'Cancel / Close Modal' },
       ]
     },
     {
-      title: t('shortcuts.general'),
+      title: 'General',
       items: [
-        { keys: ['?'], desc: t('shortcuts.show') },
+        { keys: ['?'], desc: 'Show Shortcuts' },
       ]
     }
   ];
@@ -53,8 +50,8 @@ export const ShortcutsModal: React.FC<Props> = ({ onClose }) => {
                     <Keyboard size={20} />
                 </div>
                 <div>
-                    <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{t('shortcuts.title')}</h2>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('shortcuts.subtitle')}</p>
+                    <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Keyboard Shortcuts</h2>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Master the workflow</p>
                 </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors">
@@ -93,7 +90,7 @@ export const ShortcutsModal: React.FC<Props> = ({ onClose }) => {
 
         {/* Footer */}
         <div className="bg-zinc-50 dark:bg-zinc-950 px-6 py-3 text-center border-t border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400">
-            {t('shortcuts.tip')}
+            Pro Tip: Use <span className="font-mono bg-zinc-200 dark:bg-zinc-800 px-1 rounded mx-0.5 text-zinc-600 dark:text-zinc-300">Space</span> to play/pause quickly while reviewing.
         </div>
       </div>
     </div>

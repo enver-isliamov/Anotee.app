@@ -10,13 +10,13 @@ import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId } from './services/utils';
-import { LanguageProvider, LanguageCloudSync, useLanguage } from './services/i18n';
+import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
-import { useUser, useClerk, useAuth, ClerkProvider, useOrganization } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
-import { Loader2, User as UserIcon, ArrowRight } from 'lucide-react';
+import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
@@ -36,6 +36,54 @@ type ViewState =
 // INCREASED TO 20s to prevent Rate Limiting on full Auth checks
 const POLLING_INTERVAL_MS = 20000;
 
+// --- GLOBAL UPLOAD WIDGET COMPONENT ---
+const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
+    if (tasks.length === 0) return null;
+
+    return (
+        <div className="fixed bottom-4 right-4 z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300">
+            <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700">
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
+                    <UploadCloud size={14} /> Uploads ({tasks.length})
+                </span>
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+                {tasks.map(task => (
+                    <div key={task.id} className="p-3 border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 relative">
+                        <div className="flex justify-between items-start mb-1">
+                            <div className="truncate pr-4">
+                                <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate" title={task.file.name}>{task.file.name}</div>
+                                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">in {task.projectName}</div>
+                            </div>
+                            <div className="shrink-0">
+                                {task.status === 'done' && <CheckCircle size={14} className="text-green-500" />}
+                                {task.status === 'error' && <AlertCircle size={14} className="text-red-500" />}
+                                {task.status === 'uploading' && <span className="text-[10px] font-mono font-bold text-indigo-500">{task.progress}%</span>}
+                                {(task.status === 'done' || task.status === 'error') && (
+                                    <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        {task.status === 'uploading' && (
+                            <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1 mt-1 overflow-hidden">
+                                <div className="bg-indigo-500 h-full transition-all duration-300" style={{ width: `${task.progress}%` }}></div>
+                            </div>
+                        )}
+                        {task.status === 'processing' && (
+                            <div className="flex items-center gap-1 text-[10px] text-indigo-500 mt-1">
+                                <Loader2 size={10} className="animate-spin" /> Processing...
+                            </div>
+                        )}
+                        {task.status === 'error' && <div className="text-[10px] text-red-500 mt-1">{task.error}</div>}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 interface AppLayoutProps {
     clerkUser: any | null;
     isLoaded: boolean;
@@ -49,13 +97,7 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization }) => {
   const isMockMode = authMode === 'mock';
-  const { t } = useLanguage();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
-  // GUEST STATE
-  const [guestName, setGuestName] = useState(() => localStorage.getItem('smotree_guest_name') || '');
-  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
-
   const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
@@ -70,26 +112,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   
   // Track last known server data timestamp to minimize fetching
   const lastServerTimestampRef = useRef<number>(0);
-
-  // COMPUTED USER (Real or Guest)
-  const effectiveUser: User | null = React.useMemo(() => {
-      if (currentUser) return currentUser;
-      
-      // If we are in public mode (projects loaded) but no login, return Guest User
-      // Only if guestName is set, otherwise we might return a temp placeholder or null
-      if (!isSignedIn && guestName) {
-          return {
-              id: `guest-${guestName.replace(/\s+/g, '-').toLowerCase()}-${localStorage.getItem('smotree_guest_id') || generateId()}`,
-              name: guestName,
-              avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${guestName}&backgroundColor=e5e7eb`
-          };
-      }
-      // Temporary fallback to prevent crashes before name entry
-      if (!isSignedIn && projects.length > 0) {
-           return { id: 'guest-pending', name: 'Guest', avatar: '' };
-      }
-      return null;
-  }, [currentUser, isSignedIn, guestName, projects.length]);
 
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
@@ -112,15 +134,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         } else if (pId) {
             setView({ type: 'PROJECT_VIEW', projectId: pId });
         } else {
+            // Check for other static routes based on some other logic if needed, 
+            // but for now default to Dashboard
+            // NOTE: Ideally we'd have a router, but this suffices for the requirements
             setView({ type: 'DASHBOARD' });
         }
     };
 
     window.addEventListener('popstate', handlePopState);
-    handlePopState(); // Initial check
+    
+    // Initial Load Logic handled in a separate Effect below, 
+    // but we can trigger it here if needed.
     
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
 
   // --- PREVENT BROWSER DEFAULT DRAG DROP & GLOBAL SHORTCUTS ---
   useEffect(() => {
@@ -177,6 +205,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 
                 if (res.ok) {
                     const data = await res.json();
+                    // Update context directly instead of event
                     checkDriveConnection();
                     return data.token; 
                 } else {
@@ -195,24 +224,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleLogout = async () => {
     if (isSignedIn) {
         await signOut();
-    } else {
-        // Guest Logout
-        localStorage.removeItem('smotree_guest_name');
-        setGuestName('');
-    }
+    } 
     setView({ type: 'DASHBOARD' });
     window.history.pushState({}, '', '/');
   };
 
   const fetchCloudData = useCallback(async (userOverride?: User, force = false) => {
-      // Check URL parameters for direct link access
-      const params = new URLSearchParams(window.location.search);
-      const directProjectId = params.get('projectId');
-
-      const userToUse = userOverride || effectiveUser; // Use effective user (Guest or Real)
-      
-      // ALLOW ACCESS if directProjectId exists, even if user is null
-      if (!userToUse && !directProjectId) return;
+      const userToUse = userOverride || currentUser;
+      if (!userToUse) return;
       
       // Don't fetch if we just modified data locally to prevent flickering
       if (Date.now() - lastLocalUpdateRef.current < 2000) {
@@ -224,334 +243,481 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           try { token = await getToken(); } catch (e) {}
       }
 
+      // Check URL parameters for direct link access
+      const params = new URLSearchParams(window.location.search);
+      const directProjectId = params.get('projectId');
+
       // OPTIMIZATION: Check if we need to fetch full data
+      // If we are just polling (not forced), check the lightweight timestamp first
       if (!force && !directProjectId && !isMockMode) {
           try {
               const lastModified = await api.checkUpdates(organization?.id);
               if (lastModified > 0 && lastModified <= lastServerTimestampRef.current) {
+                  // No changes since last fetch
                   return;
               }
+              // If changed, update ref and proceed to fetch full JSON
               if (lastModified > 0) lastServerTimestampRef.current = lastModified;
-          } catch (e) {
-             console.warn("Polling check failed", e);
+          } catch(e) {
+              console.warn("Failed update check, falling back to full fetch");
           }
       }
 
       try {
-        // Pass null as user if using guest link to trigger public logic
-        const fetchUser = isSignedIn ? userToUse : null;
-        const data = await api.getProjects(fetchUser, token, organization?.id, directProjectId || undefined);
-        setProjects(data);
+         setIsSyncing(true);
+         // Pass explicit project ID to fetch it even if it's public/not in my list
+         const serverData = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
+         
+         if (serverData && Array.isArray(serverData)) {
+            setProjects(currentLocalProjects => {
+                // 1. Comparison Hash to avoid unnecessary re-renders
+                const prevHash = currentLocalProjects.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+                const newHash = serverData.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+                
+                // If versions match exactly, do nothing
+                if (prevHash === newHash && currentLocalProjects.length === serverData.length) {
+                    return currentLocalProjects;
+                }
+
+                // 2. SMART MERGE: Preserve Local Files & Cleanup Ghosts
+                const mergedProjects = serverData.map(serverProj => {
+                    const localProj = currentLocalProjects.find(p => p.id === serverProj.id);
+                    
+                    if (localProj) {
+                        // Deep merge assets/versions to keep localFileUrl
+                        const mergedAssets = serverProj.assets.map(serverAsset => {
+                            const localAsset = localProj.assets.find(a => a.id === serverAsset.id);
+                            if (!localAsset) return serverAsset;
+
+                            const mergedVersions = serverAsset.versions.map(serverVer => {
+                                const localVer = localAsset.versions.find(v => v.id === serverVer.id);
+                                if (localVer && localVer.localFileUrl) {
+                                    // CLEANUP: If not in mock mode, invalidate blob URLs on reload
+                                    if (!isMockMode && localVer.localFileUrl.startsWith('blob:')) {
+                                        return serverVer; // Drop the blob reference
+                                    }
+                                    // RESTORE LOCAL REFERENCE (Only if valid)
+                                    return {
+                                        ...serverVer,
+                                        localFileUrl: localVer.localFileUrl,
+                                        localFileName: localVer.localFileName
+                                    };
+                                }
+                                return serverVer;
+                            });
+
+                            return { ...serverAsset, versions: mergedVersions };
+                        });
+                        return { ...serverProj, assets: mergedAssets };
+                    }
+                    return serverProj;
+                });
+
+                return mergedProjects;
+            });
+         }
       } catch (e) {
-        console.error("Fetch failed", e);
+         console.error("Fetch failed", e);
+      } finally {
+         setIsSyncing(false);
       }
-  }, [effectiveUser, isSignedIn, isMockMode, authMode, organization?.id, getToken]);
+  }, [currentUser, getToken, authMode, organization, isMockMode]);
 
-  // Initial Fetch & Polling
-  useEffect(() => {
-      const params = new URLSearchParams(window.location.search);
-      const directProjectId = params.get('projectId');
+  // OPTIMIZED SYNC: Now accepts a single Project or Array
+  const forceSync = async (projectsData: Project[]) => {
+      if (!currentUser) return;
+      
+      lastLocalUpdateRef.current = Date.now();
 
-      if (currentUser || directProjectId) {
-          fetchCloudData(currentUser || undefined, true);
+      let token: string | null = null;
+      if (authMode === 'clerk') try { token = await getToken(); } catch(e) {}
+
+      try {
+          setIsSyncing(true);
+          // Only send the modified project(s) to server
+          const updates = await api.syncProjects(projectsData, currentUser, token);
           
-          if (!isMockMode) {
-              const interval = setInterval(() => fetchCloudData(), POLLING_INTERVAL_MS);
-              return () => clearInterval(interval);
+          if (updates && updates.length > 0) {
+              setProjects(current => current.map(p => {
+                  const update = updates.find((u: any) => u.id === p.id);
+                  if (update) {
+                      return { ...p, _version: update._version };
+                  }
+                  return p;
+              }));
+              // Update our local timestamp ref so next poll doesn't refetch our own changes
+              lastServerTimestampRef.current = Date.now();
           }
-      } else {
-          setProjects([]);
+      } catch (e: any) {
+          console.error("Sync failed", e);
+          
+          if (e.code === 'CONFLICT') {
+              notify("Conflict detected. Reloading...", "warning");
+              lastLocalUpdateRef.current = 0; // Allow immediate poll
+              fetchCloudData(undefined, true); 
+          } else {
+              notify("Failed to save changes. Check internet.", "error");
+          }
+      } finally {
+          setIsSyncing(false);
       }
-  }, [currentUser, fetchCloudData, isMockMode]);
-
-  // --- GUEST MODAL LOGIC ---
-  useEffect(() => {
-      // If user is NOT signed in, but has loaded projects (via public link), 
-      // AND hasn't set a name yet -> Show Modal
-      const isPublicAccess = !isSignedIn && projects.length > 0;
-      if (isPublicAccess && !guestName) {
-          setIsGuestModalOpen(true);
-      } else {
-          setIsGuestModalOpen(false);
-      }
-  }, [isSignedIn, projects.length, guestName]);
-
-  const handleSetGuestName = (name: string) => {
-      if (!name.trim()) return;
-      localStorage.setItem('smotree_guest_name', name);
-      if (!localStorage.getItem('smotree_guest_id')) {
-          localStorage.setItem('smotree_guest_id', generateId());
-      }
-      setGuestName(name);
-      setIsGuestModalOpen(false);
   };
 
+  // --- USE UPLOAD MANAGER HOOK ---
   const { uploadTasks, handleUploadAsset, removeUploadTask } = useUploadManager(
-      effectiveUser, projects, setProjects, notify, 
-      async (p) => { await api.syncProjects(p, effectiveUser, null); }, 
-      lastLocalUpdateRef, isMockMode, getToken
+      currentUser,
+      projects,
+      setProjects,
+      notify,
+      forceSync,
+      lastLocalUpdateRef,
+      isMockMode,
+      getToken // Pass auth method
   );
 
-  // --- ACTIONS ---
-  const handleAddProject = async (project: Project) => {
-      setProjects(prev => [project, ...prev]);
-      notify(t('notify.proj_created'), "success");
+  useEffect(() => {
+    if (!currentUser) return; 
+    // Initial fetch always forced
+    fetchCloudData(undefined, true);
+  }, [currentUser, fetchCloudData]);
+
+  useEffect(() => {
+    if (!currentUser || isMockMode) return;
+    const shouldPoll = ['DASHBOARD', 'PROJECT_VIEW', 'PLAYER'].includes(view.type);
+    if (!shouldPoll) return;
+
+    const interval = setInterval(() => {
+        if (isSyncing) return;
+        fetchCloudData();
+    }, POLLING_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
+
+  // Initial Route Check (Sync state with URL on load)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const pId = params.get('projectId');
+    const aId = params.get('assetId');
+
+    if (pId) {
+      // Find in existing or loaded projects (Note: projects might be empty on first render)
+      // This logic relies on fetchCloudData populating `projects`.
+      // The view switching logic needs to be robust enough to handle "Loading" state or just set view ID.
+      if (aId) {
+           setView({ type: 'PLAYER', projectId: pId, assetId: aId });
+      } else {
+           setView({ type: 'PROJECT_VIEW', projectId: pId });
+      }
+    }
+  }, [currentUser]); 
+
+  const handleSelectProject = (project: Project) => {
+    setView({ type: 'PROJECT_VIEW', projectId: project.id });
+    const newUrl = `/?projectId=${project.id}`;
+    window.history.pushState({ path: newUrl }, '', newUrl);
+  };
+
+  const handleSelectAsset = (asset: ProjectAsset) => {
+    if (view.type === 'PROJECT_VIEW') {
+      setView({ type: 'PLAYER', assetId: asset.id, projectId: view.projectId, restrictedAssetId: view.restrictedAssetId });
+      const newUrl = `/?projectId=${view.projectId}&assetId=${asset.id}`;
+      window.history.pushState({ path: newUrl }, '', newUrl);
+    }
+  };
+
+  const handleBackToDashboard = () => {
+    setView({ type: 'DASHBOARD' });
+    window.history.pushState({}, '', '/');
+  };
+
+  const handleBackToProject = () => {
+    if (view.type === 'PLAYER') {
+      setView({ type: 'PROJECT_VIEW', projectId: view.projectId, restrictedAssetId: view.restrictedAssetId });
+      const newUrl = `/?projectId=${view.projectId}`;
+      window.history.pushState({ path: newUrl }, '', newUrl);
+    }
+  };
+
+  const handleUpdateProject = (updatedProject: Project, skipSync = false) => {
+    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+    if (!skipSync) {
+        // OPTIMIZATION: Only sync the specific project that changed
+        forceSync([updatedProject]);
+    }
+  };
+  
+  const handleEditProject = (projectId: string, data: Partial<Project>) => {
+      const updated = projects.map(p => p.id === projectId ? { ...p, ...data, updatedAt: 'Just now' } : p);
+      setProjects(updated);
       
-      if (!isMockMode) {
-          try {
-              await api.syncProjects([project], effectiveUser);
-          } catch(e) { 
-              notify("Failed to sync new project", "error"); 
-          }
+      const targetProject = updated.find(p => p.id === projectId);
+      if (targetProject) forceSync([targetProject]);
+      
+      notify("Project updated", "success");
+  };
+
+  const handleAddProject = (newProject: Project) => {
+    const projectWithVersion = { ...newProject, _version: 0 };
+    const newProjects = [projectWithVersion, ...projects];
+    setProjects(newProjects);
+    notify("Project created successfully", "success");
+    // OPTIMIZATION: Only sync the new project
+    forceSync([projectWithVersion]);
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      notify("Project deleted", "info");
+      
+      if ((view.type === 'PROJECT_VIEW' || view.type === 'PLAYER') && view.projectId === projectId) {
+          handleBackToDashboard();
+      }
+  };
+  
+  const handleNavigate = (page: string) => {
+      // Clear URL params for static pages
+      window.history.pushState({}, '', '/');
+      switch(page) {
+          case 'WORKFLOW': setView({ type: 'WORKFLOW' }); break;
+          case 'ABOUT': setView({ type: 'ABOUT' }); break;
+          case 'PRICING': setView({ type: 'PRICING' }); break;
+          case 'PROFILE': setView({ type: 'PROFILE' }); break;
+          case 'AI_FEATURES': setView({ type: 'AI_FEATURES' }); break;
+          case 'LIVE_DEMO': setView({ type: 'LIVE_DEMO' }); break;
+          case 'DASHBOARD': setView({ type: 'DASHBOARD' }); break;
+          default: setView({ type: 'DASHBOARD' });
       }
   };
 
-  const handleDeleteProject = (id: string) => {
-      setProjects(prev => prev.filter(p => p.id !== id));
-      // Dashboard component handles API call
-  };
+  if (!isLoaded) {
+      return (
+          <div className="h-screen w-screen bg-zinc-950 flex items-center justify-center">
+              <Loader2 size={32} className="text-indigo-500 animate-spin" />
+          </div>
+      );
+  }
 
-  const handleEditProject = (id: string, updates: Partial<Project>) => {
-      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-      // Dashboard component handles API call
-  };
+  if (view.type === 'LIVE_DEMO') {
+      return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
+  }
 
-  const handleUpdateProject = async (updatedProject: Project, skipSync = false) => {
-      setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-      lastLocalUpdateRef.current = Date.now();
-      
-      if (!skipSync && !isMockMode && effectiveUser) {
-          setIsSyncing(true);
-          try {
-              // Note: Guests usually can't save project-level changes (DB checks rights), 
-              // but can save comments (handled in Player.tsx via api.comment)
-              await api.syncProjects([updatedProject], effectiveUser);
-          } catch (e) {
-              console.error("Sync error", e);
-              // Don't show error for guests if it's just a permission issue on full project sync
-              if (isSignedIn) notify("Failed to save changes", "error");
-          } finally {
-              setIsSyncing(false);
-          }
+  const currentProject = (view.type === 'PROJECT_VIEW' || view.type === 'PLAYER') ? projects.find(p => p.id === view.projectId) : null;
+  const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
+
+  if (!currentUser) {
+      const isPublicView = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
+      if (isPublicView) {
+          return (
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
+                <MainLayout 
+                    currentUser={null} 
+                    currentView={view.type} 
+                    onNavigate={handleNavigate}
+                    onBack={handleBackToDashboard}
+                >
+                    {view.type === 'WORKFLOW' && <WorkflowPage />}
+                    {view.type === 'ABOUT' && <AboutPage />}
+                    {view.type === 'PRICING' && <PricingPage />}
+                    {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
+                </MainLayout>
+                <ToastContainer toasts={toasts} removeToast={removeToast} />
+                {isMockMode && (
+                    <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm">
+                        PREVIEW MODE: No Backend (Data saved to LocalStorage)
+                    </div>
+                )}
+            </div>
+          );
       }
-  };
+      return (
+        <>
+            <Login 
+                onLogin={() => {}} 
+                onNavigate={handleNavigate} 
+            />
+            {isMockMode && (
+                <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100]">
+                    PREVIEW MODE: Login to test
+                </div>
+            )}
+        </>
+      );
+  }
 
-  const renderContent = () => {
-    const publicViews = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'LIVE_DEMO', 'DASHBOARD'];
-    
-    // GUEST ACCESS: If viewing project/player and not signed in, check if project is loaded (Public Access)
-    const isPublicProjectView = (view.type === 'PROJECT_VIEW' || view.type === 'PLAYER') && projects.length > 0;
+  const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
 
-    if (!isSignedIn && !isMockMode && !publicViews.includes(view.type) && !isPublicProjectView) {
-        return <Login onLogin={() => {}} onNavigate={(page) => setView({ type: page as any })} />;
-    }
-
-    if (!isSignedIn && !isMockMode && view.type === 'DASHBOARD' && !isPublicProjectView) {
-         return <Login onLogin={() => {}} onNavigate={(page) => setView({ type: page as any })} />;
-    }
-    
-    // LIVE DEMO
-    if (view.type === 'LIVE_DEMO') {
-        return <LiveDemo onBack={() => { setView({ type: 'DASHBOARD' }); window.history.pushState({}, '', '/'); }} />;
-    }
-
-    // STATIC PAGES
-    if (['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type)) {
-        return (
-             <MainLayout currentUser={effectiveUser} currentView={view.type} onNavigate={(p) => setView({ type: p as any })} onBack={() => setView({ type: 'DASHBOARD' })}>
+  return (
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
+      <main className="h-full">
+        {isPlatformView && (
+            <MainLayout 
+                currentUser={currentUser} 
+                currentView={view.type} 
+                onNavigate={handleNavigate}
+                onBack={handleBackToDashboard}
+            >
+                {view.type === 'DASHBOARD' && (
+                <Dashboard 
+                    projects={projects} 
+                    currentUser={currentUser}
+                    onSelectProject={handleSelectProject}
+                    onAddProject={handleAddProject}
+                    onDeleteProject={handleDeleteProject}
+                    onEditProject={handleEditProject}
+                    onNavigate={handleNavigate}
+                    notify={notify}
+                    isMockMode={isMockMode}
+                />
+                )}
+                {view.type === 'PROFILE' && (
+                    <Profile 
+                        currentUser={currentUser}
+                        onLogout={handleLogout}
+                    />
+                )}
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
                 {view.type === 'ABOUT' && <AboutPage />}
                 {view.type === 'PRICING' && <PricingPage />}
                 {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
-             </MainLayout>
-        );
-    }
-    
-    // AUTHENTICATED VIEWS
-    if (view.type === 'DASHBOARD') {
-       return (
-         <MainLayout currentUser={effectiveUser} currentView="DASHBOARD" onNavigate={(p) => setView({ type: p as any })} onBack={() => {}}>
-           <Dashboard 
-             projects={projects}
-             currentUser={effectiveUser || { id: 'guest', name: 'Guest', avatar: '' }}
-             onSelectProject={(p) => { 
-                 setView({ type: 'PROJECT_VIEW', projectId: p.id });
-                 window.history.pushState({}, '', `?projectId=${p.id}`);
-             }}
-             onAddProject={handleAddProject}
-             onDeleteProject={handleDeleteProject}
-             onEditProject={handleEditProject}
-             onNavigate={(page) => setView({ type: page as any })}
-             notify={notify}
-             isMockMode={isMockMode}
-           />
-         </MainLayout>
-       );
-    }
+            </MainLayout>
+        )}
 
-    if (view.type === 'PROJECT_VIEW') {
-       const project = projects.find(p => p.id === view.projectId);
-       if (!project) return <div className="p-8 text-center text-zinc-500"><Loader2 className="animate-spin inline mr-2"/> Loading Project...</div>;
-       
-       return (
-          <ProjectView 
-             project={project}
-             currentUser={effectiveUser || { id: 'guest', name: 'Guest', avatar: '' }}
-             onBack={() => {
-                 setView({ type: 'DASHBOARD' });
-                 window.history.pushState({}, '', '/');
-             }}
-             onSelectAsset={(asset) => {
-                 setView({ type: 'PLAYER', projectId: project.id, assetId: asset.id });
-                 window.history.pushState({}, '', `?projectId=${project.id}&assetId=${asset.id}`);
-             }}
-             onUpdateProject={handleUpdateProject}
-             notify={notify}
-             isMockMode={isMockMode}
-             restrictedAssetId={view.restrictedAssetId}
-             onUploadAsset={handleUploadAsset}
-             uploadTasks={uploadTasks} // Pass upload tasks to ProjectView
-          />
-       );
-    }
-
-    if (view.type === 'PLAYER') {
-        const project = projects.find(p => p.id === view.projectId);
-        if (!project) return <div className="p-8 text-center text-zinc-500"><Loader2 className="animate-spin inline mr-2"/> Loading...</div>;
-        
-        const asset = project.assets.find(a => a.id === view.assetId);
-        if (!asset) return <div className="p-8 text-center text-red-500">Asset not found</div>;
-
-        return (
-            <Player 
-              asset={asset}
-              project={project}
-              currentUser={effectiveUser || { id: 'guest', name: 'Guest', avatar: '' }}
-              onBack={() => {
-                  setView({ type: 'PROJECT_VIEW', projectId: project.id });
-                  window.history.pushState({}, '', `?projectId=${project.id}`);
-              }}
-              users={project.team || []}
-              onUpdateProject={handleUpdateProject}
-              isSyncing={isSyncing}
-              notify={notify}
-              isMockMode={isMockMode}
+        {view.type === 'PROJECT_VIEW' && currentProject && (
+          <ErrorBoundary>
+            <ProjectView 
+                project={currentProject} 
+                currentUser={currentUser}
+                onBack={handleBackToDashboard}
+                onSelectAsset={handleSelectAsset}
+                onUpdateProject={handleUpdateProject}
+                notify={notify}
+                restrictedAssetId={view.restrictedAssetId}
+                isMockMode={isMockMode}
+                onUploadAsset={handleUploadAsset} 
             />
-        );
-    }
-
-    if (view.type === 'PROFILE' && effectiveUser) {
-        return (
-             <MainLayout currentUser={effectiveUser} currentView="PROFILE" onNavigate={(p) => setView({ type: p as any })} onBack={() => setView({ type: 'DASHBOARD' })}>
-                 <Profile currentUser={effectiveUser} onLogout={handleLogout} />
-             </MainLayout>
-        );
-    }
-
-    return null;
-  };
-
-  return (
-    <ErrorBoundary>
-        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors duration-300">
-            {renderContent()}
-            
-            <ToastContainer toasts={toasts} removeToast={removeToast} />
-            
-            {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
-
-            {/* GUEST NAME MODAL */}
-            {isGuestModalOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative animate-in zoom-in-95">
-                        <div className="flex flex-col items-center text-center mb-6">
-                            <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-4">
-                                <UserIcon size={32} className="text-zinc-400" />
-                            </div>
-                            <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Welcome</h2>
-                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
-                                Please enter your name to join the review. This name will appear on your comments.
-                            </p>
-                        </div>
-                        <form onSubmit={(e) => { e.preventDefault(); handleSetGuestName((e.target as any).elements.name.value); }}>
-                            <input 
-                                name="name"
-                                type="text" 
-                                autoFocus 
-                                placeholder="Your Name" 
-                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-center font-bold text-lg outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all mb-4"
-                            />
-                            <button 
-                                type="submit" 
-                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-500/20"
-                            >
-                                Continue to Review <ArrowRight size={18} />
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </div>
-    </ErrorBoundary>
+          </ErrorBoundary>
+        )}
+        {view.type === 'PLAYER' && currentProject && currentAsset && (
+          <ErrorBoundary>
+            <Player 
+                asset={currentAsset} 
+                project={currentProject}
+                currentUser={currentUser}
+                onBack={handleBackToProject}
+                users={currentProject.team}
+                onUpdateProject={(p, skipSync) => handleUpdateProject(p, skipSync)}
+                isSyncing={isSyncing}
+                notify={notify}
+                isMockMode={isMockMode}
+            />
+          </ErrorBoundary>
+        )}
+        
+        {/* GLOBAL COMPONENTS */}
+        <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        
+        {isMockMode && (
+            <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] pointer-events-none">
+                PREVIEW MODE: Local Data Only
+            </div>
+        )}
+      </main>
+    </div>
   );
 };
 
-const App: React.FC = () => {
-    // Check environment for Clerk
-    const clerkKey = (import.meta as any).env.VITE_CLERK_PUBLISHABLE_KEY;
-    const isClerkConfigured = clerkKey && !clerkKey.includes('placeholder');
+const ClerkWrapper: React.FC = () => {
+    const { user, isLoaded, isSignedIn } = useUser();
+    const { getToken, signOut } = useAuth();
+    const { openSignIn, organization } = useClerk();
+    
+    // Clerk provides the active organization here if one is selected
+    const activeOrg = organization;
+    
+    const env = (import.meta as any).env || {};
+    const isMockMode = !env.VITE_CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY.includes('placeholder');
 
-    if (!isClerkConfigured) {
+    return (
+        <DriveProvider isMockMode={isMockMode}>
+            <AppLayout 
+                clerkUser={user}
+                isLoaded={isLoaded}
+                isSignedIn={isSignedIn || false}
+                getToken={getToken}
+                signOut={async () => { await signOut(); }}
+                mockSignIn={() => openSignIn()}
+                authMode="clerk"
+                organization={activeOrg}
+            />
+        </DriveProvider>
+    );
+}
+
+const App: React.FC = () => {
+    const env = (import.meta as any).env || {};
+    const clerkKey = env.VITE_CLERK_PUBLISHABLE_KEY;
+    const isMock = !clerkKey || clerkKey.includes('placeholder');
+
+    const MockAppWrapper = () => {
+        const [isMockSignedIn, setIsMockSignedIn] = useState(false);
+        const [mockUser, setMockUser] = useState<any | null>(null);
+
+        const handleMockSignIn = () => {
+            setIsMockSignedIn(true);
+            setMockUser({
+                id: 'mock-user-1',
+                fullName: 'Mock Developer',
+                imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock',
+                primaryEmailAddressId: 'email-1',
+                emailAddresses: [{ id: 'email-1', emailAddress: 'mock@example.com' }]
+            });
+        };
+
+        const handleMockSignOut = async () => {
+            setIsMockSignedIn(false);
+            setMockUser(null);
+        };
+
         return (
-            <ThemeProvider>
-                <LanguageProvider>
-                     <DriveProvider isMockMode={true}>
-                         {/* Mock Mode Wrapper if Clerk is missing */}
-                         <AppLayout 
-                            clerkUser={{ id: 'mock-user', firstName: 'Mock', lastName: 'User' }}
-                            isLoaded={true}
-                            isSignedIn={true}
-                            getToken={async () => 'mock-token'}
-                            signOut={async () => {}}
-                            authMode='mock'
-                         />
-                     </DriveProvider>
-                </LanguageProvider>
-            </ThemeProvider>
+            <DriveProvider isMockMode={true}>
+                <AppLayout 
+                    clerkUser={mockUser}
+                    isLoaded={true}
+                    isSignedIn={isMockSignedIn}
+                    getToken={async () => 'mock-token'}
+                    signOut={handleMockSignOut}
+                    mockSignIn={handleMockSignIn}
+                    authMode="mock"
+                    organization={null}
+                />
+            </DriveProvider>
+        );
+    };
+
+    if (isMock) {
+        return (
+            <LanguageProvider>
+                <ThemeProvider>
+                    <MockAppWrapper />
+                </ThemeProvider>
+            </LanguageProvider>
         );
     }
 
     return (
         <ClerkProvider publishableKey={clerkKey}>
-             <AuthWrapper />
-        </ClerkProvider>
-    );
-};
-
-// Wrapper to access Clerk Hooks inside Provider
-const AuthWrapper: React.FC = () => {
-    const { user, isLoaded, isSignedIn } = useUser();
-    const { getToken, signOut } = useAuth();
-    const { organization } = useOrganization();
-
-    return (
-        <ThemeProvider>
             <LanguageProvider>
-                <LanguageCloudSync />
-                <ThemeCloudSync />
-                <DriveProvider isMockMode={false}>
-                    <AppLayout 
-                        clerkUser={user} 
-                        isLoaded={isLoaded} 
-                        isSignedIn={isSignedIn || false} 
-                        getToken={getToken} 
-                        signOut={signOut}
-                        authMode='clerk'
-                        organization={organization}
-                    />
-                </DriveProvider>
+                <ThemeProvider>
+                    <LanguageCloudSync />
+                    <ThemeCloudSync />
+                    <ClerkWrapper />
+                </ThemeProvider>
             </LanguageProvider>
-        </ThemeProvider>
+        </ClerkProvider>
     );
 };
 
