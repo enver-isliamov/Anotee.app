@@ -103,7 +103,7 @@ export const generateResolveXML = (projectName: string, version: number, comment
 <!DOCTYPE xmeml>
 <xmeml version="5">
   <sequence>
-    <name>${projectName}_v${version} (SmoTree Import)</name>
+    <name>${projectName}_v${version} (Anotee Import)</name>
     <rate>
       <timebase>${timebase}</timebase>
       <ntsc>FALSE</ntsc>
@@ -112,7 +112,7 @@ export const generateResolveXML = (projectName: string, version: number, comment
       <video>
         <track>
           <clipitem>
-            <name>SmoTree Markers Placeholder</name>
+            <name>Anotee Markers Placeholder</name>
             <duration>${getFrames(3600)}</duration>
             <rate>
               <timebase>${timebase}</timebase>

@@ -264,7 +264,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                       <Layout size={24} />
                   </div>
                   <div>
-                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with SmoTree</h3>
+                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with Anotee</h3>
                       <p className="text-sm text-zinc-500 dark:text-zinc-400">Follow these steps to set up your first review workflow.</p>
                   </div>
               </div>

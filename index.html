@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <title>SmoTree - Video Collaboration</title>
+    <title>Anotee - Video Collaboration</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#09090b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,7 +14,7 @@
       // IMMEDIATE THEME CHECK TO PREVENT FLICKER
       (function() {
         try {
-          var localTheme = localStorage.getItem('smotree_theme');
+          var localTheme = localStorage.getItem('anotee_theme');
           var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
           if (localTheme === 'dark' || (!localTheme && supportDarkMode)) {
             document.documentElement.classList.add('dark');

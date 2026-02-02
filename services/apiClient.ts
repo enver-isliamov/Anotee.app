@@ -1,4 +1,3 @@
-
 import { Project, User, ProjectAsset, Comment } from '../types';
 import { MOCK_PROJECTS } from '../constants';
 import { generateId } from './utils';
@@ -8,7 +7,7 @@ const ENV = (import.meta as any).env || {};
 const HAS_CLERK_KEY = ENV.VITE_CLERK_PUBLISHABLE_KEY && !ENV.VITE_CLERK_PUBLISHABLE_KEY.includes('placeholder');
 const IS_MOCK_MODE = !HAS_CLERK_KEY;
 
-const STORAGE_KEY = 'smotree_projects_data';
+const STORAGE_KEY = 'anotee_projects_data';
 
 // Helper to get local data
 const getLocalData = (): Project[] => {
@@ -96,148 +95,124 @@ export const api = {
             const params = new URLSearchParams();
             if (orgId) params.append('orgId', orgId);
             if (projectId) params.append('projectId', projectId);
-            
             if (params.toString()) url += `?${params.toString()}`;
 
             const res = await fetch(url, { headers });
             
-            if (res.status === 401) {
-                console.error("Unauthorized request to /api/data");
-                throw new Error("Unauthorized");
-            }
-            
-            if (!res.ok) throw new Error(res.statusText);
-            return await res.json();
+            if (!res.ok) throw new Error("Failed to fetch");
+            const data = await res.json();
+            return Array.isArray(data) ? data : [];
         } catch (e) {
-            console.error("API Get Error", e);
-            throw e;
-        }
-    },
-
-    syncProjects: async (projects: Project[], user: User | null, explicitToken?: string | null): Promise<any[]> => {
-        if (IS_MOCK_MODE) {
-            setLocalData(projects);
+            console.error("API Fetch Error", e);
             return [];
         }
-
-        if (!user) return [];
-
-        try {
-            const token = explicitToken || await getAuthToken();
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            // Sanitize data (remove local blob urls before sending to server)
-            const cleanData = projects.map(p => ({
-                ...p,
-                assets: p.assets.map(a => ({
-                    ...a,
-                    versions: a.versions.map(v => {
-                        const { localFileUrl, localFileName, ...rest } = v;
-                        return rest;
-                    })
-                }))
-            }));
-
-            const res = await fetch('/api/data', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(cleanData)
-            });
-
-            if (res.status === 409) {
-                const errData = await res.json();
-                const e: any = new Error("Version Conflict");
-                e.code = "CONFLICT";
-                e.details = errData;
-                throw e;
-            }
-
-            if (!res.ok) {
-                throw new Error(`Sync failed: ${res.statusText}`);
-            }
-
-            const data = await res.json();
-            return data.updates || []; // Return updated versions info
-        } catch (e) {
-            console.error("API Sync Error", e);
-            throw e; // Propagate error to UI
-        }
     },
 
-    patchProject: async (projectId: string, updates: Partial<Project>, currentVersion: number): Promise<Project> => {
+    syncProjects: async (projects: Project[], user: User, explicitToken?: string | null) => {
         if (IS_MOCK_MODE) {
-            const local = getLocalData();
-            const idx = local.findIndex(p => p.id === projectId);
-            if (idx !== -1) {
-                local[idx] = { ...local[idx], ...updates };
-                setLocalData(local);
-                return local[idx];
+            await new Promise(r => setTimeout(r, 300));
+            const current = getLocalData();
+            const updated = current.map(p => {
+                const update = projects.find(up => up.id === p.id);
+                return update ? update : p;
+            });
+            projects.forEach(p => {
+                if (!updated.find(up => up.id === p.id)) updated.push(p);
+            });
+            setLocalData(updated);
+            return projects.map(p => ({ id: p.id, _version: (p._version || 0) + 1 }));
+        }
+
+        const token = explicitToken || await getAuthToken();
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch('/api/data', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(projects)
+        });
+
+        if (!res.ok) {
+            if (res.status === 409) {
+                const err: any = new Error("Conflict");
+                err.code = 'CONFLICT';
+                throw err;
             }
-            throw new Error("Mock: Project not found");
+            throw new Error("Sync failed");
+        }
+        
+        const data = await res.json();
+        return data.updates;
+    },
+
+    patchProject: async (projectId: string, updates: Partial<Project>, _version: number) => {
+        if (IS_MOCK_MODE) {
+            const current = getLocalData();
+            const idx = current.findIndex(p => p.id === projectId);
+            if (idx !== -1) {
+                current[idx] = { ...current[idx], ...updates, updatedAt: 'Just now' };
+                setLocalData(current);
+            }
+            return;
         }
 
         const token = await getAuthToken();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
         const res = await fetch('/api/data', {
             method: 'PATCH',
             headers,
-            body: JSON.stringify({ projectId, updates, _version: currentVersion })
+            body: JSON.stringify({ projectId, updates, _version })
         });
 
-        if (res.status === 409) {
-             const errData = await res.json();
-             const e: any = new Error("Version Conflict");
-             e.code = "CONFLICT";
-             e.details = errData;
-             throw e;
-        }
-
-        if (!res.ok) throw new Error("Patch failed");
-
-        const data = await res.json();
-        return data.project;
-    },
-
-    deleteAssets: async (urls: string[], projectId: string, explicitToken?: string | null): Promise<void> => {
-        if (IS_MOCK_MODE) {
-            return; // Nothing to delete on server
-        }
-
-        try {
-            const token = explicitToken || await getAuthToken();
-            await fetch('/api/delete', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': token ? `Bearer ${token}` : ''
-                },
-                body: JSON.stringify({ urls, projectId })
-            });
-        } catch (e) {
-            console.error("Delete API Error", e);
+        if (!res.ok) {
+            if (res.status === 409) {
+                const err: any = new Error("Conflict");
+                err.code = 'CONFLICT';
+                throw err;
+            }
+            throw new Error("Patch failed");
         }
     },
 
-    comment: async (projectId: string, assetId: string, versionId: string, action: string, payload: any, user: User, explicitToken?: string | null) => {
-        if (IS_MOCK_MODE) {
-            return; 
-        }
+    deleteAssets: async (urls: string[], projectId: string) => {
+        if (IS_MOCK_MODE) return;
 
-        try {
-            const token = explicitToken || await getAuthToken();
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
+        const token = await getAuthToken();
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            await fetch('/api/comment', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ projectId, assetId, versionId, action, payload })
-            });
-        } catch (e) {
-            console.error("Comment API Error", e);
-        }
+        await fetch('/api/delete', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ urls, projectId })
+        });
+    },
+
+    comment: async (projectId: string, assetId: string, versionId: string, action: 'create'|'update'|'delete', payload: any, user: User) => {
+        if (IS_MOCK_MODE) return;
+
+        const token = await getAuthToken();
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch('/api/comment', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ projectId, assetId, versionId, action, payload })
+        });
+
+        if (!res.ok) throw new Error("Comment action failed");
+        return await res.json();
     }
 };

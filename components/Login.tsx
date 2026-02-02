@@ -70,7 +70,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                 <div className="lg:col-span-7 space-y-8 animate-in slide-in-from-bottom-8 duration-700">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[10px] uppercase font-bold tracking-widest text-zinc-600 dark:text-zinc-400 shadow-sm">
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                        <span>SmoTree v1.0</span>
+                        <span>Anotee v1.0</span>
                     </div>
 
                     <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">
@@ -141,7 +141,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                         <div className="bg-indigo-600 p-6 rounded-2xl flex flex-col items-center text-center justify-center aspect-square shadow-xl shadow-indigo-900/20 text-white">
                             <Zap size={32} className="mb-2 text-yellow-300" />
                             <div className="text-lg font-bold">4 Hours</div>
-                            <div className="text-xs text-indigo-200">SmoTree</div>
+                            <div className="text-xs text-indigo-200">Anotee</div>
                         </div>
                     </div>
                 </div>

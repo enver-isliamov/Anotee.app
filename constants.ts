@@ -23,7 +23,7 @@ const INTERNAL_MOCK_USERS: User[] = [
 export const MOCK_PROJECTS: Project[] = [
   {
     id: 'p1',
-    name: 'SmoTree – Commercial Spot X',
+    name: 'Anotee – Commercial Spot X',
     description: '30s TV spot for the new product launch. Needs energetic cuts.',
     client: 'TechCorp Inc.',
     createdAt: Date.now() - 172800000, // 2 days ago

@@ -185,7 +185,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const [controlsPos, setControlsPos] = useState(() => {
     try {
-        const saved = localStorage.getItem('smotree_controls_pos');
+        const saved = localStorage.getItem('anotee_controls_pos');
         return saved ? JSON.parse(saved) : { x: 0, y: 0 };
     } catch {
         return { x: 0, y: 0 };
@@ -261,7 +261,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   useEffect(() => {
-    localStorage.setItem('smotree_controls_pos', JSON.stringify(controlsPos));
+    localStorage.setItem('anotee_controls_pos', JSON.stringify(controlsPos));
   }, [controlsPos]);
 
   useEffect(() => {

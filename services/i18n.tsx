@@ -16,7 +16,7 @@ export const LANGUAGES: { code: Language; label: string; flag: string }[] = [
 const DICTIONARIES: Record<Language, Record<string, string>> = {
   en: {
     // General
-    'app.name': 'SmoTree',
+    'app.name': 'Anotee',
     'loading': 'Loading...',
     'cancel': 'Cancel',
     'save': 'Save',
@@ -49,8 +49,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'hero.title.speed': 'Your Video. Perfectly Aligned.',
     'hero.desc_new': 'A centralized platform for professional review. Frame-accurate edits, version control, and intelligent assistance in one click.',
     'hero.title.1': 'Join', 
-    'hero.title.2': 'SmoTree',
-    'hero.quote': '"We are a small team building SmoTree. You fund the development, and we gift you the tool forever."',
+    'hero.title.2': 'Anotee',
+    'hero.quote': '"We are a small team building Anotee. You fund the development, and we gift you the tool forever."',
     'hero.cta': 'Become a Founder',
     'hero.demo': 'Live Demo',
     'auth.card.join': 'Join Project',
@@ -68,24 +68,24 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
 
     // Landing New Blocks
     'land.speed.title': 'Speed that changes the game',
-    'land.speed.sub': 'We measured the turnaround time for typical tasks in SmoTree compared to traditional file transfer methods.',
+    'land.speed.sub': 'We measured the turnaround time for typical tasks in Anotee compared to traditional file transfer methods.',
     'land.stat.92': 'Faster Review',
     'land.stat.92.desc': '"Reduced advertising spot approval time from 5 days to 4 hours."',
     'land.stat.0': 'Missed Edits',
     'land.stat.0.desc': 'Thanks to the checklist system, not a single client request gets lost in chat history.',
-    'land.try_now': 'Try SmoTree Now',
-    'land.flow.title': 'SmoTree turns chaotic edits into a structured workflow.',
+    'land.try_now': 'Try Anotee Now',
+    'land.flow.title': 'Anotee turns chaotic edits into a structured workflow.',
     'land.flow.sub': 'Frame accuracy, instant proxies, and AI assistant in one interface.',
     'land.roi.title': 'Speed that pays off',
     'land.roi.94': 'Reduction in "feedback call" time. All info is already in the frame.',
     'land.roi.0ms': 'Latency when scrubbing timeline in browser. Comfort of a cloud editing station.',
     'land.chart.wa': 'WhatsApp/Email',
     'land.chart.cloud': 'Cloud Drives',
-    'land.chart.pro': 'SmoTree Pro',
+    'land.chart.pro': 'Anotee Pro',
     'land.integrations.title': 'Works with Your Favorite Editor',
 
     // Why Smotree Section
-    'why.title': 'Why SmoTree?',
+    'why.title': 'Why Anotee?',
     'why.feat1.title': 'Timecode Edits',
     'why.feat1.desc': 'Leave comments directly on the video. No more "something is off at second 15". Every pixel and frame under control.',
     'why.feat2.title': 'Versioning 2.0',
@@ -170,7 +170,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'upsell.donate': 'Donate',
 
     // Static Pages
-    'page.workflow.title': 'How SmoTree Works',
+    'page.workflow.title': 'How Anotee Works',
     'page.workflow.step1': 'Upload',
     'page.workflow.step1.desc': 'Drag & drop video files. We create instant proxies and thumbnails.',
     'page.workflow.step2': 'Invite',
@@ -181,25 +181,25 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.workflow.step4.desc': 'Download markers as EDL, XML (Resolve), or CSV to fix edits instantly.',
     'page.about.title': 'About Us',
     'page.about.hero': 'Built for Flow, Not for Shareholders.',
-    'page.about.mission': 'SmoTree is a passion project built by a small team for the filmmaking community. No corporate bloat, just speed.',
+    'page.about.mission': 'Anotee is a passion project built by a small team for the filmmaking community. No corporate bloat, just speed.',
     'page.about.story.title': 'The Journey',
-    'page.about.story.text': 'We started SmoTree because we were tired of subscription fatigue and sluggish tools. Our goal is simple: provide a lightweight, professional review tool that respects your time and your wallet.',
+    'page.about.story.text': 'We started Anotee because we were tired of subscription fatigue and sluggish tools. Our goal is simple: provide a lightweight, professional review tool that respects your time and your wallet.',
     'page.about.feat.fast.title': 'Video Feedback 10x Faster',
-    'page.about.feat.fast.desc': 'Forget long email chains. SmoTree is a professional video collaboration space: precise edits, version control, and instant access.',
+    'page.about.feat.fast.desc': 'Forget long email chains. Anotee is a professional video collaboration space: precise edits, version control, and instant access.',
     'page.about.feat.instant.title': 'Instant Playback',
     'page.about.feat.instant.desc': 'Automatic proxy generation and local file handling allows 4K playback without lag, even offline.',
 
     'page.pricing.title': 'Fair Pricing',
     'page.pricing.subtitle': 'Invest once, use forever during the V1 lifecycle.',
     'page.pricing.why_title': 'Why we are ending lifetime access soon',
-    'page.pricing.why_text': 'We develop SmoTree (cloud sync) as a small team. To cover future server costs, we will have to switch to a subscription model later. But we want to reward those who support us today with a permanent fee exemption.',
+    'page.pricing.why_text': 'We develop Anotee (cloud sync) as a small team. To cover future server costs, we will have to switch to a subscription model later. But we want to reward those who support us today with a permanent fee exemption.',
     'page.docs.title': 'Documentation',
     'page.docs.formats': 'Supported Formats: MP4, MOV, WEBM, MKV.',
     'page.docs.shortcuts': 'Shortcuts: Space (Play/Pause), J/K/L (Speed), F (Fullscreen), M (Marker).',
     
     // AI Page
     'page.ai.title': 'Capabilities and Advantages',
-    'page.ai.subtitle': 'Why professional studios switch to SmoTree',
+    'page.ai.subtitle': 'Why professional studios switch to Anotee',
     'page.ai.col1': '01. PROCESS (WORKFLOW)',
     'page.ai.col2': '02. INTELLIGENCE (AI)',
     'page.ai.col3': '03. TECHNOLOGY (CORE)',
@@ -232,13 +232,13 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'rm.one_time': "one-time",
     'rm.per_year': "/year",
     'rm.founder_sale': "Founder Sale",
-    'rm.lifetime_license': "Lifetime SmoTree V1.X License",
+    'rm.lifetime_license': "Lifetime Anotee V1.X License",
     'rm.lifetime_desc': "Pay once. Use forever. No subscriptions.",
     'rm.flash_loom': "Flash-Loom Protocol",
     'rm.sync_desc': "Instant comment and video synchronization.",
     'rm.unlimited': "Unlimited Access",
     'rm.unlimited_desc': "No project limits for founders.",
-    'rm.access_v1': "Access to SmoTree V1.X",
+    'rm.access_v1': "Access to Anotee V1.X",
     'rm.std_support': "Standard Support",
     'rm.monthly_pay': "Monthly Payment",
     'rm.availability': "Availability:",
@@ -254,7 +254,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
 
     // Profile
     'profile.title': 'User Profile',
-    'profile.founder_msg': "You are a Founder's Club member. Thank you for supporting SmoTree!",
+    'profile.founder_msg': "You are a Founder's Club member. Thank you for supporting Anotee!",
     'profile.tiers': 'Membership Tiers',
     'profile.language': 'Interface Language',
     'profile.migrate_title': 'Save Your Progress',
@@ -263,7 +263,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
   },
   ru: {
     // General
-    'app.name': 'SmoTree',
+    'app.name': 'Anotee',
     'loading': 'Загрузка...',
     'cancel': 'Отмена',
     'save': 'Сохранить',
@@ -296,8 +296,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'hero.title.speed': 'Ваше видео. Идеально согласовано.',
     'hero.desc_new': 'Централизованная платформа для профессионального ревью. Точные правки по кадрам, управление версиями и интеллектуальная помощь в один клик.',
     'hero.title.1': 'Присоединяйтесь к', 
-    'hero.title.2': 'SmoTree', 
-    'hero.quote': '"Мы разрабатываем SmoTree небольшой командой. Вы финансируете разработку, а мы дарим вам инструмент навсегда."',
+    'hero.title.2': 'Anotee', 
+    'hero.quote': '"Мы разрабатываем Anotee небольшой командой. Вы финансируете разработку, а мы дарим вам инструмент навсегда."',
     'hero.cta': 'Стать Основателем',
     'hero.demo': 'Live Демо',
     'auth.card.join': 'Присоединиться',
@@ -312,24 +312,24 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
 
     // Landing New Blocks
     'land.speed.title': 'Скорость, которая меняет игру',
-    'land.speed.sub': 'Мы измерили время выполнения типичных задач в SmoTree по сравнению с традиционными способами передачи файлов.',
+    'land.speed.sub': 'Мы измерили время выполнения типичных задач в Anotee по сравнению с традиционными способами передачи файлов.',
     'land.stat.92': 'Ускорение ревью',
     'land.stat.92.desc': '"Сократили время утверждения рекламного ролика с 5 дней до 4 часов."',
     'land.stat.0': 'Пропущенных правок',
     'land.stat.0.desc': 'Благодаря системе чек-листов ни одна просьба клиента не теряется в переписке.',
-    'land.try_now': 'Попробовать SmoTree сейчас',
-    'land.flow.title': 'SmoTree превращает хаотичные правки в структурированный рабочий процесс.',
+    'land.try_now': 'Попробовать Anotee сейчас',
+    'land.flow.title': 'Anotee превращает хаотичные правки в структурированный рабочий процесс.',
     'land.flow.sub': 'Точность до кадра, мгновенные прокси и ИИ-ассистент в одном интерфейсе.',
     'land.roi.title': 'Скорость, которая окупается',
     'land.roi.94': 'Снижение времени на «созвоны по правкам». Вся информация уже в кадре.',
     'land.roi.0ms': 'Задержка при прокрутке таймлайна в браузере. Комфорт монтажной станции в облаке.',
     'land.chart.wa': 'WhatsApp/Email',
     'land.chart.cloud': 'Облачные диски',
-    'land.chart.pro': 'SmoTree Pro',
+    'land.chart.pro': 'Anotee Pro',
     'land.integrations.title': 'Работает с вашим любимым редактором',
 
     // Why Smotree Section
-    'why.title': 'Почему SmoTree?',
+    'why.title': 'Почему Anotee?',
     'why.feat1.title': 'Правки по таймкодам',
     'why.feat1.desc': 'Оставляйте комментарии прямо на видео. Больше никаких «на 15-й секунде там что-то не то». Каждый пиксель и каждый кадр под контролем.',
     'why.feat2.title': 'Версионность 2.0',
@@ -401,7 +401,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
 
     // AI Page
     'page.ai.title': 'Возможности и Преимущества',
-    'page.ai.subtitle': 'Почему профессиональные студии переходят на SmoTree',
+    'page.ai.subtitle': 'Почему профессиональные студии переходят на Anotee',
     'page.ai.col1': '01. ПРОЦЕСС (WORKFLOW)',
     'page.ai.col2': '02. ИНТЕЛЛЕКТ (AI)',
     'page.ai.col3': '03. ТЕХНОЛОГИИ (CORE)',
@@ -437,7 +437,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'upsell.founder.feat3': 'Вечный доступ (Без подписки)',
     'upsell.cta': 'Получить вечный доступ',
     'upsell.donate': 'Задонатить',
-    'page.workflow.title': 'Как работает SmoTree',
+    'page.workflow.title': 'Как работает Anotee',
     'page.workflow.step1': 'Загрузка',
     'page.workflow.step1.desc': 'Перетащите видео. Мы создадим прокси и превью мгновенно.',
     'page.workflow.step2': 'Приглашение',
@@ -448,7 +448,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.workflow.step4.desc': 'Скачайте маркеры в EDL, XML (Resolve) или CSV для быстрого монтажа.',
     'page.about.title': 'О нас',
     'page.about.hero': 'Создан для потока, а не для акционеров.',
-    'page.about.mission': 'SmoTree — это проект страсти, созданный небольшой командой для сообщества фильммейкеров. Никакого корпоративного веса, только скорость.',
+    'page.about.mission': 'Anotee — это проект страсти, созданный небольшой командой для сообщества фильммейкеров. Никакого корпоративного веса, только скорость.',
     'page.about.val.1.title': 'Молниеносно',
     'page.about.val.1.desc': 'Оптимизирован для мгновенного воспроизведения и сотрудничества с нулевой задержкой.',
     'page.about.val.2.title': 'Без лишнего',
@@ -456,16 +456,16 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.about.val.3.title': 'Дух Инди',
     'page.about.val.3.desc': 'Прямая связь между разработчиками и пользователем. Ваш фидбек имеет значение.',
     'page.about.story.title': 'Наш Путь',
-    'page.about.story.text': 'Мы начали SmoTree, потому что устали от бесконечных подписок и медленных инструментов. Наша цель проста: предоставить легкий профессиональный инструмент для ревью, который уважает ваше время и кошелек.',
+    'page.about.story.text': 'Мы начали Anotee, потому что устали от бесконечных подписок и медленных инструментов. Наша цель проста: предоставить легкий профессиональный инструмент для ревью, который уважает ваше время и кошелек.',
     'page.about.feat.fast.title': 'Фидбек по видео в 10 раз быстрее',
-    'page.about.feat.fast.desc': 'Забудьте о длинных цепочках писем. SmoTree — это профессиональное пространство для совместной работы над видео: точные правки, управление версиями и мгновенный доступ.',
+    'page.about.feat.fast.desc': 'Забудьте о длинных цепочках писем. Anotee — это профессиональное пространство для совместной работы над видео: точные правки, управление версиями и мгновенный доступ.',
     'page.about.feat.instant.title': 'Мгновенный просмотр',
     'page.about.feat.instant.desc': 'Автоматическая генерация прокси и работа с локальными файлами позволяет смотреть 4K видео без лагов даже без интернета.',
     
     'page.pricing.title': 'Честные цены',
     'page.pricing.subtitle': 'Инвестируйте один раз, пользуйтесь вечно в рамках версии V1.',
     'page.pricing.why_title': 'Почему мы скоро прекратим предоставлять пожизненный доступ',
-    'page.pricing.why_text': 'Мы разрабатываем SmoTree (облачную синхронизацию) небольшой командой. Чтобы покрыть будущие расходы на серверы, нам придётся позже перейти на подписку. Но мы хотим вознаградить тех, кто поддерживает нас сегодня, постоянным освобождением от платы.',
+    'page.pricing.why_text': 'Мы разрабатываем Anotee (облачную синхронизацию) небольшой командой. Чтобы покрыть будущие расходы на серверы, нам придётся позже перейти на подписку. Но мы хотим вознаградить тех, кто поддерживает нас сегодня, постоянным освобождением от платы.',
     'page.docs.title': 'Документация',
     'page.docs.formats': 'Поддерживаемые форматы: MP4, MOV, WEBM, MKV.',
     'page.docs.shortcuts': 'Горячие клавиши: Пробел (Play/Pause), J/K/L (Скорость), F (Fullscreen), M (Маркер).',
@@ -478,13 +478,13 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'rm.one_time': "разово",
     'rm.per_year': "/год",
     'rm.founder_sale': "Продажа основателя",
-    'rm.lifetime_license': "Пожизненная лицензия SmoTree V1.X",
+    'rm.lifetime_license': "Пожизненная лицензия Anotee V1.X",
     'rm.lifetime_desc': "Платите один раз. Пользуйтесь вечно. Никаких подписок.",
     'rm.flash_loom': "Протокол Flash-Loom",
     'rm.sync_desc': "Мгновенная синхронизация комментариев и видео.",
     'rm.unlimited': "Безлимитный доступ",
     'rm.unlimited_desc': "Нет ограничений на количество проектов для основателей.",
-    'rm.access_v1': "Доступ к SmoTree V1.X",
+    'rm.access_v1': "Доступ к Anotee V1.X",
     'rm.std_support': "Стандартная поддержка",
     'rm.monthly_pay': "Ежемесячная оплата",
     'rm.availability': "Доступность:",
@@ -498,7 +498,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'rm.last_chance': "Последний шанс получить ПО без подписки.",
     'rm.saas_desc': "Новые пользователи платят ежемесячно. Учредители не платят ничего.",
     'profile.title': 'Профиль Пользователя',
-    'profile.founder_msg': "Вы участник Клуба Основателей. Спасибо за поддержку SmoTree!",
+    'profile.founder_msg': "Вы участник Клуба Основателей. Спасибо за поддержку Anotee!",
     'profile.tiers': 'Уровни Участия',
     'profile.language': 'Язык интерфейса',
     'profile.migrate_title': 'Сохраните прогресс',
@@ -506,7 +506,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'profile.migrate_btn': 'Привязать Google',
   },
   es: {
-    'app.name': 'SmoTree',
+    'app.name': 'Anotee',
     'nav.login': 'Iniciar Sesión',
     'nav.dashboard': 'Panel',
     'nav.workflow': 'Flujo',
@@ -545,7 +545,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'upsell.free.title': 'Inicial / Personal',
   },
   ja: {
-    'app.name': 'SmoTree',
+    'app.name': 'Anotee',
     'nav.login': 'ログイン',
     'nav.dashboard': 'ダッシュボード',
     'nav.workflow': 'ワークフロー',
@@ -584,7 +584,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'upsell.free.title': 'スターター / 個人',
   },
   ko: {
-    'app.name': 'SmoTree',
+    'app.name': 'Anotee',
     'nav.login': '로그인',
     'nav.dashboard': '대시보드',
     'nav.workflow': '워크플로',
@@ -623,7 +623,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'upsell.free.title': '스타터 / 개인',
   },
   pt: {
-    'app.name': 'SmoTree',
+    'app.name': 'Anotee',
     'nav.login': 'Entrar',
     'nav.dashboard': 'Painel',
     'nav.workflow': 'Fluxo',
@@ -680,7 +680,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>(() => {
     // 1. LocalStorage
-    const saved = localStorage.getItem('smotree_lang');
+    const saved = localStorage.getItem('anotee_lang');
     if (saved && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(saved)) {
         return saved as Language;
     }
@@ -694,7 +694,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Save to Local
   useEffect(() => {
-    localStorage.setItem('smotree_lang', language);
+    localStorage.setItem('anotee_lang', language);
   }, [language]);
 
   const t = (key: string) => t_fallback(language, key);

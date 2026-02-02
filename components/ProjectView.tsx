@@ -341,7 +341,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </button>
           <div className="flex flex-col truncate">
             <span className="font-bold text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                SmoTree <span className="text-zinc-600">/</span> <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>
+                Anotee <span className="text-zinc-600">/</span> <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>
             </span>
             <div className="flex items-center gap-2 font-semibold text-sm md:text-base leading-tight text-zinc-100 truncate">
                <span className="truncate">{project.name}</span>
@@ -444,7 +444,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         title={isMockMode ? "Mock Mode" : (isDriveReady ? "Toggle Storage" : "Drive not connected")}
                     >
                         {useDriveStorage && isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
-                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? "Drive Storage" : (isMockMode ? "Local Mode" : "SmoTree Cloud")}</span>
+                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? "Drive Storage" : (isMockMode ? "Local Mode" : "Anotee Cloud")}</span>
                     </button>
 
                     <button 
