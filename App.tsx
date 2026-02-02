@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -279,7 +278,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   const { uploadTasks, handleUploadAsset, removeUploadTask } = useUploadManager(
       currentUser, projects, setProjects, notify, 
-      (p) => api.syncProjects(p, currentUser, null), 
+      async (p) => { await api.syncProjects(p, currentUser, null); }, 
       lastLocalUpdateRef, isMockMode, getToken
   );
 
@@ -459,15 +458,17 @@ const App: React.FC = () => {
         return (
             <ThemeProvider>
                 <LanguageProvider>
-                     {/* Mock Mode Wrapper if Clerk is missing */}
-                     <AppLayout 
-                        clerkUser={{ id: 'mock-user', firstName: 'Mock', lastName: 'User' }}
-                        isLoaded={true}
-                        isSignedIn={true}
-                        getToken={async () => 'mock-token'}
-                        signOut={async () => {}}
-                        authMode='mock'
-                     />
+                     <DriveProvider isMockMode={true}>
+                         {/* Mock Mode Wrapper if Clerk is missing */}
+                         <AppLayout 
+                            clerkUser={{ id: 'mock-user', firstName: 'Mock', lastName: 'User' }}
+                            isLoaded={true}
+                            isSignedIn={true}
+                            getToken={async () => 'mock-token'}
+                            signOut={async () => {}}
+                            authMode='mock'
+                         />
+                     </DriveProvider>
                 </LanguageProvider>
             </ThemeProvider>
         );
@@ -482,7 +483,8 @@ const App: React.FC = () => {
 
 // Wrapper to access Clerk Hooks inside Provider
 const AuthWrapper: React.FC = () => {
-    const { user, isLoaded, isSignedIn, getToken, signOut } = useUser();
+    const { user, isLoaded, isSignedIn } = useUser();
+    const { getToken, signOut } = useAuth();
     const { organization } = useOrganization();
 
     return (
