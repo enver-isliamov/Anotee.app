@@ -174,6 +174,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [drivePermissionError, setDrivePermissionError] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [videoCors, setVideoCors] = useState<string | undefined>('anonymous');
 
   // ... (State definitions same as before) ...
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -389,6 +390,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
     setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null);
+    setVideoCors('anonymous'); // Reset CORS strategy
 
     const checkDriveStatus = async () => {
         if (!isMockMode && version?.storageType === 'drive' && version.googleDriveId) {
@@ -442,34 +444,52 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify(t('notify.perm_attempt'), "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify(t('notify.perm_fixed'), "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify(t('notify.perm_fail'), "error"); } };
   
-  // FIXED: Explicit Permission Check on Error
+  // FIXED: Explicit Permission Check on Error & CORS Retry
   const handleVideoError = async () => { 
       if (loadingDrive) return; 
       
+      // 1. CORS Retry Strategy
+      // If video failed with 'anonymous' CORS, try removing the attribute. 
+      // Public Drive files sometimes serve redirects without CORS headers.
+      if (videoCors === 'anonymous') {
+          console.warn("Video load failed with CORS, retrying without...");
+          setVideoCors(undefined); // Remove crossOrigin attribute
+          if (videoRef.current) {
+              videoRef.current.load();
+          }
+          return;
+      }
+
       if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
-          // 1. Retry with standard link if first attempt failed
+          // 2. Retry with standard link if first attempt failed
           if (!driveUrlRetried) { 
               setDriveUrlRetried(true); 
               const fallbackUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&t=${Date.now()}`; 
               setDriveUrl(fallbackUrl); 
+              // Reset CORS to anonymous for the retry to see if the new link works with it
+              setVideoCors('anonymous');
               return; 
           } 
           
           setLoadingDrive(true); 
           
-          // 2. Check File Existence
-          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
-          
-          // 3. Check File Permissions (Is it Public?)
-          // We assume "ok" status means file exists, but player fail means CORS/Permission
-          const perms = await GoogleDriveService.getFilePermissions(version.googleDriveId);
+          // 3. Check File Existence & Permissions
+          let status = 'ok';
+          let perms = { isPublic: true }; // Assume public by default to avoid false error for guests
+
+          // Only check status/perms if user is Authenticated (Owner/Member)
+          // Guests cannot check permissions via API, so we skip this to avoid false "Restricted" errors
+          if (isManager && GoogleDriveService.isAuthenticated()) {
+              status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
+              perms = await GoogleDriveService.getFilePermissions(version.googleDriveId);
+          }
           
           setLoadingDrive(false); 
           
           if (status !== 'ok') { 
               setDriveFileMissing(true); 
           } else { 
-              // If file exists but failed to play, AND isn't public, it's a permission error
+              // Only show permission error if we positively confirmed it's private
               if (!perms.isPublic) {
                   setDrivePermissionError(true); 
               }
@@ -572,6 +592,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setDrivePermissionError(false); 
       setDriveUrlRetried(false); 
       setLoadingDrive(true); 
+      setVideoCors('anonymous'); // Reset CORS for new version
       setCurrentVersionIdx(idx); 
       setShowVersionSelector(false); 
       
@@ -807,7 +828,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         onEnded={() => setIsPlaying(false)} 
                         playsInline 
                         controls={false}
-                        crossOrigin="anonymous" 
+                        crossOrigin={videoCors as any} 
                     />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (
