@@ -227,10 +227,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleFixPermissions = async (e: React.MouseEvent, driveId: string) => {
       e.stopPropagation();
-      notify("Attempting to make file public...", "info");
+      notify(t('notify.perm_fixed'), "info");
       const success = await GoogleDriveService.makeFilePublic(driveId);
-      if (success) notify("Success! File is now public.", "success");
-      else notify("Failed. Check Google Workspace settings.", "error");
+      if (success) notify(t('common.success'), "success");
+      else notify(t('notify.perm_fail'), "error");
   };
 
   const togglePublicAccess = async () => {
@@ -384,16 +384,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   <button 
                     onClick={handleOrgInviteClick}
                     className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                    title="Manage Organization Members"
+                    title={t('pv.manage_team')}
                   >
                     <UserPlus size={16} />
-                    <span className="hidden md:inline">Manage Team</span>
+                    <span className="hidden md:inline">{t('pv.manage_team')}</span>
                   </button>
               ) : (
                   <button 
                     onClick={handleShareProject}
                     className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                    title="Share via Public Link"
+                    title={t('pv.share.title')}
                   >
                     <Globe size={16} />
                     <span className="hidden md:inline">{t('pv.invite')}</span>
@@ -422,8 +422,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       {isDragging && !isLocked && (
           <div className="absolute inset-0 z-50 bg-indigo-600/90 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-200 border-4 border-white/20 border-dashed m-4 rounded-3xl">
               <FileVideo size={64} className="mb-4 animate-bounce" />
-              <h2 className="text-3xl font-bold mb-2">Drop Video to Upload</h2>
-              <p className="text-white/80">Releasing will upload to {useDriveStorage ? 'Google Drive' : 'Cloud Storage'}</p>
+              <h2 className="text-3xl font-bold mb-2">{t('pv.drop.title')}</h2>
+              <p className="text-white/80">{t('pv.drop.desc')} {useDriveStorage ? 'Google Drive' : 'Cloud Storage'}</p>
           </div>
       )}
 
@@ -441,10 +441,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <button
                         onClick={toggleStorage}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${useDriveStorage && isDriveReady ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                        title={isMockMode ? "Mock Mode" : (isDriveReady ? "Toggle Storage" : "Drive not connected")}
+                        title={isMockMode ? t('player.source.mock') : (isDriveReady ? t('pv.storage.drive') : "Drive not connected")}
                     >
                         {useDriveStorage && isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
-                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? "Drive Storage" : (isMockMode ? "Local Mode" : "SmoTree Cloud")}</span>
+                        <span className="hidden md:inline">{useDriveStorage && isDriveReady ? t('pv.storage.drive') : (isMockMode ? t('pv.storage.local') : t('pv.storage.cloud'))}</span>
                     </button>
 
                     <button 
@@ -474,7 +474,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             <span className="text-xs opacity-70">Supports MP4, MOV, MKV</span>
                         </p>
                         <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all pointer-events-none relative z-10">
-                            Select File
+                            {t('pv.upload_asset')}
                         </button>
                     </div>
                 )}
@@ -540,24 +540,24 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
                   <div className="flex items-center gap-3 mb-4 text-red-500">
                       <AlertTriangle size={32} />
-                      <h3 className="text-lg font-bold text-white">Delete Asset?</h3>
+                      <h3 className="text-lg font-bold text-white">{t('pv.del_modal.title')}</h3>
                   </div>
                   <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-                      You are about to delete <strong>{deleteModalState.asset.title}</strong>. 
+                      {t('pv.del_modal.desc')} <strong>{deleteModalState.asset.title}</strong>. 
                   </p>
                   <div className="space-y-3">
                       {isDriveReady && !isMockMode && (
                           <button onClick={() => confirmDeleteAsset(true)} disabled={isDeleting} className="w-full flex items-center justify-between p-4 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 rounded-xl text-left transition-colors group">
-                              <div><div className="font-bold text-red-400 text-sm mb-0.5">Delete Everywhere</div><div className="text-[10px] text-red-300/60">Remove from dashboard & trash Drive files</div></div>
+                              <div><div className="font-bold text-red-400 text-sm mb-0.5">{t('pv.del_modal.everywhere')}</div><div className="text-[10px] text-red-300/60">{t('pv.del_modal.everywhere_desc')}</div></div>
                               <Trash2 size={18} className="text-red-500 group-hover:scale-110 transition-transform"/>
                           </button>
                       )}
                       <button onClick={() => confirmDeleteAsset(false)} disabled={isDeleting} className="w-full flex items-center justify-between p-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-left transition-colors group">
-                          <div><div className="font-bold text-zinc-200 text-sm mb-0.5">Remove from Dashboard</div><div className="text-[10px] text-zinc-500">Files remain in your storage</div></div>
+                          <div><div className="font-bold text-zinc-200 text-sm mb-0.5">{t('pv.del_modal.dash')}</div><div className="text-[10px] text-zinc-500">{t('pv.del_modal.dash_desc')}</div></div>
                           <X size={18} className="text-zinc-400 group-hover:text-white transition-colors"/>
                       </button>
                   </div>
-                  <button onClick={() => setDeleteModalState({ isOpen: false, asset: null })} className="mt-6 w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 font-medium">Cancel</button>
+                  <button onClick={() => setDeleteModalState({ isOpen: false, asset: null })} className="mt-6 w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 font-medium">{t('cancel')}</button>
               </div>
           </div>
       )}
@@ -581,7 +581,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       <div className="mt-4">
                           <p className="text-xs text-zinc-400 mb-4">This project belongs to an organization. Manage access in settings.</p>
                           <button onClick={() => { setIsShareModalOpen(false); setIsOrgSettingsOpen(true); }} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
-                              <Settings size={14} /> Open Org Settings
+                              <Settings size={14} /> {t('pv.org_settings')}
                           </button>
                       </div>
                   ) : (
@@ -622,7 +622,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
               {isParticipantsModalOpen && !project.orgId && (
                   <>
-                    <h2 className="text-lg font-bold text-white mb-4">Project Team</h2>
+                    <h2 className="text-lg font-bold text-white mb-4">{t('pv.team')}</h2>
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {displayTeam.map(member => (
                             <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">

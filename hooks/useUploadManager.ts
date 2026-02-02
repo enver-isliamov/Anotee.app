@@ -6,6 +6,7 @@ import { GoogleDriveService } from '../services/googleDrive';
 import { upload } from '@vercel/blob/client';
 import { api } from '../services/apiClient';
 import { useDrive } from '../services/driveContext';
+import { useLanguage } from '../services/i18n';
 
 export const useUploadManager = (
     currentUser: User | null,
@@ -18,6 +19,7 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+    const { t } = useLanguage();
     
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
@@ -32,7 +34,7 @@ export const useUploadManager = (
         const newTask: UploadTask = {
             id: taskId,
             file,
-            projectName: 'Uploading...', // Placeholder
+            projectName: t('common.uploading'), // Placeholder
             progress: 0,
             status: 'uploading'
         };
@@ -223,7 +225,7 @@ export const useUploadManager = (
                 await forceSync([updatedProject]);
                 
                 updateTask({ status: 'done', progress: 100 });
-                notify("Upload completed", "success");
+                notify(t('notify.upload_complete'), "success");
 
             } catch (syncError) {
                 console.error("Sync failed during upload finalization", syncError);
@@ -245,7 +247,7 @@ export const useUploadManager = (
         } catch (e: any) {
             console.error("Upload failed", e);
             updateTask({ status: 'error', error: e.message || "Upload Failed" });
-            notify(`Upload failed: ${e.message}`, "error");
+            notify(`${t('notify.upload_fail')}: ${e.message}`, "error");
             lastLocalUpdateRef.current = Date.now(); 
         }
     };
