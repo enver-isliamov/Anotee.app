@@ -371,9 +371,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
           {/* PERSONAL PROJECT INDICATOR */}
           {!restrictedAssetId && !project.orgId && (
-             <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace">
+             <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title={t('pv.personal')}>
                  <UserIcon size={12} />
-                 <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
+                 <span className="text-[10px] font-medium uppercase tracking-wider">{t('pv.personal').split(' ')[0]}</span>
              </div>
           )}
 
@@ -525,7 +525,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         <h3 className="font-medium text-zinc-200 text-xs md:text-sm truncate mb-1">{asset.title}</h3>
                         <div className="flex justify-between items-center text-[10px] text-zinc-500">
                             <span className="flex items-center gap-1"><Clock size={10} />{asset.versions[asset.versions.length-1]?.comments.length}</span>
-                            <span>{asset.versions[asset.versions.length-1]?.uploadedAt}</span>
+                            <span>{asset.versions[asset.versions.length-1]?.uploadedAt === 'Just now' ? t('time.just_now') : asset.versions[asset.versions.length-1]?.uploadedAt}</span>
                         </div>
                         </div>
                     </div>

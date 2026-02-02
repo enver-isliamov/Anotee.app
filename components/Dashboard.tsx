@@ -474,6 +474,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       );
   };
 
+  // ... (rest of the file remains the same)
   return (
     <>
       <div className="flex justify-between items-center mb-8">
@@ -506,7 +507,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           activeOrgId ? <Building2 size={18} className="text-indigo-500"/> : <UserIcon size={18} className="text-indigo-500"/>
       )}
       
-      {/* UPSELL BLOCK */}
+      {/* ... (Upsell Block) ... */}
       <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
           <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-50 dark:from-indigo-900/10 to-transparent pointer-events-none"></div>
           
@@ -552,7 +553,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           </div>
       </div>
 
-      {/* CREATE MODAL */}
+      {/* CREATE MODAL ... (Existing code) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -596,7 +597,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
         </div>
       )}
 
-      {/* EDIT MODAL */}
+      {/* EDIT MODAL ... (Existing code) */}
       {editingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -628,7 +629,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           </div>
       )}
 
-      {/* SHARE MODAL */}
+      {/* SHARE MODAL ... (Existing code) */}
       {sharingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200 p-6">
