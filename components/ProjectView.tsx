@@ -134,7 +134,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       const videoFiles = files.filter(f => f.type.startsWith('video/'));
       
       if (videoFiles.length === 0) {
-          if (files.length > 0) notify("Only video files supported", "warning");
+          if (files.length > 0) notify(t('notify.video_only'), "warning");
           return;
       }
       onUploadAsset(videoFiles[0], project.id, useDriveStorage);
@@ -146,7 +146,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           return;
       }
       if (!isDriveReady && !useDriveStorage) {
-          notify("Please connect Google Drive in your Profile first.", "info");
+          notify(t('notify.connect_drive'), "info");
           return;
       }
       setUseDriveStorage(!useDriveStorage);
@@ -176,7 +176,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     try {
         if (!isMockMode) {
             if (deleteFromDrive && isDriveReady) {
-                notify("Deleting files from Drive...", "info");
+                notify(t('notify.drive_delete'), "info");
                 for (const v of asset.versions) {
                     if (v.storageType === 'drive' && v.googleDriveId) {
                         await GoogleDriveService.deleteFile(v.googleDriveId);
@@ -202,7 +202,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
     } catch (e) {
         console.error(e);
-        notify("Error during deletion", "error");
+        notify(t('notify.delete_error'), "error");
     } finally {
         setIsDeleting(false);
         setDeleteModalState({ isOpen: false, asset: null });
@@ -245,12 +245,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           try {
               await api.patchProject(project.id, { publicAccess: newAccess }, project._version || 0);
           } catch(e) {
-              notify("Failed to update settings", "error");
+              notify(t('notify.settings_fail'), "error");
               return;
           }
       }
       onUpdateProject({ ...project, publicAccess: newAccess });
-      notify(newAccess === 'view' ? "Link access enabled" : "Link access disabled", "info");
+      notify(newAccess === 'view' ? t('notify.link_enabled') : t('notify.link_disabled'), "info");
   };
 
   const handleInviteUser = async () => {
@@ -278,7 +278,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           try {
               await api.patchProject(project.id, { team: newTeam }, project._version || 0);
           } catch (e) {
-              notify("Failed to invite user", "error");
+              notify(t('notify.invite_fail'), "error");
               return;
           }
       }
@@ -289,13 +289,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   const handleRemoveUser = async (userId: string) => {
-      if (!confirm("Remove user from project?")) return;
+      if (!confirm(t('pv.remove_user_confirm'))) return;
       const newTeam = (project.team || []).filter(m => m.id !== userId);
       if (!isMockMode) {
           try {
               await api.patchProject(project.id, { team: newTeam }, project._version || 0);
           } catch (e) {
-              notify("Failed to remove user", "error");
+              notify(t('notify.remove_fail'), "error");
               return;
           }
       }
@@ -420,7 +420,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       {restrictedAssetId && (
         <div className="bg-orange-900/20 border-b border-orange-900/30 text-orange-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
             <Info size={12} />
-            Viewing restricted asset.
+            {t('pv.restricted_asset')}
         </div>
       )}
 
@@ -447,7 +447,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <button
                         onClick={toggleStorage}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${useDriveStorage && isDriveReady ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                        title={isMockMode ? t('player.source.mock') : (isDriveReady ? t('pv.storage.drive') : "Drive not connected")}
+                        title={isMockMode ? t('player.source.mock') : (isDriveReady ? t('pv.storage.drive') : t('pv.drive_disconnected'))}
                     >
                         {useDriveStorage && isDriveReady ? <HardDrive size={14} /> : <Cloud size={14} />}
                         <span className="hidden md:inline">{useDriveStorage && isDriveReady ? t('pv.storage.drive') : (isMockMode ? t('pv.storage.local') : t('pv.storage.cloud'))}</span>
@@ -625,14 +625,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             <div className="mb-4 bg-zinc-800/50 p-3 rounded-xl border border-zinc-700 flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-zinc-300">
                                     <Globe size={16} className={project.publicAccess === 'view' ? 'text-green-400' : 'text-zinc-500'} />
-                                    <div className="flex flex-col"><span className="text-xs font-bold text-white">Public Access</span><span className="text-[9px] text-zinc-500">Anyone with link can view</span></div>
+                                    <div className="flex flex-col"><span className="text-xs font-bold text-white">{t('pv.share.public_access')}</span><span className="text-[9px] text-zinc-500">{t('pv.share.public_desc')}</span></div>
                                 </div>
                                 <button onClick={togglePublicAccess} className={`w-10 h-5 rounded-full relative transition-colors ${project.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}><div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${project.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div></button>
                             </div>
                         )}
 
                         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
-                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
+                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.review_link_label')}</div>
                             <div className="flex items-center gap-2">
                                 <input type="text" readOnly value={`${window.location.origin}?projectId=${project.id}${shareTarget.type === 'asset' ? `&assetId=${shareTarget.id}` : ''}`} className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" />
                                 <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-medium ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>{isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}</button>

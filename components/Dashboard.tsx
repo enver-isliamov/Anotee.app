@@ -140,7 +140,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       try {
           // Attempt to rename Drive Folder if name changed
           if (editingProject.name !== editName && GoogleDriveService.isAuthenticated()) {
-              notify("Syncing name change to Google Drive...", "info");
+              notify(t('notify.sync_drive'), "info");
               await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
           }
 
@@ -171,7 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           if (err.code === 'CONFLICT') {
              notify(t('notify.conflict'), "error");
           } else {
-             notify("Failed to update project", "error");
+             notify(t('notify.update_fail'), "error");
              console.error(err);
           }
       } finally {
@@ -187,7 +187,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               await api.patchProject(project.id, { isLocked: !project.isLocked }, project._version || 0);
           }
           onEditProject(project.id, { isLocked: !project.isLocked });
-      } catch(e) { notify("Failed to toggle lock", "error"); }
+      } catch(e) { notify(t('notify.lock_fail'), "error"); }
   };
 
   const handleShareClick = (e: React.MouseEvent, project: Project) => {
@@ -248,7 +248,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
           notify(t('notify.proj_deleted'), "success");
       } catch(e) {
           console.error("Delete failed", e);
-          notify("Failed to delete project completely", "error");
+          notify(t('notify.delete_fail'), "error");
       } finally {
           setIsDeleting(null);
       }
@@ -577,11 +577,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.name')}</label>
-                  <input autoFocus type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Summer Campaign 2024" className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
+                  <input autoFocus type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder={t('dash.placeholder.name')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.client')}</label>
-                  <input type="text" required value={client} onChange={(e) => setClient(e.target.value)} placeholder="e.g. Acme Corp" className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
+                  <input type="text" required value={client} onChange={(e) => setClient(e.target.value)} placeholder={t('dash.placeholder.client')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all font-medium" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-zinc-500 mb-1.5">{t('dash.field.desc')}</label>

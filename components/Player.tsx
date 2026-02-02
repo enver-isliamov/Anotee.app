@@ -422,7 +422,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => { const t = parseFloat(e.target.value); setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (compareVideoRef.current) compareVideoRef.current.currentTime = t; };
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
-  const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify(t('notify.perm_fixed'), "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify(t('notify.perm_fail'), "error"); } };
+  const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify(t('notify.perm_attempt'), "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify(t('notify.perm_fixed'), "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify(t('notify.perm_fail'), "error"); } };
   const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
   
   // TIMELINE SCRUBBING
@@ -631,7 +631,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       )}
 
       {/* Video Elements... */}
-      {/* (Rest of Player Component kept as is, effectively identical to original but with updated logic inside useEffect) */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
         <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
@@ -660,7 +659,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                 <div className="flex items-center gap-2 text-indigo-400 font-mono text-[10px] bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-500/20 w-fit"><span>{formatTimecode(markerInPoint || currentTime)}</span>{markerOutPoint && (<><span>→</span><span>{formatTimecode(markerOutPoint)}</span></>)}</div>
                             </div>
                         </div>
-                        <textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder={isListening ? "Listening..." : "Type comment..."} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
+                        <textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder={isListening ? t('player.voice.listening') : t('player.voice.placeholder')} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
                         <div className="flex w-full gap-2"><button onClick={() => closeVoiceModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 font-medium transition-colors text-xs">{t('cancel')}</button><button onClick={() => closeVoiceModal(true)} disabled={!newCommentText.trim() || isLocked} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs">{t('save')}</button></div>
                     </div>
                  </div>
@@ -675,14 +674,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         {drivePermissionError ? <ShieldAlert size={32} className="text-orange-500" /> : <FileVideo size={32} className="text-zinc-400" />}
                     </div>
                     <p className="text-zinc-300 font-bold text-lg mb-2">
-                        {drivePermissionError ? "Access Restricted" : t('player.media_offline')}
+                        {drivePermissionError ? t('player.access_restricted') : t('player.media_offline')}
                     </p>
                     <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
-                        {drivePermissionError ? "You need public access to view this Drive file in the player." : t('player.offline_desc')}
+                        {drivePermissionError ? t('player.access_restricted_desc') : t('player.offline_desc')}
                     </p>
                     {drivePermissionError && isManager && (
                          <button onClick={(e) => { e.stopPropagation(); handleFixPermissions(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
-                             <Unlock size={16} /> Fix Permissions (Make Public)
+                             <Unlock size={16} /> {t('player.fix_perms_btn')}
                          </button>
                     )}
                     <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm border border-zinc-700 cursor-pointer">
@@ -694,18 +693,18 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              {driveFileMissing && (
                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-red-950/80 backdrop-blur-md p-6 text-center animate-in fade-in duration-300">
                      <div className="bg-red-900/50 p-4 rounded-full mb-4 ring-1 ring-red-700/50 text-red-300"><Trash2 size={32} /></div>
-                     <h3 className="text-xl font-bold text-white mb-2">File Deleted from Drive</h3>
+                     <h3 className="text-xl font-bold text-white mb-2">{t('player.file_deleted')}</h3>
                      <p className="text-sm text-zinc-300 max-w-sm mb-6 leading-relaxed">
-                         The source file for <strong>Version {version.versionNumber}</strong> was removed from Google Drive.
+                         {t('player.file_deleted_desc')} <strong>v{version.versionNumber}</strong>
                      </p>
                      <div className="flex gap-3">
                          {isManager && (
                              <button onClick={handleRemoveDeadVersion} className="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-colors">
-                                 Remove Version from App
+                                 {t('player.remove_ver_btn')}
                              </button>
                          )}
                          <button onClick={onBack} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg font-bold text-sm border border-zinc-700 transition-colors">
-                             Go Back
+                             {t('player.go_back')}
                          </button>
                      </div>
                  </div>
