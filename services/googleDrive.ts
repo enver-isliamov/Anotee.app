@@ -297,13 +297,8 @@ export const GoogleDriveService = {
   },
 
   getVideoStreamUrlLegacy: (fileId: string): string => {
-      const env = (import.meta as any).env || {};
-      const apiKey = env.VITE_GOOGLE_API_KEY;
-      
-      if (apiKey) {
-         return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
-      }
-      
+      // ENFORCED by SETTINGS.md: Always use 'uc' link for playback to support Range Requests.
+      // Do NOT use API Key or Auth headers for the video src.
       return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`;
   }
 };
