@@ -39,9 +39,9 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
                         <img 
-                            src="https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/7e/17/57/7e175739-ce36-3977-f273-53d745492d6e/AppIcon-0-0-1x_U007emarketing-0-7-0-85-220.png/512x512bb.jpg" 
+                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Final_Cut_Pro_10.6_icon.png/512px-Final_Cut_Pro_10.6_icon.png" 
                             alt="Final Cut Pro" 
-                            className="w-full h-full object-cover rounded-xl"
+                            className="w-full h-full object-cover"
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">Final Cut Pro</span>
@@ -51,9 +51,15 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
                         <img 
-                            src="https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/64/73/12/647312c9-821f-823e-9039-1639c0f99477/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/512x512bb.jpg" 
+                            src="https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/screenflow.png" 
                             alt="ScreenFlow" 
-                            className="w-full h-full object-cover rounded-xl"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement!.classList.add('bg-zinc-800');
+                                e.currentTarget.parentElement!.innerText = 'SF';
+                                e.currentTarget.parentElement!.classList.add('text-white', 'font-bold');
+                            }}
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">ScreenFlow</span>
@@ -63,9 +69,9 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative overflow-hidden">
                         <img 
-                            src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/d1/29/73/d1297374-7267-3766-3c0f-62624a9a0d24/AppIcon-0-0-1x_U007emarketing-0-7-0-85-220.png/512x512bb.jpg" 
+                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/CapCut_logo.svg/512px-CapCut_logo.svg.png" 
                             alt="CapCut" 
-                            className="w-full h-full object-cover rounded-xl"
+                            className="w-full h-full object-cover"
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">CapCut</span>
