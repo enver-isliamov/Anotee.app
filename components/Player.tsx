@@ -486,6 +486,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           if (isManager && GoogleDriveService.isAuthenticated()) {
               status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
               perms = await GoogleDriveService.getFilePermissions(version.googleDriveId);
+          } else {
+              // GUEST LOGIC: Assume restricted if error occurs on Drive file
+              // We can't know for sure without API, but high probability.
+              setDrivePermissionError(true);
           }
           
           setLoadingDrive(false); 
@@ -493,8 +497,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           if (status !== 'ok') { 
               setDriveFileMissing(true); 
           } else { 
-              // Only show permission error if we positively confirmed it's private
-              if (!perms.isPublic) {
+              // Only show permission error if we positively confirmed it's private OR if it's a guest guess
+              if (!perms.isPublic || (!isManager && !GoogleDriveService.isAuthenticated())) {
                   setDrivePermissionError(true); 
               }
               setVideoError(true); 
@@ -785,7 +789,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         {drivePermissionError ? t('player.access_restricted') : t('player.media_offline')}
                     </p>
                     <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
-                        {drivePermissionError ? t('player.access_restricted_desc') : t('player.offline_desc')}
+                        {drivePermissionError 
+                            ? t('player.access_restricted_desc') 
+                            : (!isManager ? "This video might be private. Ask the owner to check permissions." : t('player.offline_desc'))}
                     </p>
                     {drivePermissionError && isManager && (
                          <button onClick={(e) => { e.stopPropagation(); handleFixPermissions(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
