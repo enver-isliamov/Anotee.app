@@ -16,7 +16,7 @@ import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
-import { Loader2, UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
@@ -104,6 +104,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   
+  // Timeout State for Diagnostics
+  const [showTimeoutMsg, setShowTimeoutMsg] = useState(false);
+
   // Use Drive Context
   const { checkDriveConnection } = useDrive();
 
@@ -122,6 +125,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
+  // --- LOADING TIMEOUT HANDLER ---
+  useEffect(() => {
+    let timer: any;
+    if (!isLoaded) {
+      timer = setTimeout(() => setShowTimeoutMsg(true), 8000); // 8 seconds timeout
+    } else {
+      setShowTimeoutMsg(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
   // --- NAVIGATION HANDLER (HISTORY API) ---
   useEffect(() => {
     const handlePopState = () => {
@@ -134,18 +148,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         } else if (pId) {
             setView({ type: 'PROJECT_VIEW', projectId: pId });
         } else {
-            // Check for other static routes based on some other logic if needed, 
-            // but for now default to Dashboard
-            // NOTE: Ideally we'd have a router, but this suffices for the requirements
             setView({ type: 'DASHBOARD' });
         }
     };
 
     window.addEventListener('popstate', handlePopState);
-    
-    // Initial Load Logic handled in a separate Effect below, 
-    // but we can trigger it here if needed.
-    
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
@@ -205,7 +212,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 
                 if (res.ok) {
                     const data = await res.json();
-                    // Update context directly instead of event
                     checkDriveConnection();
                     return data.token; 
                 } else {
@@ -248,15 +254,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       const directProjectId = params.get('projectId');
 
       // OPTIMIZATION: Check if we need to fetch full data
-      // If we are just polling (not forced), check the lightweight timestamp first
       if (!force && !directProjectId && !isMockMode) {
           try {
               const lastModified = await api.checkUpdates(organization?.id);
               if (lastModified > 0 && lastModified <= lastServerTimestampRef.current) {
-                  // No changes since last fetch
                   return;
               }
-              // If changed, update ref and proceed to fetch full JSON
               if (lastModified > 0) lastServerTimestampRef.current = lastModified;
           } catch(e) {
               console.warn("Failed update check, falling back to full fetch");
@@ -265,26 +268,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
       try {
          setIsSyncing(true);
-         // Pass explicit project ID to fetch it even if it's public/not in my list
          const serverData = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
          
          if (serverData && Array.isArray(serverData)) {
             setProjects(currentLocalProjects => {
-                // 1. Comparison Hash to avoid unnecessary re-renders
                 const prevHash = currentLocalProjects.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
                 const newHash = serverData.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
                 
-                // If versions match exactly, do nothing
                 if (prevHash === newHash && currentLocalProjects.length === serverData.length) {
                     return currentLocalProjects;
                 }
 
-                // 2. SMART MERGE: Preserve Local Files & Cleanup Ghosts
                 const mergedProjects = serverData.map(serverProj => {
                     const localProj = currentLocalProjects.find(p => p.id === serverProj.id);
                     
                     if (localProj) {
-                        // Deep merge assets/versions to keep localFileUrl
                         const mergedAssets = serverProj.assets.map(serverAsset => {
                             const localAsset = localProj.assets.find(a => a.id === serverAsset.id);
                             if (!localAsset) return serverAsset;
@@ -292,11 +290,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                             const mergedVersions = serverAsset.versions.map(serverVer => {
                                 const localVer = localAsset.versions.find(v => v.id === serverVer.id);
                                 if (localVer && localVer.localFileUrl) {
-                                    // CLEANUP: If not in mock mode, invalidate blob URLs on reload
                                     if (!isMockMode && localVer.localFileUrl.startsWith('blob:')) {
-                                        return serverVer; // Drop the blob reference
+                                        return serverVer;
                                     }
-                                    // RESTORE LOCAL REFERENCE (Only if valid)
                                     return {
                                         ...serverVer,
                                         localFileUrl: localVer.localFileUrl,
@@ -323,7 +319,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   }, [currentUser, getToken, authMode, organization, isMockMode]);
 
-  // OPTIMIZED SYNC: Now accepts a single Project or Array
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
       
@@ -334,7 +329,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
       try {
           setIsSyncing(true);
-          // Only send the modified project(s) to server
           const updates = await api.syncProjects(projectsData, currentUser, token);
           
           if (updates && updates.length > 0) {
@@ -345,15 +339,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   }
                   return p;
               }));
-              // Update our local timestamp ref so next poll doesn't refetch our own changes
               lastServerTimestampRef.current = Date.now();
           }
       } catch (e: any) {
           console.error("Sync failed", e);
-          
           if (e.code === 'CONFLICT') {
               notify("Conflict detected. Reloading...", "warning");
-              lastLocalUpdateRef.current = 0; // Allow immediate poll
+              lastLocalUpdateRef.current = 0; 
               fetchCloudData(undefined, true); 
           } else {
               notify("Failed to save changes. Check internet.", "error");
@@ -363,7 +355,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  // --- USE UPLOAD MANAGER HOOK ---
   const { uploadTasks, handleUploadAsset, removeUploadTask } = useUploadManager(
       currentUser,
       projects,
@@ -372,12 +363,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       forceSync,
       lastLocalUpdateRef,
       isMockMode,
-      getToken // Pass auth method
+      getToken 
   );
 
   useEffect(() => {
     if (!currentUser) return; 
-    // Initial fetch always forced
     fetchCloudData(undefined, true);
   }, [currentUser, fetchCloudData]);
 
@@ -393,7 +383,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
-  // Initial Route Check (Sync state with URL on load)
   useEffect(() => {
     if (!currentUser) return;
 
@@ -402,9 +391,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const aId = params.get('assetId');
 
     if (pId) {
-      // Find in existing or loaded projects (Note: projects might be empty on first render)
-      // This logic relies on fetchCloudData populating `projects`.
-      // The view switching logic needs to be robust enough to handle "Loading" state or just set view ID.
       if (aId) {
            setView({ type: 'PLAYER', projectId: pId, assetId: aId });
       } else {
@@ -443,7 +429,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleUpdateProject = (updatedProject: Project, skipSync = false) => {
     setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
     if (!skipSync) {
-        // OPTIMIZATION: Only sync the specific project that changed
         forceSync([updatedProject]);
     }
   };
@@ -463,7 +448,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const newProjects = [projectWithVersion, ...projects];
     setProjects(newProjects);
     notify("Project created successfully", "success");
-    // OPTIMIZATION: Only sync the new project
     forceSync([projectWithVersion]);
   };
 
@@ -477,7 +461,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
   
   const handleNavigate = (page: string) => {
-      // Clear URL params for static pages
       window.history.pushState({}, '', '/');
       switch(page) {
           case 'WORKFLOW': setView({ type: 'WORKFLOW' }); break;
@@ -493,8 +476,31 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   if (!isLoaded) {
       return (
-          <div className="h-screen w-screen bg-zinc-950 flex items-center justify-center">
-              <Loader2 size={32} className="text-indigo-500 animate-spin" />
+          <div className="h-screen w-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
+              <Loader2 size={32} className="text-indigo-500 animate-spin mb-4" />
+              {showTimeoutMsg && (
+                  <div className="max-w-md bg-zinc-900 border border-zinc-800 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 shadow-2xl">
+                      <div className="flex items-center gap-2 mb-2 text-white">
+                          <AlertCircle size={20} className="text-orange-500" />
+                          <h3 className="font-bold">Taking longer than expected...</h3>
+                      </div>
+                      <p className="text-zinc-400 text-sm mb-4 leading-relaxed">
+                          The app is having trouble connecting to the authentication server. 
+                          This is common during new domain setup.
+                      </p>
+                      <div className="bg-black/30 p-3 rounded-lg mb-4">
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Likely Causes:</p>
+                          <ul className="text-left text-zinc-400 text-xs space-y-1.5 list-disc pl-4">
+                              <li>DNS (CNAME) records for <code>clerk.yourdomain.com</code> have not propagated yet.</li>
+                              <li>The Clerk <strong>Publishable Key</strong> in Vercel settings is incorrect or missing.</li>
+                              <li>Ad-blockers or privacy extensions are blocking Clerk scripts.</li>
+                          </ul>
+                      </div>
+                      <button onClick={() => window.location.reload()} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2">
+                          <RefreshCw size={14} /> Reload Page
+                      </button>
+                  </div>
+              )}
           </div>
       );
   }
