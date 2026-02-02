@@ -87,12 +87,6 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     </div>
                     
                     <div className="flex flex-col sm:flex-row gap-4 pt-4 items-start">
-                            <button 
-                            onClick={() => document.getElementById('auth-section')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="bg-zinc-900 dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200 px-8 py-4 rounded-xl font-bold text-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-indigo-900/10 dark:shadow-none"
-                        >
-                            {t('hero.cta')} <ArrowRight size={20} />
-                        </button>
                         <button 
                             onClick={() => onNavigate('LIVE_DEMO')}
                             className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 px-8 py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl group"
@@ -148,7 +142,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
         </div>
 
         {/* SECTION: WORKFLOW */}
-        <div className="py-24 max-w-7xl mx-auto px-4">
+        <div className="py-24 max-w-7xl mx-auto px-4 border-b border-zinc-200 dark:border-zinc-800">
             <div className="text-center mb-16 max-w-2xl mx-auto">
                 <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">{t('land.flow.title')}</h2>
                 <p className="text-zinc-600 dark:text-zinc-400">{t('land.flow.sub')}</p>
@@ -172,30 +166,8 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
             </div>
         </div>
 
-        {/* SECTION: FINAL CTA */}
-        <div className="py-24 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
-            <div className="max-w-5xl mx-auto px-4 text-center relative z-10">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 mb-8 shadow-lg shadow-indigo-900/10 ring-1 ring-indigo-500/20">
-                        <Rocket size={32} />
-                </div>
-                <h2 className="text-4xl md:text-5xl font-bold text-zinc-900 dark:text-white mb-8 tracking-tight">
-                    {t('land.try_now')}
-                </h2>
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
-                    <button 
-                        onClick={() => document.getElementById('auth-section')?.scrollIntoView({ behavior: 'smooth' })}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-indigo-900/20"
-                    >
-                        {t('hero.cta')} <ArrowRight size={20} />
-                    </button>
-                </div>
-            </div>
-            {/* Background Decor */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-gradient-to-r from-indigo-500/10 to-purple-500/10 blur-[120px] rounded-full pointer-events-none"></div>
-        </div>
-
         {/* FOOTER */}
-        <footer className="py-12 border-t border-zinc-200 dark:border-zinc-800 text-center">
+        <footer className="py-12 border-t border-zinc-200 dark:border-zinc-800 text-center bg-white dark:bg-zinc-900">
                 <div className="text-sm font-bold text-zinc-900 dark:text-white mb-2">{t('app.name')}</div>
                 <div className="text-xs text-zinc-500">
                     &copy; {new Date().getFullYear()} {t('footer.rights')}
