@@ -1,5 +1,5 @@
 
-# ☁️ Clerk Migration Plan (SmoTree)
+# ☁️ Clerk Migration Plan (Anotee)
 
 План полного перехода на нативные возможности Clerk для отказа от кастомного кода ("костылей").
 

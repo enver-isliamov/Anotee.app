@@ -84,7 +84,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'land.chart.pro': 'Anotee Pro',
     'land.integrations.title': 'Works with Your Favorite Editor',
 
-    // Why Smotree Section
+    // Why Anotee Section
     'why.title': 'Why Anotee?',
     'why.feat1.title': 'Timecode Edits',
     'why.feat1.desc': 'Leave comments directly on the video. No more "something is off at second 15". Every pixel and frame under control.',
@@ -328,7 +328,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'land.chart.pro': 'Anotee Pro',
     'land.integrations.title': 'Работает с вашим любимым редактором',
 
-    // Why Smotree Section
+    // Why Anotee Section
     'why.title': 'Почему Anotee?',
     'why.feat1.title': 'Правки по таймкодам',
     'why.feat1.desc': 'Оставляйте комментарии прямо на видео. Больше никаких «на 15-й секунде там что-то не то». Каждый пиксель и каждый кадр под контролем.',

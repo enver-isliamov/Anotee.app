@@ -2,7 +2,7 @@
 // Service to handle Google Drive API interactions
 // Powered by Clerk for Authentication
 
-const APP_FOLDER_NAME = 'SmoTree.App';
+const APP_FOLDER_NAME = 'Anotee.App';
 
 // We rely on the app to inject a method to get a fresh token from Clerk/Server
 let tokenGetter: (() => Promise<string | null>) | null = null;

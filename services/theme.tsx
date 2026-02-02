@@ -16,7 +16,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
     // 1. Try localStorage first for instant load
-    const saved = localStorage.getItem('smotree_theme');
+    const saved = localStorage.getItem('anotee_theme');
     if (saved === 'light' || saved === 'dark') return saved;
     // 2. Default
     return 'dark'; 
@@ -30,7 +30,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('smotree_theme', theme);
+    localStorage.setItem('anotee_theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {

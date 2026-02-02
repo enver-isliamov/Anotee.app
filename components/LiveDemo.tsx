@@ -18,7 +18,7 @@ const DEMO_USER: User = {
 
 const INITIAL_DEMO_PROJECT: Project = {
     id: 'demo-project',
-    name: 'SmoTree - Commercial Demo',
+    name: 'Anotee - Commercial Demo',
     description: 'This is a live demo environment. Changes are local and temporary.',
     client: 'Demo Corp',
     createdAt: Date.now(),
@@ -55,7 +55,7 @@ const INITIAL_DEMO_PROJECT: Project = {
                             userId: 'u2',
                             authorName: 'Director',
                             timestamp: 2,
-                            text: 'Welcome to the SmoTree Live Demo! 👋\nTry playing the video and adding your own comments.',
+                            text: 'Welcome to the Anotee Live Demo! 👋\nTry playing the video and adding your own comments.',
                             status: CommentStatus.OPEN,
                             createdAt: 'Just now'
                         },

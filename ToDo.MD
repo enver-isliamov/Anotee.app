@@ -1,5 +1,5 @@
 
-# 🚜 SmoTree Refactoring Roadmap
+# 🚜 Anotee Refactoring Roadmap
 
 ## 📋 План Действий
 

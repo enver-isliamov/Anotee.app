@@ -120,7 +120,7 @@ export const WorkflowPage: React.FC = () => {
                              <Download size={18} className="text-orange-500 dark:text-orange-400"/> DaVinci Resolve Workflow
                          </h3>
                          <div className="text-sm text-zinc-600 dark:text-zinc-400 space-y-2">
-                             <p>1. Export markers from SmoTree as <strong>.xml</strong>.</p>
+                             <p>1. Export markers from Anotee as <strong>.xml</strong>.</p>
                              <p>2. Open DaVinci Resolve. Go to <strong>File {'>'} Import {'>'} Timeline</strong>.</p>
                              <p>3. Select the downloaded XML.</p>
                              <p>4. The markers will appear as a new timeline or overlay on your clips.</p>
@@ -147,7 +147,7 @@ export const AboutPage: React.FC = () => {
                     {t('hero.title.speed')}
                 </h2>
                 <div className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold mb-8 shadow-sm">
-                    <span className="text-indigo-600 dark:text-indigo-400">SmoTree</span> Mission
+                    <span className="text-indigo-600 dark:text-indigo-400">Anotee</span> Mission
                 </div>
                 <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto leading-relaxed">
                     {t('hero.desc_new')}
@@ -163,7 +163,7 @@ export const AboutPage: React.FC = () => {
                         <Rocket size={32} />
                     </div>
                     <h2 className="text-3xl md:text-5xl font-bold text-zinc-900 dark:text-white mb-6 tracking-tight">
-                        {t('page.about.feat.fast.title').replace('SmoTree', '')} <span className="text-indigo-600 dark:text-indigo-400">SmoTree</span>
+                        {t('page.about.feat.fast.title').replace('Anotee', '')} <span className="text-indigo-600 dark:text-indigo-400">Anotee</span>
                     </h2>
                     <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto text-lg leading-relaxed font-light">
                         {t('page.about.feat.fast.desc')}
@@ -239,7 +239,7 @@ export const AboutPage: React.FC = () => {
                 <div className="flex items-center gap-3 border-t border-zinc-100 dark:border-zinc-800/50 pt-6">
                     <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-md">S</div>
                     <div className="text-left">
-                        <div className="text-sm font-bold text-zinc-900 dark:text-white">SmoTree Dev</div>
+                        <div className="text-sm font-bold text-zinc-900 dark:text-white">Anotee Dev</div>
                         <div className="text-xs text-zinc-500 font-medium">Founder & Maker</div>
                     </div>
                 </div>
