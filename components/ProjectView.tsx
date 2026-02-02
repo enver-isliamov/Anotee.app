@@ -87,10 +87,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     ? project.assets.filter(a => a.id === restrictedAssetId)
     : project.assets;
 
-  // Filter tasks for this project that are active
-  const pendingUploads = uploadTasks.filter(task => 
+  // Split tasks: those for new assets (no targetId) and those for version updates (targetId)
+  const activeTasks = uploadTasks.filter(task => 
       task.projectId === project.id && (task.status === 'uploading' || task.status === 'processing')
   );
+  
+  const newAssetTasks = activeTasks.filter(t => !t.targetAssetId);
+  // Version tasks are handled inside the map of existing assets
 
   useEffect(() => {
     if (isDriveReady) {
@@ -465,7 +468,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                {visibleAssets.length === 0 && pendingUploads.length === 0 && !isDragging && (
+                {visibleAssets.length === 0 && activeTasks.length === 0 && !isDragging && (
                     <div 
                         onClick={() => fileInputRef.current?.click()}
                         className="col-span-full h-[60vh] border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all cursor-pointer group relative overflow-hidden"
@@ -485,8 +488,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     </div>
                 )}
 
-                {/* GHOST TILES FOR UPLOADS */}
-                {pendingUploads.map(task => (
+                {/* GHOST TILES FOR NEW ASSETS ONLY */}
+                {newAssetTasks.map(task => (
                     <div key={task.id} className="group bg-zinc-900 rounded-lg overflow-hidden border border-indigo-500/50 relative shadow-sm animate-pulse">
                         <div className="aspect-video bg-zinc-950 relative overflow-hidden flex items-center justify-center">
                             {task.thumbnail ? (
@@ -516,6 +519,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     const lastVer = asset.versions[asset.versions.length-1];
                     const isDrive = lastVer?.storageType === 'drive';
                     
+                    // Check if this asset is currently receiving a new version upload
+                    const activeUpload = activeTasks.find(t => t.targetAssetId === asset.id);
+
                     return (
                     <div 
                         key={asset.id}
@@ -523,36 +529,49 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         className="group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 hover:border-indigo-500/50 transition-all shadow-sm relative"
                     >
                         <div className="aspect-video bg-zinc-950 relative overflow-hidden">
-                        <img 
-                            src={asset.thumbnail} 
-                            alt={asset.title} 
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100"
-                            onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
-                        />
-                        {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                            {!isLocked && (
-                                <button 
-                                    onClick={(e) => handleShareAsset(e, asset)}
-                                    className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"
-                                    title={t('pv.copy_link')}
-                                >
-                                    <LinkIcon size={12} />
-                                </button>
+                            <img 
+                                src={asset.thumbnail} 
+                                alt={asset.title} 
+                                className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${activeUpload ? 'opacity-40 blur-[1px]' : 'opacity-80 group-hover:opacity-100'}`}
+                                onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
+                            />
+                            
+                            {/* VERSION UPLOAD OVERLAY */}
+                            {activeUpload && (
+                                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60">
+                                    <Loader2 size={24} className="text-indigo-500 animate-spin mb-2" />
+                                    <span className="text-xs font-bold text-white shadow-black drop-shadow-md">Uploading v{asset.versions.length + 1}... {activeUpload.progress}%</span>
+                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/50">
+                                        <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${activeUpload.progress}%` }}></div>
+                                    </div>
+                                </div>
                             )}
-                            {canEditProject && !isLocked && (
-                                <>
-                                    {isProjectOwner && isDrive && lastVer.googleDriveId && (
-                                        <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
-                                    )}
-                                    <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
-                                    {canDeleteAssets && (
-                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                        <div className="absolute bottom-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-white font-mono backdrop-blur-sm">v{asset.versions.length}</div>
+
+                            {isDrive && !activeUpload && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
+                            
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                                {!isLocked && !activeUpload && (
+                                    <button 
+                                        onClick={(e) => handleShareAsset(e, asset)}
+                                        className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"
+                                        title={t('pv.copy_link')}
+                                    >
+                                        <LinkIcon size={12} />
+                                    </button>
+                                )}
+                                {canEditProject && !isLocked && !activeUpload && (
+                                    <>
+                                        {isProjectOwner && isDrive && lastVer.googleDriveId && (
+                                            <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
+                                        )}
+                                        <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
+                                        {canDeleteAssets && (
+                                            <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                            <div className="absolute bottom-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-white font-mono backdrop-blur-sm">v{asset.versions.length}</div>
                         </div>
                         <div className="p-3">
                         <h3 className="font-medium text-zinc-200 text-xs md:text-sm truncate mb-1">{asset.title}</h3>

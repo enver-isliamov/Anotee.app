@@ -40,6 +40,7 @@ export const useUploadManager = (
             file,
             projectName: project ? project.name : t('common.uploading'),
             projectId: projectId,
+            targetAssetId: targetAssetId, // Track if this is a version update
             progress: 0,
             status: 'processing' // Start with processing to generate thumb
         };
@@ -95,6 +96,8 @@ export const useUploadManager = (
                     // If adding to existing asset, we might want to stick to the Asset's naming convention
                     // OR allow the new file's name to take precedence. 
                     // Per request: "Save file name". We use the uploaded file's base name.
+                    // Actually per SETTINGS.MD: MUST use AssetTitle + index.
+                    assetTitle = existingAsset.title; // Override with existing asset title for naming consistency
                 }
             } else {
                 // Check if an asset with this name already exists to auto-group? 

@@ -71,6 +71,7 @@ export interface UploadTask {
   file: File;
   projectName: string;
   projectId: string; // Ensure projectId is tracked
+  targetAssetId?: string; // ID of the asset being updated (if version upload)
   progress: number;
   status: 'uploading' | 'processing' | 'done' | 'error';
   thumbnail?: string; // New field for optimistic UI
