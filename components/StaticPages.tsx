@@ -37,44 +37,14 @@ export const IntegrationBlock: React.FC = () => {
 
                 {/* Final Cut Pro */}
                 <div className="flex flex-col items-center gap-3 group">
-                    <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
+                    <div className="w-16 h-16 rounded-xl bg-black flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden border border-zinc-800">
                         <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Final_Cut_Pro_10.6_icon.png/512px-Final_Cut_Pro_10.6_icon.png" 
+                            src="https://support.apple.com/content/dam/edam/applecare/images/en_US/psp_heros/mini-hero-final-cut-pro.image.large_2x.png" 
                             alt="Final Cut Pro" 
                             className="w-full h-full object-cover"
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">Final Cut Pro</span>
-                </div>
-
-                {/* ScreenFlow */}
-                <div className="flex flex-col items-center gap-3 group">
-                    <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
-                        <img 
-                            src="https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/screenflow.png" 
-                            alt="ScreenFlow" 
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                                e.currentTarget.parentElement!.classList.add('bg-zinc-800');
-                                e.currentTarget.parentElement!.innerText = 'SF';
-                                e.currentTarget.parentElement!.classList.add('text-white', 'font-bold');
-                            }}
-                        />
-                    </div>
-                    <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">ScreenFlow</span>
-                </div>
-
-                {/* CapCut */}
-                <div className="flex flex-col items-center gap-3 group">
-                    <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative overflow-hidden">
-                        <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/CapCut_logo.svg/512px-CapCut_logo.svg.png" 
-                            alt="CapCut" 
-                            className="w-full h-full object-cover"
-                        />
-                    </div>
-                    <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">CapCut</span>
                 </div>
             </div>
         </div>
