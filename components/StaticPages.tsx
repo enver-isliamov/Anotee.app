@@ -15,7 +15,7 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-[#00005B] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden border border-white/10">
                         <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/4/40/Adobe_Premiere_Pro_CC_icon.svg" 
+                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Adobe_Premiere_Pro_CC_icon.svg/512px-Adobe_Premiere_Pro_CC_icon.svg.png" 
                             alt="Adobe Premiere Pro" 
                             className="w-full h-full object-cover"
                         />
@@ -27,7 +27,7 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center relative shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
                          <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/4/4d/DaVinci_Resolve_Studio.png" 
+                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/DaVinci_Resolve_Studio.png/512px-DaVinci_Resolve_Studio.png" 
                             alt="DaVinci Resolve" 
                             className="w-full h-full object-contain drop-shadow-xl"
                         />
@@ -39,9 +39,9 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
                         <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/2/23/Final_Cut_Pro_X.png" 
+                            src="https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/7e/17/57/7e175739-ce36-3977-f273-53d745492d6e/AppIcon-0-0-1x_U007emarketing-0-7-0-85-220.png/512x512bb.jpg" 
                             alt="Final Cut Pro" 
-                            className="w-full h-full object-contain"
+                            className="w-full h-full object-cover rounded-xl"
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">Final Cut Pro</span>
@@ -51,15 +51,9 @@ export const IntegrationBlock: React.FC = () => {
                 <div className="flex flex-col items-center gap-3 group">
                     <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform overflow-hidden">
                         <img 
-                            src="https://www.telestream.net/images/products/screenflow/icon-screenflow.png" 
+                            src="https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/64/73/12/647312c9-821f-823e-9039-1639c0f99477/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/512x512bb.jpg" 
                             alt="ScreenFlow" 
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                                // Fallback if image fails
-                                e.currentTarget.style.display = 'none';
-                                e.currentTarget.parentElement!.classList.add('bg-gradient-to-tr', 'from-gray-700', 'to-gray-500');
-                                e.currentTarget.parentElement!.innerHTML = '<span class="text-[10px] font-bold text-white">SF</span>';
-                            }}
+                            className="w-full h-full object-cover rounded-xl"
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">ScreenFlow</span>
@@ -67,15 +61,11 @@ export const IntegrationBlock: React.FC = () => {
 
                 {/* CapCut */}
                 <div className="flex flex-col items-center gap-3 group">
-                    <div className="w-16 h-16 rounded-xl bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative overflow-hidden">
+                    <div className="w-16 h-16 rounded-xl bg-transparent flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform relative overflow-hidden">
                         <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/CapCut_logo.svg/1024px-CapCut_logo.svg.png" 
+                            src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/d1/29/73/d1297374-7267-3766-3c0f-62624a9a0d24/AppIcon-0-0-1x_U007emarketing-0-7-0-85-220.png/512x512bb.jpg" 
                             alt="CapCut" 
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                // Fallback
-                                (e.target as HTMLImageElement).src = 'https://seeklogo.com/images/C/capcut-logo-3996500375-seeklogo.com.png';
-                            }}
+                            className="w-full h-full object-cover rounded-xl"
                         />
                     </div>
                     <span className="text-xs font-medium text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">CapCut</span>
@@ -233,7 +223,7 @@ export const AboutPage: React.FC = () => {
             {/* 4. Instant Playback & Tech Stack Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  {/* Instant Playback Block (UPDATED for Light Mode) */}
-                 <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-8 rounded-3xl flex flex-col items-center text-center relative overflow-hidden justify-center hover:border-yellow-500/30 transition-colors shadow-lg dark:shadow-2xl">
+                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 rounded-3xl flex flex-col items-center text-center relative overflow-hidden justify-center hover:border-yellow-500/30 transition-colors shadow-lg dark:shadow-2xl">
                     <div className="p-4 bg-yellow-50 dark:bg-yellow-500/10 rounded-full text-yellow-600 dark:text-yellow-500 mb-6 shadow-lg shadow-yellow-500/10 dark:shadow-[0_0_15px_rgba(234,179,8,0.2)]">
                         <Zap size={32} fill="currentColor" />
                     </div>
