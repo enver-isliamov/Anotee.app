@@ -25,12 +25,53 @@
     <meta property="twitter:description" content="Streamline your post-production workflow. Frame-accurate commenting, version control, and instant proxies." />
     <meta property="twitter:image" content="https://images.unsplash.com/photo-1574717024653-61fd2cf4d44c?w=1200&h=630&fit=crop&q=80" />
 
-    <!-- Using local SVG to prevent load errors -->
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <!-- Using PNG logo as requested -->
+    <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#09090b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- CRITICAL CSS FOR INSTANT DARK MODE (Prevents White Flash) -->
+    <style>
+      html { background-color: #09090b; color: #f4f4f5; }
+      html.light { background-color: #fafafa; color: #18181b; }
+      body { opacity: 1; transition: opacity 0.2s ease; }
+      
+      /* Custom scrollbar for dark theme */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      .dark ::-webkit-scrollbar-track { background: #18181b; }
+      .dark ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+      .dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+      /* Light mode scrollbar */
+      ::-webkit-scrollbar-track { background: #f4f4f5; }
+      ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+
+      /* Prevent pull-to-refresh on mobile to feel native */
+      body { overscroll-behavior-y: none; }
+      
+      /* Network Error Overlay */
+      #network-error-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #09090b;
+        color: white;
+        z-index: 99999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+    </style>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       // IMMEDIATE THEME CHECK TO PREVENT FLICKER
@@ -41,8 +82,10 @@
           // Default to dark if no setting or if system is dark
           if (localTheme === 'dark' || (!localTheme)) {
             document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
           } else {
             document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('light');
           }
         } catch (e) {}
       })();
@@ -75,59 +118,6 @@
         }
       }
     </script>
-    <style>
-      /* Custom scrollbar for dark theme */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      .dark ::-webkit-scrollbar-track {
-        background: #18181b; 
-      }
-      .dark ::-webkit-scrollbar-thumb {
-        background: #3f3f46; 
-        border-radius: 4px;
-      }
-      .dark ::-webkit-scrollbar-thumb:hover {
-        background: #52525b; 
-      }
-
-      /* Light mode scrollbar */
-      ::-webkit-scrollbar-track {
-        background: #f4f4f5;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #d4d4d8;
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #a1a1aa;
-      }
-
-      /* Prevent pull-to-refresh on mobile to feel native */
-      body {
-        overscroll-behavior-y: none;
-      }
-      
-      /* Network Error Overlay */
-      #network-error-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: #09090b;
-        color: white;
-        z-index: 99999;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        padding: 20px;
-        font-family: system-ui, -apple-system, sans-serif;
-      }
-    </style>
   <script type="importmap">
 {
   "imports": {
