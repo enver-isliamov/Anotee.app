@@ -30,6 +30,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.about': 'About',
     'nav.demo': 'Live Demo',
     'nav.ai': 'AI Features',
+    'nav.terms': 'Terms of Service',
+    'nav.privacy': 'Privacy Policy',
     
     // Common Actions
     'common.copy': 'Copy',
@@ -277,6 +279,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.about': 'О нас',
     'nav.demo': 'Демо',
     'nav.ai': 'AI/Планы',
+    'nav.terms': 'Оферта',
+    'nav.privacy': 'Политика',
 
     // Common
     'common.copy': 'Копировать',
@@ -514,6 +518,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.about': 'Nosotros',
     'nav.demo': 'Demo',
     'nav.ai': 'IA',
+    'nav.terms': 'Términos',
+    'nav.privacy': 'Privacidad',
     'hero.demo': 'Demo en Vivo',
     'dash.my_projects': 'Mis Proyectos',
     'dash.shared_projects': 'Compartido conmigo',
@@ -553,6 +559,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.about': '約',
     'nav.demo': 'デモ',
     'nav.ai': 'AI',
+    'nav.terms': '利用規約',
+    'nav.privacy': 'プライバシー',
     'hero.demo': 'ライブデモ',
     'dash.my_projects': 'マイプロジェクト',
     'dash.shared_projects': '共有アイテム',
@@ -592,6 +600,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.about': '정보',
     'nav.demo': '데모',
     'nav.ai': 'AI',
+    'nav.terms': '이용 약관',
+    'nav.privacy': '개인 정보 보호 정책',
     'hero.demo': '라이브 데모',
     'dash.my_projects': '내 프로젝트',
     'dash.shared_projects': '나와 공유됨',
@@ -631,6 +641,8 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.about': 'Sobre',
     'nav.demo': 'Demonstração',
     'nav.ai': 'IA',
+    'nav.terms': 'Termos',
+    'nav.privacy': 'Privacidade',
     'hero.demo': 'Demo ao Vivo',
     'dash.my_projects': 'Meus Projetos',
     'dash.shared_projects': 'Compartilhado comigo',

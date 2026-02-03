@@ -167,11 +167,33 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
         </div>
 
         {/* FOOTER */}
-        <footer className="py-12 border-t border-zinc-200 dark:border-zinc-800 text-center bg-white dark:bg-zinc-900">
-                <div className="text-sm font-bold text-zinc-900 dark:text-white mb-2">{t('app.name')}</div>
-                <div className="text-xs text-zinc-500 flex flex-col gap-1">
-                    <span>&copy; {new Date().getFullYear()} {t('footer.rights')}</span>
-                    <span className="opacity-70">ИНН 910228340090</span>
+        <footer className="mt-16 py-8 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-3 gap-8 text-center md:text-left">
+                    {/* Brand */}
+                    <div className="flex flex-col gap-2">
+                        <div className="font-bold text-zinc-900 dark:text-white">Anotee</div>
+                        <div className="text-xs text-zinc-500 dark:text-zinc-600">
+                            &copy; {new Date().getFullYear()} {t('footer.rights')}
+                        </div>
+                    </div>
+
+                    {/* Links */}
+                    <div className="flex flex-col gap-2 text-xs">
+                        <button onClick={() => onNavigate('TERMS')} className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left">
+                            {t('nav.terms')} (Публичная оферта)
+                        </button>
+                        <button onClick={() => onNavigate('PRIVACY')} className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left">
+                            {t('nav.privacy')} (Политика конфиденциальности)
+                        </button>
+                    </div>
+
+                    {/* Contacts (Required by YooKassa) */}
+                    <div className="text-xs text-zinc-500 dark:text-zinc-600 flex flex-col gap-1">
+                        <div className="font-bold text-zinc-700 dark:text-zinc-400">Контакты и Реквизиты:</div>
+                        <span>ИП/Самозанятый [ВАШЕ ФИО]</span>
+                        <span>ИНН 910228340090</span>
+                        <span>Email: [ВАШ EMAIL]</span>
+                    </div>
                 </div>
         </footer>
     </div>

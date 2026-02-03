@@ -6,6 +6,7 @@ import { Player } from './components/Player';
 import { Login } from './components/Login';
 import { Profile } from './components/Profile';
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
+import { LegalPage } from './components/LegalPages';
 import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
@@ -31,6 +32,8 @@ type ViewState =
   | { type: 'ABOUT' }
   | { type: 'PRICING' }
   | { type: 'AI_FEATURES' }
+  | { type: 'TERMS' }
+  | { type: 'PRIVACY' }
   | { type: 'LIVE_DEMO' };
 
 // INCREASED TO 20s to prevent Rate Limiting on full Auth checks
@@ -470,6 +473,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'AI_FEATURES': setView({ type: 'AI_FEATURES' }); break;
           case 'LIVE_DEMO': setView({ type: 'LIVE_DEMO' }); break;
           case 'DASHBOARD': setView({ type: 'DASHBOARD' }); break;
+          case 'TERMS': setView({ type: 'TERMS' }); break;
+          case 'PRIVACY': setView({ type: 'PRIVACY' }); break;
           default: setView({ type: 'DASHBOARD' });
       }
   };
@@ -513,7 +518,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
   if (!currentUser) {
-      const isPublicView = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
+      const isPublicView = ['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
       if (isPublicView) {
           return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
@@ -527,6 +532,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     {view.type === 'ABOUT' && <AboutPage />}
                     {view.type === 'PRICING' && <PricingPage />}
                     {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
+                    {view.type === 'TERMS' && <LegalPage type="TERMS" />}
+                    {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
                 </MainLayout>
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
                 {isMockMode && (
@@ -552,7 +559,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       );
   }
 
-  const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES'].includes(view.type);
+  const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
@@ -587,6 +594,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 {view.type === 'ABOUT' && <AboutPage />}
                 {view.type === 'PRICING' && <PricingPage />}
                 {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
+                {view.type === 'TERMS' && <LegalPage type="TERMS" />}
+                {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
             </MainLayout>
         )}
 
