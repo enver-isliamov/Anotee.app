@@ -54,6 +54,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
   // Deletion State
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  
+  // Payment State
+  const [isBuying, setIsBuying] = useState(false);
 
   // Form State (Create)
   const [name, setName] = useState('');
@@ -130,6 +133,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
     setName('');
     setClient('');
     setDescription('');
+  };
+
+  const handlePayment = async () => {
+      setIsBuying(true);
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/payment?action=init', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          
+          if (res.ok && data.confirmationUrl) {
+              window.location.href = data.confirmationUrl;
+          } else {
+              notify("Payment failed: " + (data.error || "Unknown"), "error");
+              setIsBuying(false);
+          }
+      } catch (e) {
+          notify("Network error", "error");
+          setIsBuying(false);
+      }
   };
 
   const handleOpenEdit = (e: React.MouseEvent, project: Project) => {
@@ -560,8 +585,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                            <button onClick={() => onNavigate('PRICING')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all">
                                {t('upsell.cta')} <ArrowRight size={14} />
                            </button>
-                           <button className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg text-sm font-bold border border-zinc-200 dark:border-zinc-700">
-                               {t('upsell.donate')}
+                           <button onClick={handlePayment} disabled={isBuying} className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg text-sm font-bold border border-zinc-200 dark:border-zinc-700 flex items-center gap-2 disabled:opacity-70">
+                               {isBuying ? <Loader2 size={14} className="animate-spin"/> : t('upsell.donate')}
                            </button>
                        </div>
                   </div>
