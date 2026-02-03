@@ -1,36 +1,60 @@
-<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_1" data-name="Слой 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 200 200">
   <defs>
-    <!-- Rainbow gradient for the border -->
-    <linearGradient id="rainbowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4ade80;stop-opacity:1" />
-      <stop offset="25%" style="stop-color:#fbbf24;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#fb923c;stop-opacity:1" />
-      <stop offset="75%" style="stop-color:#f87171;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#c084fc;stop-opacity:1" />
+    <style>
+      .cls-1 {
+        fill: url(#_Безымянный_градиент);
+      }
+
+      .cls-1, .cls-2, .cls-3, .cls-4, .cls-5, .cls-6 {
+        stroke-width: 0px;
+      }
+
+      .cls-2 {
+        fill: #1e293b;
+      }
+
+      .cls-3, .cls-7 {
+        fill: none;
+      }
+
+      .cls-4 {
+        fill: #fff;
+      }
+
+      .cls-5 {
+        fill: url(#grid);
+      }
+
+      .cls-6 {
+        fill: #f45897;
+      }
+
+      .cls-7 {
+        stroke: #374151;
+        stroke-width: 2px;
+      }
+    </style>
+    <linearGradient id="_Безымянный_градиент" data-name="Безымянный градиент" x1="0" y1="200" x2="1" y2="199" gradientTransform="translate(0 40000) scale(200 -200)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset=".25" stop-color="#fbbf24"/>
+      <stop offset=".5" stop-color="#fb923c"/>
+      <stop offset=".75" stop-color="#f87171"/>
+      <stop offset="1" stop-color="#c084fc"/>
     </linearGradient>
-    
-    <!-- Grid pattern -->
-    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#374151" stroke-width="2"/>
+    <pattern id="grid" x="0" y="0" width="20" height="20" patternTransform="translate(0 -16184) scale(1 -1)" patternUnits="userSpaceOnUse" viewBox="0 0 20 20">
+      <g>
+        <rect class="cls-3" width="20" height="20"/>
+        <path class="cls-7" d="m20,20H0V0"/>
+      </g>
     </pattern>
   </defs>
-  
-  <!-- Outer rounded square with gradient -->
-  <rect width="200" height="200" rx="45" fill="url(#rainbowGradient)"/>
-  
-  <!-- Inner dark rounded square -->
-  <rect x="10" y="10" width="180" height="180" rx="38" fill="#1e293b"/>
-  
-  <!-- Grid pattern overlay -->
-  <rect x="26" y="26" width="148" height="148" rx="25" fill="url(#grid)"/>
-  
-  <!-- Lowercase letter "a" in print form -->
-  <g transform="translate(110, 110)">
-    <!-- Circle/bowl of "a" -->
-    <circle cx="-15" cy="4" r="40" fill="none" stroke="#ffffff" stroke-width="6"/>
-    <!-- Vertical stem on the right -->
-    <path d="M 25,-36 L 25,40" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square"/>
-    <!-- Dot above the "a" on the right -->
-    <circle cx="25" cy="-55" r="8" fill="#ffffff"/>
+  <rect class="cls-1" x="0" y="0" width="200" height="200" rx="45" ry="45"/>
+  <rect class="cls-2" x="10" y="10" width="180" height="180" rx="38" ry="38"/>
+  <rect class="cls-5" x="26" y="26" width="148" height="148" rx="25" ry="25"/>
+  <path class="cls-4" d="m147.62,120.21c-.6-.97-1.43-1.46-2.47-1.46-1.21,0-2.29.57-3.26,1.71-3.54,4.23-6.48,7.21-8.81,8.96-2.34,1.75-4.79,2.62-7.36,2.62s-4.63-.99-5.91-2.99c-1.29-1.99-1.93-5.18-1.93-9.57,0-4.96.86-12.21,2.59-21.76,1.73-9.55,2.64-9.27,4.73-17.15.24-.98.36-1.79.36-2.44,0-3.74-2.86-5.61-8.57-5.61-2.41,0-4.34.41-5.79,1.22-1.45.81-2.41,2.36-2.9,4.63-2.98,15.61-4.99,18.96-8.05,28.07-3.06,9.1-6.44,15.69-10.14,19.75-3.7,4.07-8.01,6.1-12.91,6.1-4.34,0-7.86-1.89-10.56-5.67-2.7-3.78-4.04-9.12-4.04-16.03,0-9.51,1.77-18.37,5.31-26.58,3.54-8.21,8.89-14.81,16.05-19.81,5.92-4.14,10.85-6.56,18.16-7.27,2.01-.2,3.46-1.93,3.36-3.95-.02-.32-.03-.64-.03-.97,0-1.56.18-3.08.52-4.54.58-2.5-1.41-4.81-3.96-4.57-10.21.98-17.87,4.05-26.14,9.22-10.22,6.38-17.94,14.84-23.17,25.36-5.23,10.53-7.84,21.97-7.84,34.32,0,7.15,1.29,13.35,3.86,18.59,2.57,5.24,6.09,9.25,10.56,12.01,4.46,2.76,9.47,4.15,15.02,4.15,9.16,0,16.56-3.94,22.2-11.81,1.65-2.3,5.15-1.83,6.32.74,1.1,2.4,2.53,4.45,4.3,6.13,3.46,3.29,8,4.94,13.63,4.94s10.1-1.26,13.88-3.78c3.78-2.52,7.64-6.18,11.58-10.97,1.53-1.87,2.29-4.39,2.29-7.56,0-1.71-.3-3.05-.9-4.02Z"/>
+  <g>
+    <path class="cls-6" d="m125.56,62.3c-5.68,0-10.3-4.62-10.3-10.3s4.62-10.3,10.3-10.3,10.31,4.62,10.31,10.3-4.62,10.3-10.31,10.3Z"/>
+    <path class="cls-4" d="m125.56,44.2c4.31,0,7.8,3.49,7.8,7.8h0c0,4.31-3.49,7.8-7.8,7.8h0c-4.31,0-7.8-3.49-7.8-7.8h0c0-4.31,3.49-7.8,7.8-7.8h0m0-5c-7.06,0-12.8,5.74-12.8,12.8s5.74,12.8,12.8,12.8,12.8-5.74,12.8-12.8-5.74-12.8-12.8-12.8h0Z"/>
   </g>
 </svg>
