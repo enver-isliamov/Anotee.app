@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Menu, X, PlayCircle, Shield } from 'lucide-react';
+import { Menu, X, PlayCircle, Shield, Settings, User as UserIcon } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { ThemeToggle } from './ThemeToggle';
@@ -129,17 +129,28 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </div>
                 )}
 
-                {/* Standardized User Button (Replaces manual profile chip) */}
+                {/* LOGGED IN USER ACTIONS */}
                 {currentUser && (
-                    <UserButton 
-                        afterSignOutUrl="/"
-                        userProfileMode="modal"
-                        appearance={{
-                            elements: {
-                                avatarBox: "w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 transition-colors"
-                            }
-                        }}
-                    />
+                    <div className="flex items-center gap-2">
+                        {/* Profile/Settings Link - CRITICAL FIX */}
+                        <button 
+                            onClick={() => onNavigate('PROFILE')}
+                            className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                            title="Settings & Subscription"
+                        >
+                            <Settings size={20} />
+                        </button>
+
+                        <UserButton 
+                            afterSignOutUrl="/"
+                            userProfileMode="modal"
+                            appearance={{
+                                elements: {
+                                    avatarBox: "w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 transition-colors"
+                                }
+                            }}
+                        />
+                    </div>
                 )}
 
                 {/* Login Button (If Logged Out) */}
@@ -199,18 +210,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 )}
 
                 {currentUser && (
-                    <div className="px-4 py-3">
-                        <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Organization</div>
-                        <OrganizationSwitcher 
-                            hidePersonal={false}
-                            afterCreateOrganizationUrl="#"
-                            appearance={{
-                                elements: {
-                                    rootBox: "w-full",
-                                    organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900",
-                                }
-                            }}
-                        />
+                    <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-2">
+                        <button 
+                            onClick={() => { setIsMobileMenuOpen(false); onNavigate('PROFILE'); }}
+                            className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white flex items-center gap-2"
+                        >
+                            <Settings size={16} /> Профиль и Подписка
+                        </button>
+
+                        <div className="px-4 py-3">
+                            <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Organization</div>
+                            <OrganizationSwitcher 
+                                hidePersonal={false}
+                                afterCreateOrganizationUrl="#"
+                                appearance={{
+                                    elements: {
+                                        rootBox: "w-full",
+                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900",
+                                    }
+                                }}
+                            />
+                        </div>
                     </div>
                 )}
 

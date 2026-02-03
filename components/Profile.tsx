@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Crown, Database, Check, AlertCircle, LogOut, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, LogOut, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { UserProfile, useAuth, useUser } from '@clerk/clerk-react';
@@ -63,7 +63,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
   };
 
   const handleCancelSubscription = async () => {
-      if (!confirm("Вы уверены, что хотите отключить автопродление? Доступ сохранится до конца оплаченного периода.")) return;
+      if (!confirm("Вы действительно хотите отключить автопродление? Вы сохраните доступ до конца оплаченного периода.")) return;
       
       setIsCanceling(true);
       try {
@@ -75,7 +75,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
           
           if (res.ok) {
               await checkStatus(); // Reload user data
-              alert("Автопродление отключено.");
+              alert("Автопродление успешно отключено.");
           } else {
               alert("Не удалось отключить. Попробуйте позже.");
           }
@@ -95,9 +95,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                  <div>
                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                        {t('profile.title')}
+                        <Settings className="text-zinc-400" /> {t('profile.title')}
                      </h2>
-                     <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Управление аккаунтом и подписками.</p>
+                     <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Управление аккаунтом, подписками и биллингом.</p>
                  </div>
                  
                  <div className="flex items-center gap-2">
@@ -121,14 +121,22 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
             </div>
             
             {/* SUBSCRIPTION MANAGEMENT CARD (ALWAYS VISIBLE) */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+            <div className={`bg-white dark:bg-zinc-900 border rounded-2xl p-6 shadow-sm relative overflow-hidden transition-all ${isPro ? 'border-indigo-200 dark:border-indigo-900/50 shadow-indigo-500/10' : 'border-zinc-200 dark:border-zinc-800'}`}>
                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Crown size={120} /></div>
                 
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2 relative z-10">
-                    <CreditCard size={20} className="text-indigo-600 dark:text-indigo-400" /> Подписка и Биллинг
-                </h3>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-10">
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                        <CreditCard size={20} className="text-indigo-600 dark:text-indigo-400" /> Управление подпиской
+                    </h3>
+                    {isPro && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold border border-green-200 dark:border-green-800">
+                            <Check size={12} /> Активна
+                        </span>
+                    )}
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                    {/* Status Info */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-lg ${isPro ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'}`}>
@@ -147,18 +155,19 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
                                     <Calendar size={20} />
                                 </div>
                                 <div>
-                                    <div className="text-xs text-zinc-500 uppercase font-bold">Активна до</div>
+                                    <div className="text-xs text-zinc-500 uppercase font-bold">Доступ до</div>
                                     <div className="text-sm font-bold text-zinc-900 dark:text-white">{expiresAt ? expiresAt.toLocaleDateString() : 'Бессрочно'}</div>
                                 </div>
                             </div>
                         )}
                     </div>
 
+                    {/* Actions Panel */}
                     {isPro ? (
                         <div className="bg-zinc-50 dark:bg-zinc-950/50 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Автопродление</div>
+                                    <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Статус автопродления</div>
                                     <div className={`text-sm font-bold flex items-center gap-2 ${isAutoRenew ? 'text-green-600' : 'text-zinc-500'}`}>
                                         <div className={`w-2 h-2 rounded-full ${isAutoRenew ? 'bg-green-500 animate-pulse' : 'bg-zinc-400'}`}></div>
                                         {isAutoRenew ? 'Включено (2900₽/мес)' : 'Отключено'}
@@ -167,16 +176,21 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
                             </div>
                             
                             {isAutoRenew ? (
-                                <button 
-                                    onClick={handleCancelSubscription} 
-                                    disabled={isCanceling}
-                                    className="w-full py-2 bg-white dark:bg-zinc-800 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
-                                >
-                                    {isCanceling ? 'Обработка...' : <><XCircle size={14} /> Отменить автопродление</>}
-                                </button>
+                                <div className="space-y-2">
+                                    <button 
+                                        onClick={handleCancelSubscription} 
+                                        disabled={isCanceling}
+                                        className="w-full py-2 bg-white dark:bg-zinc-800 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-sm"
+                                    >
+                                        {isCanceling ? 'Обработка...' : <><XCircle size={14} /> Отменить автопродление</>}
+                                    </button>
+                                    <p className="text-[10px] text-zinc-400 text-center">
+                                        Нажимая кнопку, вы отключаете будущие списания. Текущий доступ сохраняется.
+                                    </p>
+                                </div>
                             ) : (
-                                <p className="text-xs text-zinc-400 italic">
-                                    Доступ сохранится до {expiresAt?.toLocaleDateString()}. Списаний больше не будет.
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400 italic bg-zinc-100 dark:bg-zinc-900 p-2 rounded border border-zinc-200 dark:border-zinc-800">
+                                    Автосписание отключено. Доступ сохранится до {expiresAt?.toLocaleDateString()}. Дальнейших списаний не будет.
                                 </p>
                             )}
                         </div>
@@ -187,7 +201,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
                             </p>
                             <button 
                                 onClick={() => document.getElementById('roadmap-block')?.scrollIntoView({ behavior: 'smooth' })} 
-                                className="flex items-center gap-2 text-xs bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-indigo-500 transition-colors shadow-sm"
+                                className="flex items-center gap-2 text-xs bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-indigo-500 transition-colors shadow-sm w-full justify-center"
                             >
                                 <ArrowUpCircle size={14} /> Обновиться до Pro
                             </button>
