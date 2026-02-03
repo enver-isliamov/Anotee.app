@@ -17,7 +17,7 @@ import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
-import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw, PartyPopper } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
@@ -96,9 +96,10 @@ interface AppLayoutProps {
     mockSignIn?: () => void;
     authMode: 'clerk' | 'mock';
     organization?: any;
+    userObj?: any;
 }
 
-const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization }) => {
+const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization, userObj }) => {
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -138,6 +139,28 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     }
     return () => clearTimeout(timer);
   }, [isLoaded]);
+
+  // --- PAYMENT SUCCESS HANDLER ---
+  useEffect(() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('payment') === 'success') {
+          // 1. Notify User
+          notify("Payment Successful! Welcome to Founder's Club.", "success");
+          
+          // 2. Reload Clerk User Metadata (Critical step!)
+          if (userObj && userObj.reload) {
+              userObj.reload().then(() => {
+                  console.log("User metadata refreshed after payment");
+                  // Optional: Force view to profile to show off the new badge
+                  setView({ type: 'PROFILE' });
+              });
+          }
+
+          // 3. Clean URL
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, '', newUrl);
+      }
+  }, [userObj]);
 
   // --- NAVIGATION HANDLER (HISTORY API) ---
   useEffect(() => {
@@ -667,6 +690,7 @@ const ClerkWrapper: React.FC = () => {
                 mockSignIn={() => openSignIn()}
                 authMode="clerk"
                 organization={activeOrg}
+                userObj={user} // Pass the full user object for reload() method
             />
         </DriveProvider>
     );

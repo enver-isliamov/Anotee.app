@@ -190,9 +190,9 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     {/* Contacts (Required by YooKassa) */}
                     <div className="text-xs text-zinc-500 dark:text-zinc-600 flex flex-col gap-1">
                         <div className="font-bold text-zinc-700 dark:text-zinc-400">Контакты и Реквизиты:</div>
-                        <span>ИП/Самозанятый [ВАШЕ ФИО]</span>
+                        <span>Самозанятый [ИСЛЯМОВ ЭНВЕР ЯКУБОВИЧ]</span>
                         <span>ИНН 910228340090</span>
-                        <span>Email: [ВАШ EMAIL]</span>
+                        <span>Email: [enver.isliamov@yandex.com]</span>
                     </div>
                 </div>
         </footer>

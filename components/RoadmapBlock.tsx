@@ -46,7 +46,7 @@ export const RoadmapBlock: React.FC = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
         {/* Active Card - Founder's Club */}
-        <div className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden group transition-all shadow-xl dark:shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-green-200 dark:border-zinc-800 hover:border-green-500/50 dark:hover:border-green-500/30'}`}>
+        <div className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden group transition-all shadow-xl dark:shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-green-400 dark:border-green-600/50 hover:border-green-500 dark:hover:border-green-500 shadow-green-500/10'}`}>
             {isPro && (
                 <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20">
                     CURRENT PLAN
@@ -99,14 +99,14 @@ export const RoadmapBlock: React.FC = () => {
                     <button 
                         onClick={handleBuy}
                         disabled={isBuying}
-                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                        className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] ring-4 ring-indigo-500/10 animate-in fade-in zoom-in duration-300"
                     >
                         {isBuying ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                        {isBuying ? 'Processing...' : 'Купить за 2900₽'}
+                        {isBuying ? 'Обработка...' : 'Купить за 2900₽'}
                     </button>
                 ) : (
                     <div className="w-full py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default">
-                        <Check size={16} /> Already Active
+                        <Check size={16} /> Уже активировано
                     </div>
                 )}
                 
