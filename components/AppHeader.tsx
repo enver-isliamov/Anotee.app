@@ -98,18 +98,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right Side */}
             <div className="flex items-center gap-3 md:gap-5">
                 
-                {/* ADMIN BUTTON (Visible only to admins) */}
-                {isAdmin && !hideNav && (
-                    <button 
-                        onClick={() => onNavigate('ADMIN')}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold shadow-lg hover:opacity-90 transition-opacity"
-                        title="Admin Dashboard"
-                    >
-                        <Shield size={14} />
-                        <span className="hidden md:inline">Admin</span>
-                    </button>
-                )}
-
                 {/* Unified User Controls */}
                 {currentUser && (
                     <div className="flex items-center gap-2 pl-2">

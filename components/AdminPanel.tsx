@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, MoreVertical, Search } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, MoreVertical, Search, Crown } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG } from '../types';
 
 interface AdminUser {
@@ -309,20 +309,21 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             return (
                                 <div key={user.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between shadow-sm">
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        <img src={user.avatar} className="w-10 h-10 rounded-full bg-zinc-200 shrink-0" alt="" />
-                                        <div className="min-w-0">
+                                        <img src={user.avatar} className="w-10 h-10 rounded-full bg-zinc-200 shrink-0 object-cover" alt="" />
+                                        <div className="min-w-0 flex-1">
                                             <div className="font-bold text-zinc-900 dark:text-white text-sm truncate">{user.name}</div>
                                             <div className="text-[10px] text-zinc-500 truncate mb-1">{user.email}</div>
                                             <div className="flex items-center gap-2">
                                                 {isPro ? (
                                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[9px] font-bold border border-indigo-200 dark:border-indigo-500/20">
-                                                        PRO
+                                                        <Zap size={8} fill="currentColor"/> PRO
                                                     </span>
                                                 ) : (
-                                                    <span className="text-zinc-500 text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">FREE</span>
+                                                    <span className="text-zinc-500 text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">FREE</span>
                                                 )}
                                                 {isPro && (
-                                                    <span className="text-[9px] text-zinc-400 font-mono">
+                                                    <span className="text-[9px] text-zinc-400 font-mono flex items-center gap-1">
+                                                        <RefreshCw size={8}/>
                                                         {isLifetime ? '∞' : (expiry ? expiry.toLocaleDateString() : '')}
                                                     </span>
                                                 )}
@@ -331,11 +332,11 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                     </div>
                                     <div className="shrink-0 ml-2">
                                         {isPro ? (
-                                            <button onClick={() => handleRevokePro(user.id)} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg">
+                                            <button onClick={() => handleRevokePro(user.id)} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
                                                 <AlertTriangle size={16} />
                                             </button>
                                         ) : (
-                                            <button onClick={() => setSelectedUser(user)} className="px-3 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold">
+                                            <button onClick={() => setSelectedUser(user)} className="px-3 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-transform">
                                                 + Pro
                                             </button>
                                         )}
@@ -443,14 +444,25 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {selectedUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
-                        <h2 className="text-lg font-bold mb-4 dark:text-white">Выдать Pro доступ</h2>
-                        <div className="mb-4">
-                            <p className="text-xs text-zinc-500 mb-2 truncate">Для: <strong>{selectedUser.email}</strong></p>
-                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1.5">Срок действия</label>
+                        <div className="flex items-center gap-3 mb-4 text-indigo-600 dark:text-indigo-400">
+                            <Crown size={24} />
+                            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Выдать Pro доступ</h2>
+                        </div>
+                        
+                        <div className="mb-6 bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center gap-3 mb-2">
+                                <img src={selectedUser.avatar} className="w-8 h-8 rounded-full" alt="" />
+                                <div className="min-w-0">
+                                    <div className="font-bold text-xs text-zinc-900 dark:text-white truncate">{selectedUser.name}</div>
+                                    <div className="text-[10px] text-zinc-500 truncate">{selectedUser.email}</div>
+                                </div>
+                            </div>
+                            
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1.5 mt-4">Срок действия</label>
                             <select 
                                 value={grantDuration} 
                                 onChange={(e) => setGrantDuration(parseInt(e.target.value))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm dark:text-white outline-none focus:border-indigo-500"
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500 transition-colors"
                             >
                                 <option value={7}>7 Дней (Триал)</option>
                                 <option value={30}>1 Месяц</option>
@@ -458,9 +470,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <option value={0}>Навсегда (Lifetime)</option>
                             </select>
                         </div>
-                        <div className="flex gap-3 mt-6">
-                            <button onClick={() => setSelectedUser(null)} className="flex-1 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800">Отмена</button>
-                            <button onClick={handleGrantPro} disabled={isGranting} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 flex items-center justify-center gap-2">
+
+                        <div className="flex gap-3">
+                            <button onClick={() => setSelectedUser(null)} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">Отмена</button>
+                            <button onClick={handleGrantPro} disabled={isGranting} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all">
                                 {isGranting ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle size={14}/>} Подтвердить
                             </button>
                         </div>
