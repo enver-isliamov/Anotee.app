@@ -8,6 +8,25 @@ const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
 export default async function handler(req, res) {
     const { action } = req.query;
 
+    // --- PUBLIC/AUTH ALLOWED ACTIONS (Before Admin Check) ---
+    
+    // 1. Get Config (Available to any logged in user to know their limits)
+    if (action === 'get_config') {
+        try {
+            const user = await verifyUser(req); 
+            // Optional: if (!user) return defaults... but frontend handles auth
+            
+            // Create table if not exists just in case
+            await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
+            
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'feature_flags'`;
+            return res.status(200).json(rows.length > 0 ? rows[0].value : {});
+        } catch (e) {
+            console.error(e);
+            return res.status(200).json({}); 
+        }
+    }
+
     // --- 1. SETUP DATABASE ---
     if (action === 'setup') {
         const providedSecret = req.query.secret;
@@ -22,6 +41,10 @@ export default async function handler(req, res) {
             await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
             await sql`CREATE INDEX IF NOT EXISTS idx_owner_id ON projects (owner_id);`;
             await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
+            
+            // NEW: System Settings Table for Feature Flags
+            await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
+            
             return res.status(200).json({ success: true, message: "DB Setup Complete" });
         } catch (e) {
             return res.status(500).json({ error: e.message });
@@ -84,33 +107,23 @@ export default async function handler(req, res) {
         }
     }
 
-    // --- 3. LIST USERS (ADMIN ONLY) ---
-    if (action === 'users') {
-        if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+    // --- 3. STRICT ADMIN ACTIONS (Middleware Check) ---
+    try {
+        const user = await verifyUser(req, true); // Force email fetch
+        if (!user || !user.email || !ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) {
+            return res.status(403).json({ error: "Forbidden: Admins only" });
+        }
 
-        try {
-            // Force requireEmail=true to fetch profile from Clerk
-            const user = await verifyUser(req, true);
+        const clerk = getClerkClient();
+
+        // --- LIST USERS ---
+        if (action === 'users') {
+            if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
             
-            if (!user || !user.email) {
-                return res.status(401).json({ error: "Unauthorized" });
-            }
-
-            // 🛑 SECURITY CHECK
-            const userEmail = user.email.toLowerCase().trim();
-            if (!ADMIN_EMAILS.includes(userEmail)) {
-                console.warn(`Unauthorized admin access attempt by: ${userEmail}`);
-                return res.status(403).json({ error: "Forbidden: Admins only" });
-            }
-
-            const clerk = getClerkClient();
-            // Fetch users (limit 100 for now, pagination can be added later)
             const usersList = await clerk.users.getUserList({ limit: 100, orderBy: '-created_at' });
-
             const data = usersList.data.map(u => {
                 const meta = u.publicMetadata || {};
                 const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
-                
                 return {
                     id: u.id,
                     name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
@@ -122,13 +135,68 @@ export default async function handler(req, res) {
                     lastActive: u.lastSignInAt
                 };
             });
-
             return res.status(200).json({ users: data });
-
-        } catch (error) {
-            console.error("Admin Users List Error:", error);
-            return res.status(500).json({ error: error.message });
         }
+
+        // --- GRANT PRO ---
+        if (action === 'grant_pro') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            
+            const { userId, days } = req.body;
+            if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+            let expiresAt = null;
+            if (days && typeof days === 'number') {
+                // If days > 0, calculate date. If 0, assumes lifetime (handled by frontend logic usually, but here just in case)
+                expiresAt = days === 0 ? new Date('2099-12-31').getTime() : Date.now() + (days * 24 * 60 * 60 * 1000);
+            } else {
+                expiresAt = new Date('2099-12-31').getTime();
+            }
+
+            await clerk.users.updateUserMetadata(userId, {
+                publicMetadata: {
+                    plan: 'pro',
+                    status: 'active',
+                    expiresAt: expiresAt,
+                    yookassaPaymentMethodId: null // Manual grant usually doesn't have a card attached
+                }
+            });
+
+            return res.status(200).json({ success: true, message: `Pro granted to ${userId}` });
+        }
+
+        // --- REVOKE PRO ---
+        if (action === 'revoke_pro') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const { userId } = req.body;
+            
+            await clerk.users.updateUserMetadata(userId, {
+                publicMetadata: {
+                    plan: 'free',
+                    status: 'inactive',
+                    expiresAt: null
+                }
+            });
+            return res.status(200).json({ success: true });
+        }
+
+        // --- UPDATE CONFIG ---
+        if (action === 'update_config') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const config = req.body;
+            
+            await sql`
+                INSERT INTO system_settings (key, value) 
+                VALUES ('feature_flags', ${JSON.stringify(config)}::jsonb)
+                ON CONFLICT (key) 
+                DO UPDATE SET value = ${JSON.stringify(config)}::jsonb;
+            `;
+            return res.status(200).json({ success: true });
+        }
+
+    } catch (error) {
+        console.error("Admin API Error:", error);
+        return res.status(500).json({ error: error.message });
     }
 
     return res.status(400).json({ error: 'Invalid action' });

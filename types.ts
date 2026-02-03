@@ -75,3 +75,29 @@ export interface UploadTask {
   status: 'uploading' | 'processing' | 'done' | 'error';
   error?: string;
 }
+
+// --- FEATURE FLAGS & CONFIG ---
+export interface FeatureRule {
+    enabledForFree: boolean;
+    enabledForPro: boolean;
+    limitFree?: number; // e.g., 3 projects
+    limitPro?: number;  // e.g., 1000 projects
+}
+
+export interface AppConfig {
+    max_projects: FeatureRule;
+    export_xml: FeatureRule;
+    export_csv: FeatureRule;
+    google_drive: FeatureRule;
+    ai_transcription: FeatureRule;
+    team_collab: FeatureRule;
+}
+
+export const DEFAULT_CONFIG: AppConfig = {
+    max_projects: { enabledForFree: true, enabledForPro: true, limitFree: 3, limitPro: 1000 },
+    export_xml: { enabledForFree: false, enabledForPro: true },
+    export_csv: { enabledForFree: false, enabledForPro: true },
+    google_drive: { enabledForFree: false, enabledForPro: true },
+    ai_transcription: { enabledForFree: true, enabledForPro: true },
+    team_collab: { enabledForFree: true, enabledForPro: true }
+};
