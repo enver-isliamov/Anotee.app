@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { Menu, X, PlayCircle, Shield, Settings, User as UserIcon } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
-import { ThemeToggle } from './ThemeToggle';
 import { User } from '../types';
 import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react';
 
@@ -45,7 +44,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <>
-        <header className={`h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/50 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-50 transition-all ${className || ''}`}>
+        <header className={`h-16 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-50 transition-all ${className || ''}`}>
             <div className="flex items-center gap-6 overflow-hidden flex-1">
                 
                 {/* LOGO AREA */}
@@ -58,10 +57,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         alt={t('app.name')} 
                         className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" 
                     />
-                    <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{t('app.name')}</span>
+                    <span className="text-lg font-bold text-zinc-100 tracking-tight">{t('app.name')}</span>
                 </div>
 
-                {!hideNav && <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block"></div>}
+                {!hideNav && <div className="h-6 w-px bg-zinc-800 hidden md:block"></div>}
 
                 {/* Desktop Navigation */}
                 {!hideNav && (
@@ -75,8 +74,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                 onClick={() => onNavigate(pageKey)}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all
                                     ${isActive 
-                                        ? 'text-indigo-600 bg-indigo-50 dark:text-white dark:bg-zinc-800' 
-                                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                                        ? 'text-white bg-zinc-800' 
+                                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
                                     }
                                 `}
                             >
@@ -87,7 +86,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     {!currentUser && (
                         <button 
                             onClick={() => onNavigate('LIVE_DEMO')}
-                            className="px-3 py-1.5 text-sm font-bold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 rounded-lg transition-all hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                            className="px-3 py-1.5 text-sm font-bold text-red-400 hover:text-red-300 rounded-lg transition-all hover:bg-red-900/20 flex items-center gap-2"
                         >
                             <PlayCircle size={14} /> {t('nav.demo')}
                         </button>
@@ -103,7 +102,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {isAdmin && !hideNav && (
                     <button 
                         onClick={() => onNavigate('ADMIN')}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold shadow-lg hover:opacity-90 transition-opacity"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white text-black rounded-lg text-xs font-bold shadow-lg hover:opacity-90 transition-opacity"
                         title="Admin Dashboard"
                     >
                         <Shield size={14} />
@@ -120,7 +119,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                             appearance={{
                                 elements: {
                                     rootBox: "flex items-center",
-                                    organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-medium text-zinc-700 dark:text-zinc-200 bg-transparent",
+                                    organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 transition-colors text-sm font-medium text-zinc-200 bg-transparent",
                                     organizationPreviewTextContainer: "hidden lg:block",
                                     organizationPreviewAvatarContainer: "shrink-0",
                                 }
@@ -132,11 +131,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {/* LOGGED IN USER ACTIONS */}
                 {currentUser && (
                     <div className="flex items-center gap-2">
-                        {/* Profile/Settings Link - CRITICAL FIX */}
+                        {/* Profile/Settings Link */}
                         <button 
                             onClick={() => onNavigate('PROFILE')}
-                            className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                            title="Settings & Subscription"
+                            className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-900/30 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                            title="Subscription & Settings"
                         >
                             <Settings size={20} />
                         </button>
@@ -146,7 +145,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                             userProfileMode="modal"
                             appearance={{
                                 elements: {
-                                    avatarBox: "w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 transition-colors"
+                                    avatarBox: "w-8 h-8 rounded-full border border-zinc-700 hover:border-indigo-500 transition-colors"
                                 }
                             }}
                         />
@@ -163,14 +162,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </button>
                 )}
 
-                <ThemeToggle />
                 <LanguageSelector />
 
                 {/* Mobile Menu Toggle */}
                 {!hideNav && (
                     <button 
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        className="md:hidden text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-1"
+                        className="md:hidden text-zinc-400 hover:text-white p-1"
                     >
                         {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                     </button>
@@ -180,7 +178,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {/* Mobile Menu Dropdown */}
         {isMobileMenuOpen && !hideNav && (
-            <div className="md:hidden fixed top-16 left-0 right-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 z-40 p-4 flex flex-col gap-2 shadow-2xl animate-in slide-in-from-top-2">
+            <div className="md:hidden fixed top-16 left-0 right-0 bg-zinc-900 border-b border-zinc-800 z-40 p-4 flex flex-col gap-2 shadow-2xl animate-in slide-in-from-top-2">
                 {navItems.map(page => {
                     const pageKey = page === 'ai' ? 'AI_FEATURES' : page.toUpperCase();
                     const isActive = currentView === pageKey;
@@ -192,7 +190,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                 onNavigate(pageKey);
                             }}
                             className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors
-                                ${isActive ? 'bg-zinc-100 dark:bg-zinc-800 text-indigo-600 dark:text-white' : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'}
+                                ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'}
                             `}
                         >
                             {t(`nav.${page}`)}
@@ -203,17 +201,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {isAdmin && (
                     <button 
                         onClick={() => { setIsMobileMenuOpen(false); onNavigate('ADMIN'); }}
-                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-black dark:bg-white text-white dark:text-black flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-white text-black flex items-center gap-2"
                     >
                         <Shield size={16} /> Admin Panel
                     </button>
                 )}
 
                 {currentUser && (
-                    <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-2">
+                    <div className="space-y-2 pt-2 border-t border-zinc-800 mt-2">
                         <button 
                             onClick={() => { setIsMobileMenuOpen(false); onNavigate('PROFILE'); }}
-                            className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white flex items-center gap-2"
+                            className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-zinc-800 text-white flex items-center gap-2"
                         >
                             <Settings size={16} /> Профиль и Подписка
                         </button>
@@ -226,7 +224,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                 appearance={{
                                     elements: {
                                         rootBox: "w-full",
-                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900",
+                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-900",
                                     }
                                 }}
                             />
@@ -234,12 +232,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </div>
                 )}
 
-                <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>
+                <div className="h-px bg-zinc-800 my-1"></div>
                 
                 {currentUser ? (
-                    <div className="flex items-center gap-2 px-4 py-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-zinc-800 rounded-lg">
                         <UserButton afterSignOutUrl="/" />
-                        <span className="text-sm font-bold text-zinc-800 dark:text-white">{currentUser.name}</span>
+                        <span className="text-sm font-bold text-white">{currentUser.name}</span>
                     </div>
                 ) : (
                     <button 
