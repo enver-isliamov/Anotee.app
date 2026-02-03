@@ -44,7 +44,7 @@ export const RoadmapBlock: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
+    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
         {/* Active Card - Founder's Club */}
         <div className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden group transition-all shadow-xl dark:shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-green-400 dark:border-green-600/50 hover:border-green-500 dark:hover:border-green-500 shadow-green-500/10'}`}>
             {isPro && (
