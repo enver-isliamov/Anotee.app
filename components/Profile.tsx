@@ -24,7 +24,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
       setErrorMessage('');
       try {
           const token = await getToken();
-          const res = await fetch('/api/migrate', {
+          // CHANGED: Using consolidated endpoint
+          const res = await fetch('/api/admin?action=migrate', {
               method: 'POST',
               headers: {
                   'Authorization': `Bearer ${token}`

@@ -1,8 +1,15 @@
+
 {
   "framework": "vite",
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!assets/|.*\\..*).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 10 * * *" 
+    }
   ]
 }

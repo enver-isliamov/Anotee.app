@@ -20,7 +20,8 @@ export const RoadmapBlock: React.FC = () => {
       setIsBuying(true);
       try {
           const token = await getToken();
-          const res = await fetch('/api/yookassa/init', {
+          // CHANGED: Using consolidated endpoint
+          const res = await fetch('/api/payment?action=init', {
               method: 'POST',
               headers: {
                   'Authorization': `Bearer ${token}`

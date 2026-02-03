@@ -1,5 +1,5 @@
 
-import { getClerkClient } from '../_auth.js';
+import { getClerkClient } from './_auth.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
@@ -16,13 +16,10 @@ export default async function handler(req, res) {
     if (!shopId || !secretKey) return res.status(500).json({ error: 'Config missing' });
 
     try {
-        // 2. Find Expiring Users (simplified scan)
-        // Clerk API doesn't support complex metadata queries efficiently in listUser.
-        // In prod, you'd sync users to a DB. Here we iterate (limit 100).
+        // Find Expiring Users (simplified)
         const users = await clerk.users.getUserList({ limit: 100 });
         const now = Date.now();
         const tomorrow = now + (24 * 60 * 60 * 1000);
-
         const renewals = [];
 
         for (const user of users.data) {
@@ -36,7 +33,6 @@ export default async function handler(req, res) {
 
         console.log(`Found ${renewals.length} users for renewal`);
 
-        // 3. Process Renewals
         const results = [];
         const authString = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
 
@@ -61,17 +57,12 @@ export default async function handler(req, res) {
                 const payment = await paymentRes.json();
 
                 if (payment.status === 'succeeded') {
-                    // Extend subscription
                     const newExpiry = Date.now() + (30 * 24 * 60 * 60 * 1000);
                     await clerk.users.updateUserMetadata(user.id, {
-                        publicMetadata: {
-                            ...user.publicMetadata,
-                            expiresAt: newExpiry
-                        }
+                        publicMetadata: { ...user.publicMetadata, expiresAt: newExpiry }
                     });
                     results.push({ userId: user.id, status: 'renewed' });
                 } else {
-                    // Payment failed - Downgrade logic could go here
                     results.push({ userId: user.id, status: 'failed', reason: payment.status });
                 }
             } catch (e) {
