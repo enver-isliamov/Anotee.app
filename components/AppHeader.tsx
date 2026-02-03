@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Menu, X, PlayCircle, Shield, Settings, User as UserIcon } from 'lucide-react';
+import { Menu, X, PlayCircle, Shield, Settings } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { User } from '../types';
@@ -110,45 +110,48 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </button>
                 )}
 
-                {/* Organization Switcher */}
-                {currentUser && !hideNav && (
-                    <div className="hidden md:block">
-                        <OrganizationSwitcher 
-                            hidePersonal={false}
-                            afterCreateOrganizationUrl="#"
-                            appearance={{
-                                elements: {
-                                    rootBox: "flex items-center",
-                                    organizationSwitcherTrigger: "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 transition-colors text-sm font-medium text-zinc-200 bg-transparent",
-                                    organizationPreviewTextContainer: "hidden lg:block",
-                                    organizationPreviewAvatarContainer: "shrink-0",
-                                }
-                            }}
-                        />
-                    </div>
-                )}
-
-                {/* LOGGED IN USER ACTIONS */}
+                {/* Unified User Controls */}
                 {currentUser && (
-                    <div className="flex items-center gap-2">
-                        {/* Profile/Settings Link */}
+                    <div className="flex items-center gap-2 pl-2">
+                        {/* Settings Link */}
                         <button 
                             onClick={() => onNavigate('PROFILE')}
-                            className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-900/30 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                            className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
                             title="Subscription & Settings"
                         >
                             <Settings size={20} />
                         </button>
 
-                        <UserButton 
-                            afterSignOutUrl="/"
-                            userProfileMode="modal"
-                            appearance={{
-                                elements: {
-                                    avatarBox: "w-8 h-8 rounded-full border border-zinc-700 hover:border-indigo-500 transition-colors"
-                                }
-                            }}
-                        />
+                        {/* Combined Identity Block */}
+                        <div className="flex items-center bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-full pl-1 pr-1 py-1 transition-all">
+                            {!hideNav && (
+                                <div className="hidden md:block scale-90 origin-right mr-2">
+                                    <OrganizationSwitcher 
+                                        hidePersonal={false}
+                                        afterCreateOrganizationUrl="#"
+                                        appearance={{
+                                            elements: {
+                                                rootBox: "flex items-center",
+                                                organizationSwitcherTrigger: "flex items-center gap-2 px-2 py-1 rounded-lg hover:text-white transition-colors text-xs font-medium text-zinc-300 bg-transparent focus:shadow-none",
+                                                organizationPreviewTextContainer: "hidden lg:block max-w-[100px] truncate",
+                                                organizationPreviewAvatarContainer: "shrink-0",
+                                                userPreviewMainIdentifier: "text-white",
+                                                userPreviewSecondaryIdentifier: "text-zinc-400"
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            <UserButton 
+                                afterSignOutUrl="/"
+                                userProfileMode="modal"
+                                appearance={{
+                                    elements: {
+                                        avatarBox: "w-8 h-8 rounded-full border-2 border-zinc-900 hover:border-indigo-500 transition-colors"
+                                    }
+                                }}
+                            />
+                        </div>
                     </div>
                 )}
 
@@ -216,7 +219,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                             <Settings size={16} /> Профиль и Подписка
                         </button>
 
-                        <div className="px-4 py-3">
+                        <div className="px-4 py-3 bg-zinc-950 rounded-xl">
                             <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Organization</div>
                             <OrganizationSwitcher 
                                 hidePersonal={false}
@@ -224,7 +227,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                 appearance={{
                                     elements: {
                                         rootBox: "w-full",
-                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-900",
+                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-900 text-white",
                                     }
                                 }}
                             />
