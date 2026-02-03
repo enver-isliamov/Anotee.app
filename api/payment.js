@@ -60,7 +60,36 @@ export default async function handler(req, res) {
         }
     }
 
-    // --- 2. WEBHOOK (Yookassa calls this) ---
+    // --- 2. CANCEL SUBSCRIPTION (Disable Auto-renew) ---
+    if (action === 'cancel_sub') {
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        
+        try {
+            const user = await verifyUser(req);
+            if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+            const clerk = getClerkClient();
+            
+            // Fetch current metadata to preserve other fields
+            const clerkUser = await clerk.users.getUser(user.userId);
+            const currentMeta = clerkUser.publicMetadata || {};
+
+            // Remove payment method but keep plan and expiry
+            await clerk.users.updateUserMetadata(user.userId, {
+                publicMetadata: {
+                    ...currentMeta,
+                    yookassaPaymentMethodId: null // Disable auto-charge
+                }
+            });
+
+            return res.status(200).json({ success: true, message: "Auto-renewal disabled" });
+        } catch (error) {
+            console.error('Cancel Sub Error:', error);
+            return res.status(500).json({ error: 'Failed to cancel subscription' });
+        }
+    }
+
+    // --- 3. WEBHOOK (Yookassa calls this) ---
     if (action === 'webhook') {
         if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
@@ -97,5 +126,5 @@ export default async function handler(req, res) {
         }
     }
 
-    return res.status(400).json({ error: 'Invalid action parameter. Use ?action=init or ?action=webhook' });
+    return res.status(400).json({ error: 'Invalid action parameter.' });
 }

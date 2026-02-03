@@ -140,23 +140,25 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearTimeout(timer);
   }, [isLoaded]);
 
-  // --- PAYMENT SUCCESS HANDLER ---
+  // --- PAYMENT STATUS HANDLER ---
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('payment') === 'success') {
-          // 1. Notify User
+      const paymentStatus = params.get('payment');
+      
+      if (paymentStatus === 'success') {
           notify("Payment Successful! Welcome to Founder's Club.", "success");
-          
-          // 2. Reload Clerk User Metadata (Critical step!)
           if (userObj && userObj.reload) {
               userObj.reload().then(() => {
-                  console.log("User metadata refreshed after payment");
-                  // Optional: Force view to profile to show off the new badge
+                  console.log("User metadata refreshed");
                   setView({ type: 'PROFILE' });
               });
           }
+      } else if (paymentStatus === 'canceled' || paymentStatus === 'failed') {
+          notify("Payment was canceled or failed.", "error");
+      }
 
-          // 3. Clean URL
+      if (paymentStatus) {
+          // Clean URL
           const newUrl = window.location.pathname;
           window.history.replaceState({}, '', newUrl);
       }

@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Crown, Database, Check, AlertCircle, LogOut } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, LogOut, CreditCard, Calendar, XCircle } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
-import { UserProfile, useAuth } from '@clerk/clerk-react';
+import { UserProfile, useAuth, useUser } from '@clerk/clerk-react';
+import { useSubscription } from '../hooks/useSubscription';
 
 interface ProfileProps {
   currentUser: User;
@@ -14,17 +15,23 @@ interface ProfileProps {
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
   const { t } = useLanguage();
   const { getToken } = useAuth();
+  const { isPro, expiresAt, checkStatus } = useSubscription();
+  const { user } = useUser();
   
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [migratedCount, setMigratedCount] = useState(0);
+  
+  const [isCanceling, setIsCanceling] = useState(false);
+
+  // Check if auto-renew is active (payment method saved)
+  const isAutoRenew = !!(user?.publicMetadata as any)?.yookassaPaymentMethodId;
 
   const handleMigrate = async () => {
       setMigrationStatus('loading');
       setErrorMessage('');
       try {
           const token = await getToken();
-          // CHANGED: Using consolidated endpoint
           const res = await fetch('/api/admin?action=migrate', {
               method: 'POST',
               headers: {
@@ -44,6 +51,31 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
           console.error(e);
           setErrorMessage(e.message);
           setMigrationStatus('error');
+      }
+  };
+
+  const handleCancelSubscription = async () => {
+      if (!confirm("Are you sure you want to disable auto-renewal? You will keep access until the end of the period.")) return;
+      
+      setIsCanceling(true);
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/payment?action=cancel_sub', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (res.ok) {
+              await checkStatus(); // Reload user data
+              alert("Auto-renewal disabled.");
+          } else {
+              alert("Failed to cancel. Please try again.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Network error");
+      } finally {
+          setIsCanceling(false);
       }
   };
 
@@ -69,6 +101,62 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                  </button>
             </div>
             
+            {/* SUBSCRIPTION MANAGEMENT CARD (Visible only for PRO) */}
+            {isPro && (
+                <div className="bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-900/50 rounded-2xl p-6 shadow-lg shadow-indigo-500/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><Crown size={120} className="text-indigo-500" /></div>
+                    
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2 relative z-10">
+                        <Crown size={20} className="text-indigo-500" /> Your Subscription
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400"><CreditCard size={20} /></div>
+                                <div>
+                                    <div className="text-xs text-zinc-500 uppercase font-bold">Current Plan</div>
+                                    <div className="text-sm font-bold text-zinc-900 dark:text-white">Founder's Club (Pro)</div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-600 dark:text-zinc-400"><Calendar size={20} /></div>
+                                <div>
+                                    <div className="text-xs text-zinc-500 uppercase font-bold">Active Until</div>
+                                    <div className="text-sm font-bold text-zinc-900 dark:text-white">{expiresAt ? expiresAt.toLocaleDateString() : 'Lifetime'}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-zinc-50 dark:bg-zinc-950/50 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Auto-Renewal</div>
+                                    <div className={`text-sm font-bold flex items-center gap-2 ${isAutoRenew ? 'text-green-600' : 'text-zinc-500'}`}>
+                                        <div className={`w-2 h-2 rounded-full ${isAutoRenew ? 'bg-green-500 animate-pulse' : 'bg-zinc-400'}`}></div>
+                                        {isAutoRenew ? 'Active' : 'Disabled'}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {isAutoRenew ? (
+                                <button 
+                                    onClick={handleCancelSubscription} 
+                                    disabled={isCanceling}
+                                    className="w-full py-2 bg-white dark:bg-zinc-800 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isCanceling ? 'Processing...' : <><XCircle size={14} /> Cancel Auto-Renewal</>}
+                                </button>
+                            ) : (
+                                <p className="text-xs text-zinc-400 italic">
+                                    Your subscription will end on {expiresAt?.toLocaleDateString()}. You will not be charged again.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Clerk User Profile - Full Mode */}
             <div className="flex justify-center">
                 <UserProfile 
@@ -99,7 +187,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                 />
             </div>
 
-            {/* Migration Tool (Admins Only) - Hidden if already done */}
+            {/* Migration Tool */}
             {!hasMigrated && (
                 <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
                     <div className="flex items-start gap-4">
@@ -137,10 +225,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                 </div>
             )}
 
-            <div>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 px-1 mt-8">{t('profile.tiers')}</h3>
-                <RoadmapBlock />
-            </div>
+            {!isPro && (
+                <div>
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 px-1 mt-8">{t('profile.tiers')}</h3>
+                    <RoadmapBlock />
+                </div>
+            )}
         </div>
   );
 };
