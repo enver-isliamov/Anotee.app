@@ -25,8 +25,8 @@
     <meta property="twitter:description" content="Streamline your post-production workflow. Frame-accurate commenting, version control, and instant proxies." />
     <meta property="twitter:image" content="https://images.unsplash.com/photo-1574717024653-61fd2cf4d44c?w=1200&h=630&fit=crop&q=80" />
 
-    <!-- Using absolute GitHub URL to ensure logo loads correctly in all environments -->
-    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/enver-isliamov/SmoTree.app/refs/heads/main/logo.png" />
+    <!-- Using local SVG to prevent load errors -->
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#09090b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -38,7 +38,8 @@
         try {
           var localTheme = localStorage.getItem('anotee_theme');
           var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (localTheme === 'dark' || (!localTheme && supportDarkMode)) {
+          // Default to dark if no setting or if system is dark
+          if (localTheme === 'dark' || (!localTheme)) {
             document.documentElement.classList.add('dark');
           } else {
             document.documentElement.classList.remove('dark');
@@ -153,7 +154,7 @@
 }
 </script>
 </head>
-  <body class="bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased transition-colors duration-300">
+  <body class="bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased">
     <div id="root"></div>
     
     <!-- Error Overlay Structure -->

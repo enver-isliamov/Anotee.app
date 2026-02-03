@@ -16,7 +16,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col transition-colors duration-300">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
       <AppHeader 
         currentUser={currentUser} 
         currentView={currentView} 

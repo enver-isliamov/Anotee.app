@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, XCircle, CreditCard, ArrowLeft, MoreHorizontal, CheckCircle, Clock, Zap, Settings, Save, AlertTriangle } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG } from '../types';
 
 interface AdminUser {
@@ -16,12 +16,12 @@ interface AdminUser {
 }
 
 const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
-    max_projects: "Project Limits (Number of projects allowed)",
-    export_xml: "DaVinci Resolve XML Export",
-    export_csv: "Premiere/Excel CSV Export",
-    google_drive: "Google Drive Integration & Uploads",
-    ai_transcription: "AI Voice-to-Text Transcription",
-    team_collab: "Team Invites & Collaboration"
+    max_projects: "Лимиты проектов (Количество проектов)",
+    export_xml: "Экспорт в DaVinci Resolve (XML)",
+    export_csv: "Экспорт в Premiere/Excel (CSV)",
+    google_drive: "Интеграция с Google Drive и загрузка",
+    ai_transcription: "AI Транскрибация речи",
+    team_collab: "Приглашение в команду и совместная работа"
 };
 
 export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -51,7 +51,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             const res = await fetch('/api/admin?action=users', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error("Failed to fetch users.");
+            if (!res.ok) throw new Error("Не удалось загрузить пользователей.");
             const data = await res.json();
             setUsers(data.users || []);
         } catch (e: any) {
@@ -102,14 +102,14 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             setSelectedUser(null);
             fetchUsers(); // Refresh list
         } catch (e) {
-            alert("Error granting Pro");
+            alert("Ошибка при выдаче Pro");
         } finally {
             setIsGranting(false);
         }
     };
 
     const handleRevokePro = async (userId: string) => {
-        if (!confirm("Are you sure you want to downgrade this user to Free?")) return;
+        if (!confirm("Вы уверены, что хотите понизить пользователя до Free?")) return;
         try {
             const token = await getToken();
             await fetch('/api/admin?action=revoke_pro', {
@@ -122,7 +122,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             });
             fetchUsers();
         } catch (e) {
-            alert("Error revoking Pro");
+            alert("Ошибка при отзыве Pro");
         }
     };
 
@@ -138,9 +138,9 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 },
                 body: JSON.stringify(config)
             });
-            alert("Configuration saved!");
+            alert("Конфигурация сохранена!");
         } catch (e) {
-            alert("Failed to save config");
+            alert("Не удалось сохранить конфигурацию");
         } finally {
             setIsSavingConfig(false);
         }
@@ -170,9 +170,9 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </button>
                     <div>
                         <h1 className="text-2xl font-bold flex items-center gap-2">
-                            <Shield fill="currentColor" className="text-indigo-600 dark:text-indigo-400"/> Super Admin
+                            <Shield fill="currentColor" className="text-indigo-600 dark:text-indigo-400"/> Панель Администратора
                         </h1>
-                        <p className="text-sm text-zinc-500">Manage users, subscriptions, and system flags</p>
+                        <p className="text-sm text-zinc-500">Управление пользователями, подписками и флагами системы</p>
                     </div>
                 </div>
                 
@@ -181,13 +181,13 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         onClick={() => setActiveTab('users')}
                         className={`px-4 py-2 text-sm font-bold rounded-md transition-all ${activeTab === 'users' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
-                        Users
+                        Пользователи
                     </button>
                     <button 
                         onClick={() => setActiveTab('features')}
                         className={`px-4 py-2 text-sm font-bold rounded-md transition-all ${activeTab === 'features' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
-                        Feature Flags
+                        Настройки функций
                     </button>
                 </div>
             </div>
@@ -197,16 +197,16 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl">
-                            <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">Total Users</div>
+                            <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">Всего пользователей</div>
                             <div className="text-3xl font-bold">{totalUsers}</div>
                         </div>
                         <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-4 rounded-xl">
-                            <div className="text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">Pro Accounts</div>
+                            <div className="text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">Pro Аккаунты</div>
                             <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{proUsers}</div>
                         </div>
                         <div className="flex items-center justify-end">
                              <button onClick={fetchUsers} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-sm font-bold transition-colors">
-                                <RefreshCw size={16} className={usersLoading ? "animate-spin" : ""} /> Refresh List
+                                <RefreshCw size={16} className={usersLoading ? "animate-spin" : ""} /> Обновить список
                             </button>
                         </div>
                     </div>
@@ -218,10 +218,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
                                     <tr>
-                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">User</th>
-                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Status</th>
-                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Expires</th>
-                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs text-right">Actions</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Пользователь</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Статус</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Истекает</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs text-right">Действия</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -251,14 +251,14 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
-                                                    {isLifetime ? <span className="text-green-500 font-bold">Lifetime</span> : (expiry ? expiry.toLocaleDateString() : '-')}
+                                                    {isLifetime ? <span className="text-green-500 font-bold">Вечный</span> : (expiry ? expiry.toLocaleDateString() : '-')}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     {isPro ? (
-                                                        <button onClick={() => handleRevokePro(user.id)} className="text-xs text-red-500 hover:text-red-700 hover:underline">Downgrade</button>
+                                                        <button onClick={() => handleRevokePro(user.id)} className="text-xs text-red-500 hover:text-red-700 hover:underline">Понизить до Free</button>
                                                     ) : (
                                                         <button onClick={() => setSelectedUser(user)} className="px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold hover:opacity-80 transition-opacity">
-                                                            Grant Pro
+                                                            Выдать Pro
                                                         </button>
                                                     )}
                                                 </td>
@@ -278,9 +278,9 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-500/20 p-4 rounded-xl mb-6 flex items-start gap-3">
                         <AlertTriangle className="text-yellow-600 dark:text-yellow-500 shrink-0" size={20} />
                         <div>
-                            <h3 className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Global Feature Flags</h3>
+                            <h3 className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Глобальные флаги функций</h3>
                             <p className="text-xs text-yellow-700/80 dark:text-yellow-500/80">
-                                These settings control access for ALL users instantly. Changes reflect immediately in the app after refresh.
+                                Эти настройки управляют доступом для ВСЕХ пользователей мгновенно. Изменения применяются сразу после обновления страницы.
                             </p>
                         </div>
                     </div>
@@ -295,7 +295,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                     <div>
                                         <div className="font-bold text-sm text-zinc-900 dark:text-white capitalize">{key.replace('_', ' ')}</div>
                                         <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                                            {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || "System Feature"}
+                                            {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || "Системная функция"}
                                         </div>
                                     </div>
                                 </div>
@@ -305,7 +305,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                     {(key === 'max_projects') && (
                                         <div className="flex items-center gap-2 mr-4">
                                             <div className="flex flex-col">
-                                                <label className="text-[9px] font-bold uppercase text-zinc-400">Free Limit</label>
+                                                <label className="text-[9px] font-bold uppercase text-zinc-400">Лимит Free</label>
                                                 <input 
                                                     type="number" 
                                                     value={rule.limitFree || 0}
@@ -314,7 +314,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                                 />
                                             </div>
                                             <div className="flex flex-col">
-                                                <label className="text-[9px] font-bold uppercase text-zinc-400">Pro Limit</label>
+                                                <label className="text-[9px] font-bold uppercase text-zinc-400">Лимит Pro</label>
                                                 <input 
                                                     type="number" 
                                                     value={rule.limitPro || 0}
@@ -333,7 +333,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                             onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
                                             className="w-4 h-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
                                         />
-                                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Enable for Free</span>
+                                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Вкл. для Free</span>
                                     </label>
                                     
                                     <label className="flex items-center gap-2 cursor-pointer">
@@ -343,7 +343,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                             onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
                                             className="w-4 h-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
                                         />
-                                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Enable for Pro</span>
+                                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Вкл. для Pro</span>
                                     </label>
                                 </div>
                             </div>
@@ -357,7 +357,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
                         >
                             {isSavingConfig ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                            Save Configuration
+                            Сохранить конфигурацию
                         </button>
                     </div>
                 </div>
@@ -367,25 +367,25 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {selectedUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
-                        <h2 className="text-xl font-bold mb-4 dark:text-white">Grant Pro Access</h2>
+                        <h2 className="text-xl font-bold mb-4 dark:text-white">Выдать Pro доступ</h2>
                         <div className="mb-4">
-                            <p className="text-sm text-zinc-500 mb-2">User: <strong>{selectedUser.email}</strong></p>
-                            <label className="block text-xs font-bold uppercase text-zinc-400 mb-1.5">Duration</label>
+                            <p className="text-sm text-zinc-500 mb-2">Пользователь: <strong>{selectedUser.email}</strong></p>
+                            <label className="block text-xs font-bold uppercase text-zinc-400 mb-1.5">Срок действия</label>
                             <select 
                                 value={grantDuration} 
                                 onChange={(e) => setGrantDuration(parseInt(e.target.value))}
                                 className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm dark:text-white outline-none focus:border-indigo-500"
                             >
-                                <option value={7}>7 Days (Trial)</option>
-                                <option value={30}>1 Month</option>
-                                <option value={365}>1 Year</option>
-                                <option value={0}>Lifetime (Forever)</option>
+                                <option value={7}>7 Дней (Триал)</option>
+                                <option value={30}>1 Месяц</option>
+                                <option value={365}>1 Год</option>
+                                <option value={0}>Навсегда (Lifetime)</option>
                             </select>
                         </div>
                         <div className="flex gap-3 mt-6">
-                            <button onClick={() => setSelectedUser(null)} className="flex-1 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800">Cancel</button>
+                            <button onClick={() => setSelectedUser(null)} className="flex-1 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800">Отмена</button>
                             <button onClick={handleGrantPro} disabled={isGranting} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-500 flex items-center justify-center gap-2">
-                                {isGranting ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle size={14}/>} Confirm
+                                {isGranting ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle size={14}/>} Подтвердить
                             </button>
                         </div>
                     </div>

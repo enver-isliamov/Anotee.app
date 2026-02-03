@@ -1,10 +1,9 @@
 
 import React from 'react';
 import { User } from '../types';
-import { ArrowRight, UserPlus, ShieldCheck, PlayCircle, Zap, Clock, Check, BarChart3, MousePointer2, Layers, Shield, Share2, Upload, MessageSquare, Download, Rocket, Server, Heart, Code2 } from 'lucide-react';
+import { ArrowRight, ShieldCheck, PlayCircle, Zap, Clock } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
-import { RoadmapBlock } from './RoadmapBlock';
 import { IntegrationBlock } from './StaticPages';
 import { SignInButton } from '@clerk/clerk-react';
 
@@ -17,7 +16,7 @@ const LoginCard: React.FC = () => {
     const { t } = useLanguage();
 
     return (
-        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden w-full max-w-sm mx-auto animate-in zoom-in-95 duration-300 transition-colors">
+        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden w-full max-w-sm mx-auto animate-in zoom-in-95 duration-300">
             <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-500"></div>
             <div className="mb-6">
                 <div className="flex items-start gap-3">
@@ -49,7 +48,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen w-full bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white selection:bg-indigo-500/30 transition-colors duration-500">
+    <div className="min-h-screen w-full bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white selection:bg-indigo-500/30">
       
       <AppHeader 
         currentUser={null}
@@ -139,31 +138,6 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                         </div>
                     </div>
                 </div>
-        </div>
-
-        {/* SECTION: WORKFLOW */}
-        <div className="py-24 max-w-7xl mx-auto px-4 border-b border-zinc-200 dark:border-zinc-800">
-            <div className="text-center mb-16 max-w-2xl mx-auto">
-                <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">{t('land.flow.title')}</h2>
-                <p className="text-zinc-600 dark:text-zinc-400">{t('land.flow.sub')}</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                {[
-                    { icon: Upload, title: t('page.workflow.step1'), desc: t('page.workflow.step1.desc'), color: 'text-blue-500' },
-                    { icon: Share2, title: t('page.workflow.step2'), desc: t('page.workflow.step2.desc'), color: 'text-indigo-500' },
-                    { icon: MessageSquare, title: t('page.workflow.step3'), desc: t('page.workflow.step3.desc'), color: 'text-purple-500' },
-                    { icon: Download, title: t('page.workflow.step4'), desc: t('page.workflow.step4.desc'), color: 'text-green-500' },
-                ].map((step, i) => (
-                    <div key={i} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl hover:border-indigo-500/30 transition-all group shadow-sm hover:shadow-md">
-                        <div className={`w-12 h-12 rounded-xl bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center mb-4 ${step.color} group-hover:scale-110 transition-transform`}>
-                            <step.icon size={24} />
-                        </div>
-                        <h3 className="font-bold text-zinc-900 dark:text-white mb-2">{step.title}</h3>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{step.desc}</p>
-                    </div>
-                ))}
-            </div>
         </div>
 
         {/* FOOTER */}
