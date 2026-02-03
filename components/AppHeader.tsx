@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Menu, X, PlayCircle } from 'lucide-react';
+import { Menu, X, PlayCircle, Shield } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { ThemeToggle } from './ThemeToggle';
@@ -15,6 +16,8 @@ interface AppHeaderProps {
   hideNav?: boolean;
   className?: string;
 }
+
+const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
 
 export const AppHeader: React.FC<AppHeaderProps> = ({ 
     currentUser, 
@@ -35,6 +38,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           onNavigate('DASHBOARD');
       }
   };
+
+  const isAdmin = currentUser?.email && ADMIN_EMAILS.includes(currentUser.email);
 
   const navItems = ['workflow', 'ai', 'pricing', 'about'];
 
@@ -94,6 +99,18 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right Side */}
             <div className="flex items-center gap-3 md:gap-5">
                 
+                {/* ADMIN BUTTON (Visible only to admins) */}
+                {isAdmin && !hideNav && (
+                    <button 
+                        onClick={() => onNavigate('ADMIN')}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold shadow-lg hover:opacity-90 transition-opacity"
+                        title="Admin Dashboard"
+                    >
+                        <Shield size={14} />
+                        <span className="hidden md:inline">Admin</span>
+                    </button>
+                )}
+
                 {/* Organization Switcher */}
                 {currentUser && !hideNav && (
                     <div className="hidden md:block">
@@ -172,6 +189,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     );
                 })}
                 
+                {isAdmin && (
+                    <button 
+                        onClick={() => { setIsMobileMenuOpen(false); onNavigate('ADMIN'); }}
+                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-black dark:bg-white text-white dark:text-black flex items-center gap-2"
+                    >
+                        <Shield size={16} /> Admin Panel
+                    </button>
+                )}
+
                 {currentUser && (
                     <div className="px-4 py-3">
                         <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Organization</div>

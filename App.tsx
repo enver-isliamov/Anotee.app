@@ -172,8 +172,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         const params = new URLSearchParams(window.location.search);
         const pId = params.get('projectId');
         const aId = params.get('assetId');
+        const path = window.location.pathname;
 
-        if (pId && aId) {
+        if (path === '/panel' || path === '/admin') {
+            setView({ type: 'ADMIN' });
+        } else if (pId && aId) {
             setView({ type: 'PLAYER', projectId: pId, assetId: aId });
         } else if (pId) {
             setView({ type: 'PROJECT_VIEW', projectId: pId });
@@ -181,6 +184,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             setView({ type: 'DASHBOARD' });
         }
     };
+
+    // Initial Load Check
+    handlePopState();
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -219,7 +225,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         setCurrentUser({
             id: clerkUser.id,
             name: clerkUser.fullName || clerkUser.firstName || 'User',
-            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev'
+            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
+            email: clerkUser.primaryEmailAddress?.emailAddress
         });
     } else {
         setCurrentUser(null);
@@ -413,22 +420,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => clearInterval(interval);
   }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const pId = params.get('projectId');
-    const aId = params.get('assetId');
-
-    if (pId) {
-      if (aId) {
-           setView({ type: 'PLAYER', projectId: pId, assetId: aId });
-      } else {
-           setView({ type: 'PROJECT_VIEW', projectId: pId });
-      }
-    }
-  }, [currentUser]); 
-
   const handleSelectProject = (project: Project) => {
     setView({ type: 'PROJECT_VIEW', projectId: project.id });
     const newUrl = `/?projectId=${project.id}`;
@@ -565,7 +556,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 </MainLayout>
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
                 {isMockMode && (
-                    <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-black text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm">
+                    <div className="fixed bottom-0 left-0 right-0 bg-yellow-500/90 text-center text-xs font-bold py-1 z-[100] backdrop-blur-sm text-black">
                         PREVIEW MODE: No Backend (Data saved to LocalStorage)
                     </div>
                 )}
@@ -713,7 +704,7 @@ const App: React.FC = () => {
                 <ThemeProvider>
                     <DriveProvider isMockMode={true}>
                         <AppLayout 
-                            clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock' }} 
+                            clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} 
                             isLoaded={true} 
                             isSignedIn={true} 
                             getToken={async () => 'mock-token'} 

@@ -8,6 +8,7 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
+  email?: string; // Added for admin checks
 }
 
 export interface Comment {
