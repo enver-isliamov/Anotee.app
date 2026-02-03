@@ -3,13 +3,13 @@
   "name": "Anotee Video Review",
   "icons": [
     {
-      "src": "/logo.svg",
-      "type": "image/svg+xml",
+      "src": "https://raw.githubusercontent.com/enver-isliamov/SmoTree.app/refs/heads/main/logo.png",
+      "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/logo.svg",
-      "type": "image/svg+xml",
+      "src": "https://raw.githubusercontent.com/enver-isliamov/SmoTree.app/refs/heads/main/logo.png",
+      "type": "image/png",
       "sizes": "512x512"
     }
   ],

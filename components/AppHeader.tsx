@@ -49,7 +49,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     onClick={handleLogoClick}
                 >
                     <img 
-                        src="/logo.svg" 
+                        src="https://raw.githubusercontent.com/enver-isliamov/SmoTree.app/refs/heads/main/logo.png" 
                         alt={t('app.name')} 
                         className="w-10 h-10 shrink-0 group-hover:scale-105 transition-transform" 
                     />
