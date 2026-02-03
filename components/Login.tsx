@@ -169,8 +169,9 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
         {/* FOOTER */}
         <footer className="py-12 border-t border-zinc-200 dark:border-zinc-800 text-center bg-white dark:bg-zinc-900">
                 <div className="text-sm font-bold text-zinc-900 dark:text-white mb-2">{t('app.name')}</div>
-                <div className="text-xs text-zinc-500">
-                    &copy; {new Date().getFullYear()} {t('footer.rights')}
+                <div className="text-xs text-zinc-500 flex flex-col gap-1">
+                    <span>&copy; {new Date().getFullYear()} {t('footer.rights')}</span>
+                    <span className="opacity-70">ИНН 910228340090</span>
                 </div>
         </footer>
     </div>
