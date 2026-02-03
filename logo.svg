@@ -11,7 +11,7 @@
     
     <!-- Grid pattern -->
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#374151" stroke-width="1"/>
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#374151" stroke-width="2"/>
     </pattern>
   </defs>
   
@@ -25,12 +25,12 @@
   <rect x="26" y="26" width="148" height="148" rx="25" fill="url(#grid)"/>
   
   <!-- Lowercase letter "a" in print form -->
-  <g transform="translate(100, 100)">
+  <g transform="translate(110, 110)">
     <!-- Circle/bowl of "a" -->
-    <circle cx="0" cy="8" r="28" fill="none" stroke="#ffffff" stroke-width="6"/>
+    <circle cx="-15" cy="4" r="40" fill="none" stroke="#ffffff" stroke-width="6"/>
     <!-- Vertical stem on the right -->
-    <path d="M 28,-20 L 28,36" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square"/>
+    <path d="M 25,-36 L 25,40" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square"/>
     <!-- Dot above the "a" on the right -->
-    <circle cx="28" cy="-38" r="9" fill="#ffffff"/>
+    <circle cx="25" cy="-55" r="8" fill="#ffffff"/>
   </g>
 </svg>
