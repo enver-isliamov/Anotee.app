@@ -4,7 +4,7 @@
   "name": "Anotee Video Review",
   "icons": [
     {
-      "src": "/logo.svg",
+      "src": "/logo.png",
       "type": "image/svg+xml",
       "sizes": "192x192 512x512"
     }
