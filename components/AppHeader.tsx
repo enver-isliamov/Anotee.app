@@ -51,7 +51,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     <img 
                         src="https://raw.githubusercontent.com/enver-isliamov/SmoTree.app/refs/heads/main/logo.png" 
                         alt={t('app.name')} 
-                        className="w-10 h-10 shrink-0 group-hover:scale-105 transition-transform" 
+                        className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" 
                     />
                     <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{t('app.name')}</span>
                 </div>
