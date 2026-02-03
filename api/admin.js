@@ -1,6 +1,9 @@
 
 import { sql } from '@vercel/postgres';
-import { verifyUser } from './_auth.js';
+import { verifyUser, getClerkClient } from './_auth.js';
+
+// 🛑 HARDCODED ADMINS
+const ADMIN_EMAILS = ['enverphoto@gmail.com'];
 
 export default async function handler(req, res) {
     const { action } = req.query;
@@ -78,6 +81,53 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, updatedProjects: updatedCount, claimedOwnerships: claimedCount });
         } catch (error) {
             return res.status(500).json({ error: "Internal Server Error", details: error.message });
+        }
+    }
+
+    // --- 3. LIST USERS (ADMIN ONLY) ---
+    if (action === 'users') {
+        if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+        try {
+            // Force requireEmail=true to fetch profile from Clerk
+            const user = await verifyUser(req, true);
+            
+            if (!user || !user.email) {
+                return res.status(401).json({ error: "Unauthorized" });
+            }
+
+            // 🛑 SECURITY CHECK
+            const userEmail = user.email.toLowerCase().trim();
+            if (!ADMIN_EMAILS.includes(userEmail)) {
+                console.warn(`Unauthorized admin access attempt by: ${userEmail}`);
+                return res.status(403).json({ error: "Forbidden: Admins only" });
+            }
+
+            const clerk = getClerkClient();
+            // Fetch users (limit 100 for now, pagination can be added later)
+            const usersList = await clerk.users.getUserList({ limit: 100, orderBy: '-created_at' });
+
+            const data = usersList.data.map(u => {
+                const meta = u.publicMetadata || {};
+                const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
+                
+                return {
+                    id: u.id,
+                    name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+                    email: email,
+                    avatar: u.imageUrl,
+                    plan: meta.plan || 'free',
+                    expiresAt: meta.expiresAt,
+                    isAutoRenew: !!meta.yookassaPaymentMethodId,
+                    lastActive: u.lastSignInAt
+                };
+            });
+
+            return res.status(200).json({ users: data });
+
+        } catch (error) {
+            console.error("Admin Users List Error:", error);
+            return res.status(500).json({ error: error.message });
         }
     }
 

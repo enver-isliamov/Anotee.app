@@ -5,6 +5,7 @@ import { ProjectView } from './components/ProjectView';
 import { Player } from './components/Player';
 import { Login } from './components/Login';
 import { Profile } from './components/Profile';
+import { AdminPanel } from './components/AdminPanel'; // Import new component
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { LegalPage } from './components/LegalPages';
 import { LiveDemo } from './components/LiveDemo';
@@ -15,7 +16,7 @@ import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
-import { useUser, useClerk, useAuth, ClerkProvider } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, ClerkProvider, useOrganization } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
 import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw, PartyPopper } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -28,6 +29,7 @@ type ViewState =
   | { type: 'PROJECT_VIEW', projectId: string, restrictedAssetId?: string }
   | { type: 'PLAYER', assetId: string, projectId: string, restrictedAssetId?: string }
   | { type: 'PROFILE' }
+  | { type: 'ADMIN' } // NEW VIEW STATE
   | { type: 'WORKFLOW' }
   | { type: 'ABOUT' }
   | { type: 'PRICING' }
@@ -495,6 +497,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'ABOUT': setView({ type: 'ABOUT' }); break;
           case 'PRICING': setView({ type: 'PRICING' }); break;
           case 'PROFILE': setView({ type: 'PROFILE' }); break;
+          case 'ADMIN': setView({ type: 'ADMIN' }); break; // Handle Admin nav
           case 'AI_FEATURES': setView({ type: 'AI_FEATURES' }); break;
           case 'LIVE_DEMO': setView({ type: 'LIVE_DEMO' }); break;
           case 'DASHBOARD': setView({ type: 'DASHBOARD' }); break;
@@ -584,6 +587,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       );
   }
 
+  // Admin Panel Render
+  if (view.type === 'ADMIN') {
+      return (
+          <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+              <AdminPanel onBack={handleBackToDashboard} />
+          </div>
+      );
+  }
+
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
   return (
@@ -613,6 +625,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     <Profile 
                         currentUser={currentUser}
                         onLogout={handleLogout}
+                        onNavigate={handleNavigate} // Pass navigation prop
                     />
                 )}
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
@@ -670,92 +683,63 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 };
 
-const ClerkWrapper: React.FC = () => {
+const AuthWrapper: React.FC = () => {
     const { user, isLoaded, isSignedIn } = useUser();
     const { getToken, signOut } = useAuth();
-    const { openSignIn, organization } = useClerk();
-    
-    // Clerk provides the active organization here if one is selected
-    const activeOrg = organization;
-    
-    const env = (import.meta as any).env || {};
-    const isMockMode = !env.VITE_CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY.includes('placeholder');
+    const { organization } = useOrganization();
 
     return (
-        <DriveProvider isMockMode={isMockMode}>
-            <AppLayout 
-                clerkUser={user}
-                isLoaded={isLoaded}
-                isSignedIn={isSignedIn || false}
-                getToken={getToken}
-                signOut={async () => { await signOut(); }}
-                mockSignIn={() => openSignIn()}
-                authMode="clerk"
-                organization={activeOrg}
-                userObj={user} // Pass the full user object for reload() method
-            />
-        </DriveProvider>
+        <AppLayout 
+            clerkUser={user} 
+            isLoaded={isLoaded} 
+            isSignedIn={!!isSignedIn} 
+            getToken={getToken} 
+            signOut={signOut} 
+            authMode="clerk" 
+            organization={organization}
+            userObj={user}
+        />
     );
-}
+};
 
 const App: React.FC = () => {
     const env = (import.meta as any).env || {};
-    const clerkKey = env.VITE_CLERK_PUBLISHABLE_KEY;
-    const isMock = !clerkKey || clerkKey.includes('placeholder');
+    const clerkPubKey = env.VITE_CLERK_PUBLISHABLE_KEY;
+    const isMockMode = !clerkPubKey || clerkPubKey.includes('placeholder');
 
-    const MockAppWrapper = () => {
-        const [isMockSignedIn, setIsMockSignedIn] = useState(false);
-        const [mockUser, setMockUser] = useState<any | null>(null);
-
-        const handleMockSignIn = () => {
-            setIsMockSignedIn(true);
-            setMockUser({
-                id: 'mock-user-1',
-                fullName: 'Mock Developer',
-                imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock',
-                primaryEmailAddressId: 'email-1',
-                emailAddresses: [{ id: 'email-1', emailAddress: 'mock@example.com' }]
-            });
-        };
-
-        const handleMockSignOut = async () => {
-            setIsMockSignedIn(false);
-            setMockUser(null);
-        };
-
-        return (
-            <DriveProvider isMockMode={true}>
-                <AppLayout 
-                    clerkUser={mockUser}
-                    isLoaded={true}
-                    isSignedIn={isMockSignedIn}
-                    getToken={async () => 'mock-token'}
-                    signOut={handleMockSignOut}
-                    mockSignIn={handleMockSignIn}
-                    authMode="mock"
-                    organization={null}
-                />
-            </DriveProvider>
-        );
-    };
-
-    if (isMock) {
+    if (isMockMode) {
         return (
             <LanguageProvider>
                 <ThemeProvider>
-                    <MockAppWrapper />
+                    <DriveProvider isMockMode={true}>
+                        <AppLayout 
+                            clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock' }} 
+                            isLoaded={true} 
+                            isSignedIn={true} 
+                            getToken={async () => 'mock-token'} 
+                            signOut={async () => window.location.reload()} 
+                            mockSignIn={() => {}}
+                            authMode="mock" 
+                        />
+                    </DriveProvider>
                 </ThemeProvider>
             </LanguageProvider>
         );
     }
 
+    if (!clerkPubKey) {
+        return <div>Missing Clerk Key</div>;
+    }
+
     return (
-        <ClerkProvider publishableKey={clerkKey}>
+        <ClerkProvider publishableKey={clerkPubKey}>
             <LanguageProvider>
                 <ThemeProvider>
                     <LanguageCloudSync />
                     <ThemeCloudSync />
-                    <ClerkWrapper />
+                    <DriveProvider isMockMode={false}>
+                        <AuthWrapper />
+                    </DriveProvider>
                 </ThemeProvider>
             </LanguageProvider>
         </ClerkProvider>

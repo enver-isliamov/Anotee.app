@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Crown, Database, Check, AlertCircle, LogOut, CreditCard, Calendar, XCircle } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, LogOut, CreditCard, Calendar, XCircle, Shield } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { UserProfile, useAuth, useUser } from '@clerk/clerk-react';
@@ -10,9 +10,12 @@ import { useSubscription } from '../hooks/useSubscription';
 interface ProfileProps {
   currentUser: User;
   onLogout: () => void;
+  onNavigate?: (page: string) => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
+const ADMIN_EMAIL = 'enverphoto@gmail.com';
+
+export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavigate }) => {
   const { t } = useLanguage();
   const { getToken } = useAuth();
   const { isPro, expiresAt, checkStatus } = useSubscription();
@@ -26,6 +29,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
 
   // Check if auto-renew is active (payment method saved)
   const isAutoRenew = !!(user?.publicMetadata as any)?.yookassaPaymentMethodId;
+
+  // Check Admin Access
+  const primaryEmail = user?.primaryEmailAddress?.emailAddress;
+  const isAdmin = primaryEmail === ADMIN_EMAIL;
 
   const handleMigrate = async () => {
       setMigrationStatus('loading');
@@ -92,13 +99,24 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout }) => {
                      <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Manage your account settings and subscriptions.</p>
                  </div>
                  
-                 <button 
-                    onClick={onLogout}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-sm font-bold transition-colors border border-red-200 dark:border-red-900/50"
-                 >
-                    <LogOut size={16} />
-                    {t('logout')}
-                 </button>
+                 <div className="flex items-center gap-2">
+                     {isAdmin && onNavigate && (
+                         <button 
+                            onClick={() => onNavigate('ADMIN')}
+                            className="flex items-center gap-2 px-4 py-2 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 rounded-lg text-sm font-bold transition-all shadow-lg"
+                         >
+                            <Shield size={16} />
+                            Admin Dashboard
+                         </button>
+                     )}
+                     <button 
+                        onClick={onLogout}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-sm font-bold transition-colors border border-red-200 dark:border-red-900/50"
+                     >
+                        <LogOut size={16} />
+                        {t('logout')}
+                     </button>
+                 </div>
             </div>
             
             {/* SUBSCRIPTION MANAGEMENT CARD (Visible only for PRO) */}
