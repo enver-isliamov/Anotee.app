@@ -2,8 +2,8 @@
 import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
 
-// 🛑 HARDCODED ADMINS
-const ADMIN_EMAILS = ['enverphoto@gmail.com'];
+// 🛑 UPDATE: Added your yandex email here
+const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
 
 export default async function handler(req, res) {
     const { action } = req.query;

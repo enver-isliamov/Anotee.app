@@ -13,7 +13,8 @@ interface ProfileProps {
   onNavigate?: (page: string) => void;
 }
 
-const ADMIN_EMAIL = 'enverphoto@gmail.com';
+// UPDATE: Added your yandex email here
+const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
 
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavigate }) => {
   const { t } = useLanguage();
@@ -32,7 +33,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onLogout, onNavig
 
   // Check Admin Access
   const primaryEmail = user?.primaryEmailAddress?.emailAddress;
-  const isAdmin = primaryEmail === ADMIN_EMAIL;
+  const isAdmin = primaryEmail && ADMIN_EMAILS.includes(primaryEmail);
 
   const handleMigrate = async () => {
       setMigrationStatus('loading');
