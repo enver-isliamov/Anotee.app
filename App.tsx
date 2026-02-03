@@ -518,6 +518,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                               <li>DNS (CNAME) records for <code>clerk.yourdomain.com</code> have not propagated yet.</li>
                               <li>The Clerk <strong>Publishable Key</strong> in Vercel settings is incorrect or missing.</li>
                               <li>Ad-blockers or privacy extensions are blocking Clerk scripts.</li>
+                              <li><strong>HTTP/3 (QUIC)</strong> blocking by your ISP (check logs).</li>
                           </ul>
                       </div>
                       <button onClick={() => window.location.reload()} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2">
@@ -700,21 +701,23 @@ const App: React.FC = () => {
 
     if (isMockMode) {
         return (
-            <LanguageProvider>
-                <ThemeProvider>
-                    <DriveProvider isMockMode={true}>
-                        <AppLayout 
-                            clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} 
-                            isLoaded={true} 
-                            isSignedIn={true} 
-                            getToken={async () => 'mock-token'} 
-                            signOut={async () => window.location.reload()} 
-                            mockSignIn={() => {}}
-                            authMode="mock" 
-                        />
-                    </DriveProvider>
-                </ThemeProvider>
-            </LanguageProvider>
+            <ErrorBoundary>
+                <LanguageProvider>
+                    <ThemeProvider>
+                        <DriveProvider isMockMode={true}>
+                            <AppLayout 
+                                clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} 
+                                isLoaded={true} 
+                                isSignedIn={true} 
+                                getToken={async () => 'mock-token'} 
+                                signOut={async () => window.location.reload()} 
+                                mockSignIn={() => {}}
+                                authMode="mock" 
+                            />
+                        </DriveProvider>
+                    </ThemeProvider>
+                </LanguageProvider>
+            </ErrorBoundary>
         );
     }
 
@@ -722,18 +725,21 @@ const App: React.FC = () => {
         return <div>Missing Clerk Key</div>;
     }
 
+    // Wrap ClerkProvider in ErrorBoundary to catch initial connection failures (like blocked QUIC/UDP)
     return (
-        <ClerkProvider publishableKey={clerkPubKey}>
-            <LanguageProvider>
-                <ThemeProvider>
-                    <LanguageCloudSync />
-                    <ThemeCloudSync />
-                    <DriveProvider isMockMode={false}>
-                        <AuthWrapper />
-                    </DriveProvider>
-                </ThemeProvider>
-            </LanguageProvider>
-        </ClerkProvider>
+        <ErrorBoundary>
+            <ClerkProvider publishableKey={clerkPubKey}>
+                <LanguageProvider>
+                    <ThemeProvider>
+                        <LanguageCloudSync />
+                        <ThemeCloudSync />
+                        <DriveProvider isMockMode={false}>
+                            <AuthWrapper />
+                        </DriveProvider>
+                    </ThemeProvider>
+                </LanguageProvider>
+            </ClerkProvider>
+        </ErrorBoundary>
     );
 };
 
