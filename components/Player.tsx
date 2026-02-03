@@ -10,6 +10,7 @@ import { extractAudioFromUrl } from '../services/audioUtils';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization } from '@clerk/clerk-react';
+import { useSubscription } from '../hooks/useSubscription';
 
 interface PlayerProps {
   asset: ProjectAsset;
@@ -140,6 +141,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // ... (No changes to state or effects above this point) ...
   const { t } = useLanguage();
   const { organization } = useOrganization();
+  const { isPro } = useSubscription();
 
   // Check management permissions (Owner or Org Member)
   const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);
@@ -483,7 +485,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleSetInPoint = () => { setMarkerInPoint(currentTime); notify("In Point Set", "info"); };
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
-  const handleExport = (format: 'xml' | 'csv' | 'edl') => { let content = ''; let mime = 'text/plain'; let ext = ''; if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); setShowExportMenu(false); };
+  
+  const handleExport = (format: 'xml' | 'csv' | 'edl') => { 
+      if (!isPro && !isDemo) {
+          notify(t('upsell.founder.feat2') + " (Pro Feature)", "warning");
+          return;
+      }
+      
+      let content = ''; let mime = 'text/plain'; let ext = ''; if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); setShowExportMenu(false); 
+  };
+  
   const handleSelectCompareVersion = (idx: number | null) => { setCompareVersionIdx(idx); if (idx !== null) setViewMode('side-by-side'); else setViewMode('single'); setShowCompareMenu(false); };
   
   // FIXED SWITCH: Reset Drive URL to force reload

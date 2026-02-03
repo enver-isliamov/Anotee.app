@@ -9,6 +9,7 @@ import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useUser, useAuth } from '@clerk/clerk-react';
 import { isOrgAdmin } from '../services/userUtils';
+import { useSubscription } from '../hooks/useSubscription';
 
 interface DashboardProps {
   projects: Project[];
@@ -22,10 +23,13 @@ interface DashboardProps {
   isMockMode?: boolean;
 }
 
+const FREE_PROJECT_LIMIT = 3;
+
 export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onSelectProject, onAddProject, onDeleteProject, onEditProject, onNavigate, notify, isMockMode = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
+  const { isPro } = useSubscription();
   
   // CLERK ORG CONTEXT
   const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
@@ -82,6 +86,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const sectionTitle = activeOrgId 
     ? (organization?.name || 'Organization') + ' Projects' 
     : t('dash.my_projects');
+
+  // LIMIT CHECK
+  // Limits apply to Personal Workspace only. Organizations might have different logic, but here we enforce on user.
+  const createdProjectsCount = projects.filter(p => p.ownerId === currentUser.id && !p.orgId).length;
+  const canCreate = isPro || createdProjectsCount < FREE_PROJECT_LIMIT || !!activeOrgId; // Orgs usually have separate billing, allowing strict user limit on personal
 
   // PERMISSION CHECKS (Project Level)
   const canManageProject = (project: Project) => {
@@ -491,13 +500,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
              {/* Spacer for alignment on mobile where header controls are */}
             <div className="lg:hidden"></div>
 
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="ml-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-bold shadow-lg shadow-indigo-900/20"
-            >
-              <Plus size={16} />
-              {t('dash.new_project')}
-            </button>
+            <div className="ml-auto relative group">
+                <button 
+                  onClick={() => canCreate ? setIsModalOpen(true) : onNavigate('PRICING')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold shadow-lg ${canCreate ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 cursor-not-allowed border border-zinc-700'}`}
+                >
+                  {canCreate ? <Plus size={16} /> : <Lock size={16} />}
+                  {t('dash.new_project')}
+                </button>
+                
+                {!canCreate && (
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                        You have reached the limit of <strong>{FREE_PROJECT_LIMIT} personal projects</strong> on the Free plan. <span className="text-indigo-400 font-bold block mt-1">Upgrade to Pro for unlimited access.</span>
+                    </div>
+                )}
+            </div>
       </div>
 
       {renderProjectGrid(
@@ -523,7 +540,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                        </div>
                        <ul className="space-y-3 text-sm text-zinc-600 dark:text-zinc-500 font-medium">
                            <li className="flex items-center gap-2"><Check size={14}/> {t('upsell.free.feat1')}</li>
-                           <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><X size={14}/> {t('upsell.free.feat2')}</li>
+                           <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><Check size={14}/> 3 Active Projects</li>
                            <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><X size={14}/> {t('upsell.free.feat3')}</li>
                        </ul>
                   </div>
