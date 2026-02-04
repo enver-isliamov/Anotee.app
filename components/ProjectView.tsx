@@ -11,6 +11,7 @@ import { api } from '../services/apiClient';
 import { useOrganization, OrganizationProfile } from '@clerk/clerk-react';
 import { useDrive } from '../services/driveContext';
 import { mapClerkUserToAppUser, isOrgAdmin } from '../services/userUtils';
+import logo from '../logo.svg';
 
 interface ProjectViewProps {
   project: Project;
@@ -333,7 +334,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       <header className="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-hidden flex-1">
           <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-white shrink-0 p-1 mr-1">
-              <img src="/logo.png" alt="Back" className="w-8 h-8 shrink-0 hover:opacity-80 transition-opacity" />
+              <img src={logo} alt="Back" className="w-8 h-8 shrink-0 hover:opacity-80 transition-opacity" />
           </button>
           <div className="flex flex-col truncate">
             <span className="font-bold text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-1">

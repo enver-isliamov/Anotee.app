@@ -5,6 +5,7 @@ import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { User } from '../types';
 import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react';
+import logo from '../logo.svg';
 
 interface AppHeaderProps {
   currentUser: User | null;
@@ -53,7 +54,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     onClick={handleLogoClick}
                 >
                     <img 
-                        src="/logo.svg" 
+                        src={logo} 
                         alt={t('app.name')} 
                         className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" 
                     />
