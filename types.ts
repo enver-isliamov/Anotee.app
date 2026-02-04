@@ -91,6 +91,10 @@ export interface AppConfig {
     google_drive: FeatureRule;
     ai_transcription: FeatureRule;
     team_collab: FeatureRule;
+    local_file_link: FeatureRule;
+    high_res_proxies: FeatureRule;
+    project_locking: FeatureRule;
+    version_comparison: FeatureRule;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -99,5 +103,9 @@ export const DEFAULT_CONFIG: AppConfig = {
     export_csv: { enabledForFree: false, enabledForPro: true },
     google_drive: { enabledForFree: false, enabledForPro: true },
     ai_transcription: { enabledForFree: true, enabledForPro: true },
-    team_collab: { enabledForFree: true, enabledForPro: true }
+    team_collab: { enabledForFree: true, enabledForPro: true },
+    local_file_link: { enabledForFree: true, enabledForPro: true },
+    high_res_proxies: { enabledForFree: false, enabledForPro: true },
+    project_locking: { enabledForFree: false, enabledForPro: true },
+    version_comparison: { enabledForFree: true, enabledForPro: true }
 };

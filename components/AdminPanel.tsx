@@ -21,7 +21,11 @@ const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
     export_csv: "Экспорт (CSV/Excel)",
     google_drive: "Google Drive Интеграция",
     ai_transcription: "AI Транскрибация",
-    team_collab: "Командная работа"
+    team_collab: "Командная работа",
+    local_file_link: "Локальные файлы (Offline)",
+    high_res_proxies: "4K Прокси / Оригиналы",
+    project_locking: "Блокировка (NDA)",
+    version_comparison: "Сравнение версий"
 };
 
 export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
