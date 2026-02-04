@@ -53,7 +53,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     onClick={handleLogoClick}
                 >
                     <img 
-                        src="/logo.png" 
+                        src="/logo.svg" 
                         alt={t('app.name')} 
                         className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" 
                     />
