@@ -104,7 +104,7 @@ const PlayerSidebar = React.memo(({
     return (
         <div className="w-full lg:w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shrink-0 h-[45vh] lg:h-auto z-10 shadow-2xl lg:shadow-none pb-20 lg:pb-0 relative transition-colors">
              <>
-                <div className="flex border-b border-zinc-200 dark:border-zinc-800">
+                <div className="flex border-b border-zinc-200 dark:border-zinc-800" id="tour-sidebar-tabs">
                     <button 
                         onClick={() => setSidebarTab('comments')}
                         className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'comments' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
@@ -122,13 +122,14 @@ const PlayerSidebar = React.memo(({
                     <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 sticky top-0 z-20">
                         <div className="flex items-center gap-3"><span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total: ({filteredComments.length})</span></div>
                         <div className="flex items-center gap-2">
-                            {isManager && (<><button onClick={handleToggleLock} className={`p-1 rounded transition-colors ${version.isLocked ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} title={version.isLocked ? t('player.unlock_ver') : t('player.lock_ver')}>{version.isLocked ? <Lock size={14} /> : <Unlock size={14} />}</button><div className="relative"><button onClick={() => setShowExportMenu(!showExportMenu)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title={t('player.export.title')}><Download size={14} /></button>{showExportMenu && (<div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100"><button onClick={() => handleExport('xml')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><Film size={14} className="text-indigo-500 dark:text-indigo-400" />{t('player.export.xml')}</button><button onClick={() => handleExport('csv')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileSpreadsheet size={14} className="text-green-500 dark:text-green-400" />{t('player.export.csv')}</button><button onClick={() => handleExport('edl')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileText size={14} className="text-orange-500 dark:text-orange-400" />{t('player.export.edl')}</button></div>)}{showExportMenu && (<div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>)}</div></>)}
+                            {isManager && (<><button onClick={handleToggleLock} className={`p-1 rounded transition-colors ${version.isLocked ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} title={version.isLocked ? t('player.lock_ver') : t('player.lock_ver')}>{version.isLocked ? <Lock size={14} /> : <Unlock size={14} />}</button><div className="relative"><button id="tour-export-btn" onClick={() => setShowExportMenu(!showExportMenu)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title={t('player.export.title')}><Download size={14} /></button>{showExportMenu && (<div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100"><button onClick={() => handleExport('xml')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><Film size={14} className="text-indigo-500 dark:text-indigo-400" />{t('player.export.xml')}</button><button onClick={() => handleExport('csv')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileSpreadsheet size={14} className="text-green-500 dark:text-green-400" />{t('player.export.csv')}</button><button onClick={() => handleExport('edl')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileText size={14} className="text-orange-500 dark:text-orange-400" />{t('player.export.edl')}</button></div>)}{showExportMenu && (<div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>)}</div></>)}
                             {isManager && filteredComments.some((c: any) => c.status === CommentStatus.OPEN) && (<button onClick={handleBulkResolve} className="flex items-center gap-1 text-[9px] font-bold bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-900/50 hover:bg-green-200 dark:hover:bg-green-900/40 px-2 py-0.5 rounded transition-colors uppercase"><CheckSquare size={10} />{t('player.resolve_all')}</button>)}
                         </div>
                     </div>
                 )}
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
+                    {/* ... (Existing comments render logic is unchanged, just wrapping div ID was added above) ... */}
                     {sidebarTab === 'comments' && filteredComments.map((comment: any) => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; 
                         
@@ -193,7 +194,6 @@ const PlayerSidebar = React.memo(({
 });
 
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
-  // ... (No changes to initial state)
   const { t } = useLanguage();
   const { organization } = useOrganization();
   const { isPro } = useSubscription();
@@ -254,7 +254,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const [comments, setComments] = useState<Comment[]>(version?.comments || []);
   
-  // NOTE: Swipe state moved to Sidebar component to prevent full re-renders
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   
@@ -303,6 +302,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   useEffect(() => {
     localStorage.setItem('anotee_controls_pos', JSON.stringify(controlsPos));
   }, [controlsPos]);
+
+  // RESET POSITION IF OFFSCREEN (Fix for Mobile)
+  useEffect(() => {
+      const { innerWidth, innerHeight } = window;
+      const { x, y } = controlsPos;
+      // Allow some flexibility but reset if way off (e.g. 50px threshold)
+      if (x > innerWidth - 50 || y > innerHeight - 50 || x < -innerWidth || y < -innerHeight) {
+          setControlsPos({ x: 0, y: 0 });
+      }
+  }, []);
 
   useEffect(() => {
       return () => {
@@ -381,10 +390,26 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLocked, isPlaying, currentTime, markerInPoint, markerOutPoint, isFullscreen, videoFps, duration]);
 
-  const togglePlay = () => {
-    const s = !isPlaying; setIsPlaying(s); if (s) setSelectedCommentId(null);
-    if (videoRef.current) s ? videoRef.current.play().catch(() => setIsPlaying(false)) : videoRef.current.pause();
-    if (compareVideoRef.current && viewMode === 'side-by-side') s ? compareVideoRef.current.play().catch(() => {}) : compareVideoRef.current.pause();
+  // Robust Play/Pause Toggle
+  const togglePlay = async () => {
+    if (!videoRef.current) return;
+    
+    // Check DOM state instead of React state to avoid sync issues
+    if (videoRef.current.paused) {
+        try {
+            await videoRef.current.play();
+            setIsPlaying(true);
+            setSelectedCommentId(null);
+            if (compareVideoRef.current && viewMode === 'side-by-side') compareVideoRef.current.play().catch(() => {});
+        } catch (e) {
+            console.error("Play prevented", e);
+            setIsPlaying(false);
+        }
+    } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        if (compareVideoRef.current) compareVideoRef.current.pause();
+    }
   };
 
   const persistLocalFile = (url: string, name: string) => { const uV = [...asset.versions]; uV[currentVersionIdx] = { ...uV[currentVersionIdx], localFileUrl: url, localFileName: name }; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV } : a); onUpdateProject({ ...project, assets: uA }); };
@@ -449,10 +474,40 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // Player Handlers
   useEffect(() => { const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); }; document.addEventListener('fullscreenchange', handleFsChange); return () => document.removeEventListener('fullscreenchange', handleFsChange); }, []);
+  
   const startFpsDetection = () => { if (isFpsDetected) return; fpsDetectionRef.current = { frames: [], lastTime: performance.now(), active: true }; };
   useEffect(() => { let handle: number; const detectLoop = () => { if (fpsDetectionRef.current.active && isPlaying) { const now = performance.now(); const delta = now - fpsDetectionRef.current.lastTime; fpsDetectionRef.current.lastTime = now; if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta); if (fpsDetectionRef.current.frames.length > 30) { const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length; const est = 1000 / avg; const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p); setVideoFps(closest); setIsFpsDetected(true); fpsDetectionRef.current.active = false; } else { handle = requestAnimationFrame(detectLoop); } } }; if (isPlaying && !isFpsDetected) { startFpsDetection(); handle = requestAnimationFrame(detectLoop); } return () => cancelAnimationFrame(handle); }, [isPlaying, isFpsDetected]);
   
-  const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
+  // Smooth Timecode Update (60FPS)
+  useEffect(() => {
+      let animationFrameId: number;
+      const loop = () => {
+          if (videoRef.current) {
+              setCurrentTime(videoRef.current.currentTime);
+              if (viewMode === 'side-by-side' && compareVideoRef.current) {
+                  if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) {
+                      compareVideoRef.current.currentTime = videoRef.current.currentTime;
+                  }
+              }
+          }
+          if (isPlaying) {
+              animationFrameId = requestAnimationFrame(loop);
+          }
+      };
+      
+      if (isPlaying) {
+          loop();
+      }
+      
+      return () => cancelAnimationFrame(animationFrameId);
+  }, [isPlaying, viewMode]);
+
+  // Fallback Timeupdate (4-15Hz)
+  const handleTimeUpdate = () => { 
+      if (!isScrubbing && !isVideoScrubbing && !isPlaying && videoRef.current) { 
+          setCurrentTime(videoRef.current.currentTime); 
+      } 
+  };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
   const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
@@ -526,11 +581,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             {(!isSearchOpen || window.innerWidth > 768) && (
               <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
                    <div className="flex items-center gap-2 max-w-full">
-                       <div className="relative group/title min-w-0">
-                            <button onClick={() => setShowVersionSelector(!showVersionSelector)} className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 max-w-full">
-                                <div className="min-w-0 flex items-center gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span className="font-bold text-xs md:text-sm truncate max-w-[200px] md:max-w-[400px] block overflow-hidden text-ellipsis" title={localFileName || version.filename || asset.title}>{localFileName || version.filename || asset.title}</span>
+                       <div className="relative group/title min-w-0 flex-1">
+                            <button onClick={() => setShowVersionSelector(!showVersionSelector)} className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1 px-2 md:p-1.5 md:px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 max-w-full w-full">
+                                <div className="min-w-0 flex items-center gap-2 w-full">
+                                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                                        <span className="font-bold text-xs md:text-sm truncate block" title={localFileName || version.filename || asset.title}>{localFileName || version.filename || asset.title}</span>
                                         <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-indigo-100 dark:border-indigo-500/20 shrink-0">v{version.versionNumber} <ChevronDown size={10} /></div>
                                     </div>
                                 </div>
@@ -563,7 +618,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             </div>
                         )}
                        {isSyncing ? <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500 animate-pulse text-[10px]" title={t('player.syncing')}><Cloud size={12} /></div> : <div className="flex items-center gap-1 text-green-500 dark:text-green-500/80 text-[10px]" title={t('player.saved')}><CheckCircle size={12} /></div>}
-                       <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 transition-colors text-[10px] font-medium cursor-pointer" title={localFileName ? "Replace Local File" : "Link Local File to play without internet"}><Link size={10} /><span className="hidden md:inline">{localFileName ? 'Replace Source' : 'Link File'}</span></button>
+                       <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 transition-colors text-[10px] font-medium cursor-pointer" title={localFileName ? "Replace Local File" : "Link Local File to play without internet"}><Link size={10} /><span className="hidden md:inline">{localFileName ? 'Replace Source' : 'Link File'}</span></button>
                    </div>
               </div>
             )}
@@ -581,24 +636,30 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         </header>
       )}
 
+      {/* ... Rest of the component (Body) ... */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
         <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
+          {/* ... Video container ... */}
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
+             {/* ... Fullscreen button ... */}
              <div className="absolute bottom-4 right-4 z-50 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300">
                 <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
              </div>
              
+             {/* ... Timecode ... */}
              <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
                 <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime)}</div>
                 <div className="h-6 w-px bg-white/20"></div>
                 <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
+             {/* ... Comments Overlay ... */}
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
                  {activeOverlayComments.map(c => { const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
              </div>
 
+             {/* ... Voice Modal ... */}
              {showVoiceModal && isFullscreen && (
                  <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4">
@@ -615,9 +676,20 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
-             {!isPlaying && !isScrubbing && !videoError && !showVoiceModal && !driveFileMissing && !loadingDrive && !isVideoScrubbing && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center shadow-xl animate-in fade-in zoom-in duration-200">{isPlaying ? <Pause size={32} fill="white" className="text-white"/> : <Play size={32} fill="white" className="ml-1 text-white" />}</div></div>)}
+             {/* ... Play Button / Loaders ... */}
+             <div 
+                className="absolute inset-0 z-20 flex items-center justify-center pointer-events-auto cursor-pointer" 
+                onClick={togglePlay}
+             >
+                {!isPlaying && !isScrubbing && !videoError && !showVoiceModal && !driveFileMissing && !loadingDrive && !isVideoScrubbing && (
+                    <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-full flex items-center justify-center shadow-xl animate-in fade-in zoom-in duration-200 pointer-events-none">
+                        <Play size={32} fill="white" className="ml-1 text-white" />
+                    </div>
+                )}
+             </div>
              {loadingDrive && (<div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"><Loader2 size={48} className="animate-spin text-white/50"/></div>)}
 
+             {/* ... Errors ... */}
              {videoError && !driveFileMissing && (
                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-6 text-center animate-in fade-in duration-300">
                     <div className="bg-zinc-800 p-4 rounded-full mb-4 ring-1 ring-zinc-700">
@@ -642,6 +714,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
+             {/* ... Video Element ... */}
              <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
@@ -679,7 +752,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         {!isFullscreen && sidebarTab === 'comments' && (
             <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
                 {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime)} - {markerOutPoint ? formatTimecode(markerOutPoint) : '...'}</span></div></div>)}
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-center" id="tour-comment-input">
                     <div className="relative flex-1">
                         <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? "Comments locked" : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
                         <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>

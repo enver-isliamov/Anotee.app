@@ -23,6 +23,7 @@ interface ProjectViewProps {
   restrictedAssetId?: string;
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
+  onboardingActiveStep?: number; // Legacy prop, kept for compatibility but not used
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
@@ -388,6 +389,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   </button>
               ) : (
                   <button 
+                    id="tour-share-btn"
                     onClick={handleShareProject}
                     className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
                     title="Share via Public Link"
@@ -452,6 +454,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     )}
 
                     <button 
+                        id="tour-upload-btn"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={!isMockMode && !isDriveReady}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center"

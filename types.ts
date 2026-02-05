@@ -85,6 +85,7 @@ export interface FeatureRule {
 }
 
 export interface AppConfig {
+    // Core Features
     max_projects: FeatureRule;
     export_xml: FeatureRule;
     export_csv: FeatureRule;
@@ -95,9 +96,17 @@ export interface AppConfig {
     high_res_proxies: FeatureRule;
     project_locking: FeatureRule;
     version_comparison: FeatureRule;
+
+    // UI Control Flags
+    ui_upsell_banner: FeatureRule;
+    ui_roadmap_block: FeatureRule;
+    ui_help_button: FeatureRule;
+    ui_footer: FeatureRule;
+    ui_drive_connect: FeatureRule;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
+    // Core Features
     max_projects: { enabledForFree: true, enabledForPro: true, limitFree: 3, limitPro: 1000 },
     export_xml: { enabledForFree: false, enabledForPro: true },
     export_csv: { enabledForFree: false, enabledForPro: true },
@@ -107,5 +116,12 @@ export const DEFAULT_CONFIG: AppConfig = {
     local_file_link: { enabledForFree: true, enabledForPro: true },
     high_res_proxies: { enabledForFree: false, enabledForPro: true },
     project_locking: { enabledForFree: false, enabledForPro: true },
-    version_comparison: { enabledForFree: true, enabledForPro: true }
+    version_comparison: { enabledForFree: true, enabledForPro: true },
+
+    // UI Defaults
+    ui_upsell_banner: { enabledForFree: true, enabledForPro: false }, // Hide upsell for Pro users by default
+    ui_roadmap_block: { enabledForFree: true, enabledForPro: false },
+    ui_help_button: { enabledForFree: true, enabledForPro: true },
+    ui_footer: { enabledForFree: true, enabledForPro: true },
+    ui_drive_connect: { enabledForFree: false, enabledForPro: true }, // Drive UI hidden for free by default
 };

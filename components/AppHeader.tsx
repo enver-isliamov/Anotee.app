@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Menu, X, PlayCircle, Shield, Settings } from 'lucide-react';
+import { Menu, X, PlayCircle, Shield, Settings, CircleHelp } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { User } from '../types';
@@ -13,6 +13,7 @@ interface AppHeaderProps {
   onNavigate: (page: string) => void;
   onBack: () => void;
   onLoginClick?: () => void;
+  onStartTour?: () => void; // Added prop
   hideNav?: boolean;
   className?: string;
 }
@@ -24,7 +25,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     currentView, 
     onNavigate, 
     onBack, 
-    onLoginClick, 
+    onLoginClick,
+    onStartTour,
     hideNav = false,
     className 
 }) => {
@@ -155,6 +157,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 )}
 
                 <LanguageSelector />
+                
+                {/* TOUR TRIGGER BUTTON */}
+                {currentUser && onStartTour && (
+                    <button 
+                        onClick={onStartTour}
+                        className="p-2 rounded-lg text-zinc-400 hover:text-indigo-400 hover:bg-zinc-800 transition-colors hidden md:block"
+                        title="Start Tour / Help"
+                    >
+                        <CircleHelp size={20} />
+                    </button>
+                )}
 
                 {/* Mobile Menu Toggle */}
                 {!hideNav && (
@@ -190,6 +203,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     );
                 })}
                 
+                {currentUser && onStartTour && (
+                    <button 
+                        onClick={() => { setIsMobileMenuOpen(false); onStartTour(); }}
+                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-medium text-indigo-400 hover:bg-zinc-800 flex items-center gap-2"
+                    >
+                        <CircleHelp size={16} /> Показать обучение
+                    </button>
+                )}
+
                 {isAdmin && (
                     <button 
                         onClick={() => { setIsMobileMenuOpen(false); onNavigate('ADMIN'); }}
