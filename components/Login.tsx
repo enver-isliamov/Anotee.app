@@ -163,22 +163,6 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
       {/* 7. INTEGRATIONS & FOOTER */}
       <IntegrationBlock />
 
-      {/* 8. CTA BOTTOM */}
-      <div className="py-24 bg-zinc-900 border-t border-zinc-800 text-center">
-          <div className="max-w-2xl mx-auto px-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-500/10 rounded-2xl text-indigo-400 mb-8 border border-indigo-500/20">
-                  <PlayCircle size={32} />
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">{t('land.try_now')}</h2>
-              <button 
-                  onClick={() => onNavigate('LIVE_DEMO')}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-indigo-500/20 transition-all"
-              >
-                  {t('hero.demo')}
-              </button>
-          </div>
-      </div>
-
       {/* FOOTER */}
       <footer className="py-8 bg-black border-t border-zinc-800 text-center text-xs text-zinc-600">
             <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
