@@ -129,7 +129,6 @@ const PlayerSidebar = React.memo(({
                 )}
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
-                    {/* ... (Existing comments render logic is unchanged, just wrapping div ID was added above) ... */}
                     {sidebarTab === 'comments' && filteredComments.map((comment: any) => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; 
                         
@@ -193,10 +192,7 @@ const PlayerSidebar = React.memo(({
     );
 });
 
-// ... (Rest of file unchanged, just export Player) ...
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
-// ... existing implementation ...
-// (Returning full file content to ensure context is kept)
   const { t } = useLanguage();
   const { organization } = useOrganization();
   const { isPro } = useSubscription();
@@ -288,18 +284,32 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   
   const fpsDetectionRef = useRef<{ frames: number[], lastTime: number, active: boolean }>({ frames: [], lastTime: 0, active: false });
 
-  // REFACTORED TIMECODE FORMATTER
+  // --- IRON RULE: TOTAL FRAMES CALCULATION ---
   const formatTimecode = (seconds: number) => {
-    const fps = videoFps || 30; 
+    // 1. Get FPS (Default to 30 if not yet detected)
+    const fps = videoFps || 30;
+    
+    // 2. Calculate Total Frames using Real FPS (float safe)
     const totalFrames = Math.floor(seconds * fps);
-    const h = Math.floor(totalFrames / (3600 * fps));
-    const m = Math.floor((totalFrames % (3600 * fps)) / (60 * fps));
-    const s = Math.floor((totalFrames % (60 * fps)) / fps);
-    const f = Math.floor(totalFrames % fps);
+    
+    // 3. Round FPS to integer for Timecode Base (23.976 -> 24)
+    // This ensures frames count 0..23 correctly
+    const frameBase = Math.round(fps);
+    
+    // 4. Calculate Time Components using Integer Math
+    const frames = totalFrames % frameBase;
+    const totalSeconds = Math.floor(totalFrames / frameBase);
+    
+    const s = totalSeconds % 60;
+    const m = Math.floor((totalSeconds / 60) % 60);
+    const h = Math.floor(totalSeconds / 3600);
+
+    // 5. Format Strings
     const hh = h.toString().padStart(2, '0');
     const mm = m.toString().padStart(2, '0');
     const ss = s.toString().padStart(2, '0');
-    const ff = f.toString().padStart(2, '0');
+    const ff = frames.toString().padStart(2, '0');
+    
     return `${hh}:${mm}:${ss}:${ff}`;
   };
 
@@ -657,7 +667,19 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
-                    <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} crossOrigin="anonymous" />
+                    {/* CRITICAL: Removed crossOrigin="anonymous" to allow playback from Google Drive 'uc' links which often block CORS requests */}
+                    <video 
+                        key={version.id} 
+                        ref={videoRef} 
+                        src={localFileSrc || driveUrl || version.url} 
+                        className="w-full h-full object-contain pointer-events-none" 
+                        onTimeUpdate={handleTimeUpdate} 
+                        onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} 
+                        onError={handleVideoError} 
+                        onEnded={() => setIsPlaying(false)} 
+                        playsInline 
+                        controls={false} 
+                    />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
                 <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
