@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -23,6 +22,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
 import { DriveProvider, useDrive } from './services/driveContext';
+import { OnboardingWidget } from './components/OnboardingWidget';
 import useSWR, { mutate } from 'swr';
 
 type ViewState = 
@@ -110,6 +110,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   
   // Timeout State for Diagnostics
   const [showTimeoutMsg, setShowTimeoutMsg] = useState(false);
+
+  // Onboarding Visibility State
+  const [hideOnboarding, setHideOnboarding] = useState(() => {
+      return localStorage.getItem('anotee_hide_onboarding') === 'true';
+  });
+
+  // Modal State for Create Project (Lifted from Dashboard)
+  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
 
   // Use Drive Context
   const { checkDriveConnection } = useDrive();
@@ -476,6 +484,26 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
+  // Helper to jump to the most relevant project for next step
+  const handleGoToLatestProject = () => {
+      // Find visible projects for current user/org
+      const activeOrgId = organization?.id;
+      const visible = projects.filter(p => {
+          if (activeOrgId) return p.orgId === activeOrgId;
+          return !p.orgId && (p.ownerId === currentUser?.id || p.team?.some(m => m.id === currentUser?.id));
+      });
+
+      if (visible.length > 0) {
+          const sorted = [...visible].sort((a, b) => b.createdAt - a.createdAt);
+          handleSelectProject(sorted[0]);
+      }
+  };
+
+  const handleDismissOnboarding = () => {
+      setHideOnboarding(true);
+      localStorage.setItem('anotee_hide_onboarding', 'true');
+  };
+
   if (!isLoaded) {
       return (
           <div className="h-screen w-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
@@ -568,6 +596,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
+  // Filter projects for onboarding context (current org)
+  const activeOrgId = organization?.id;
+  const onboardingProjects = projects.filter(p => {
+      if (activeOrgId) return p.orgId === activeOrgId;
+      return !p.orgId && (p.ownerId === currentUser?.id || p.team?.some(m => m.id === currentUser?.id));
+  });
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
       <main className="h-full">
@@ -578,6 +613,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 onNavigate={handleNavigate}
                 onBack={handleBackToDashboard}
             >
+                {/* Onboarding Widget: Full Mode on Dashboard */}
+                {view.type === 'DASHBOARD' && (
+                    <OnboardingWidget 
+                        projects={onboardingProjects}
+                        variant="full"
+                        onDismiss={handleDismissOnboarding}
+                        hide={hideOnboarding}
+                        onCreateProject={() => setCreateModalOpen(true)}
+                        onGoToProject={handleGoToLatestProject}
+                        onInvite={handleGoToLatestProject}
+                    />
+                )}
+
                 {view.type === 'DASHBOARD' && (
                 <Dashboard 
                     projects={projects} 
@@ -589,6 +637,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     onNavigate={handleNavigate}
                     notify={notify}
                     isMockMode={isMockMode}
+                    isCreateModalOpen={isCreateModalOpen}
+                    setCreateModalOpen={setCreateModalOpen}
                 />
                 )}
                 {view.type === 'PROFILE' && (
@@ -640,6 +690,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         
         {/* GLOBAL COMPONENTS */}
         <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
+        
+        {/* Persistent Onboarding: Compact Mode on other pages */}
+        {view.type !== 'DASHBOARD' && (
+             <OnboardingWidget 
+                projects={onboardingProjects}
+                variant="compact"
+                onDismiss={handleDismissOnboarding}
+                hide={hideOnboarding}
+                onCreateProject={() => {
+                    handleBackToDashboard(); // Go to dash first
+                    setTimeout(() => setCreateModalOpen(true), 100);
+                }}
+                onGoToProject={handleGoToLatestProject}
+                onInvite={handleGoToLatestProject}
+            />
+        )}
+
         <ToastContainer toasts={toasts} removeToast={removeToast} />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         
