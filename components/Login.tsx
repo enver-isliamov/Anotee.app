@@ -5,6 +5,8 @@ import { ArrowRight, ShieldCheck, PlayCircle, Zap, Clock } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
 import { IntegrationBlock } from './StaticPages';
+import { RoadmapBlock } from './RoadmapBlock';
+import { WorkflowBlock, ROIBlock, FeaturesBlock } from './LandingBlocks';
 import { SignInButton } from '@clerk/clerk-react';
 
 interface LoginProps {
@@ -58,7 +60,8 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
         onLoginClick={() => document.getElementById('auth-section')?.scrollIntoView({ behavior: 'smooth' })}
       />
 
-      <div className="relative py-20 px-4 md:py-32 overflow-hidden">
+      {/* 1. HERO SECTION */}
+      <div className="relative py-20 px-4 md:py-32 overflow-hidden bg-black">
             {/* Background Gradients */}
             <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-300/20 dark:bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none mix-blend-multiply dark:mix-blend-normal"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-300/20 dark:bg-purple-600/10 rounded-full blur-[120px] pointer-events-none mix-blend-multiply dark:mix-blend-normal"></div>
@@ -102,13 +105,10 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     <LoginCard />
                 </div>
             </div>
-        </div>
+      </div>
 
-        {/* INTEGRATION BLOCK */}
-        <IntegrationBlock />
-
-        {/* SECTION: STATS (SPEED) */}
-        <div className="py-24 bg-white dark:bg-zinc-900 border-y border-zinc-200 dark:border-zinc-800 relative overflow-hidden">
+      {/* 2. STATS SECTION (Speed) */}
+      <div className="py-24 bg-white dark:bg-zinc-900 border-y border-zinc-200 dark:border-zinc-800 relative overflow-hidden">
                 <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
                     <div>
                         <div className="inline-block p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg text-indigo-600 dark:text-indigo-400 mb-6"><Zap size={24} /></div>
@@ -138,38 +138,41 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                         </div>
                     </div>
                 </div>
-        </div>
+      </div>
 
-        {/* FOOTER */}
-        <footer className="mt-16 py-8 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-3 gap-8 text-center md:text-left">
-                    {/* Brand */}
-                    <div className="flex flex-col gap-2">
-                        <div className="font-bold text-zinc-900 dark:text-white">Anotee</div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-600">
-                            &copy; {new Date().getFullYear()} {t('footer.rights')}
-                        </div>
-                    </div>
+      {/* 3. WORKFLOW SECTION (New) */}
+      <WorkflowBlock />
 
-                    {/* Links */}
-                    <div className="flex flex-col gap-2 text-xs">
-                        <button onClick={() => onNavigate('TERMS')} className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left">
-                            {t('nav.terms')} (Публичная оферта)
-                        </button>
-                        <button onClick={() => onNavigate('PRIVACY')} className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left">
-                            {t('nav.privacy')} (Политика конфиденциальности)
-                        </button>
-                    </div>
+      {/* 4. ROI SECTION (New) */}
+      <ROIBlock />
 
-                    {/* Contacts (Required by YooKassa) */}
-                    <div className="text-xs text-zinc-500 dark:text-zinc-600 flex flex-col gap-1">
-                        <div className="font-bold text-zinc-700 dark:text-zinc-400">Контакты и Реквизиты:</div>
-                        <span>Самозанятый [ИСЛЯМОВ ЭНВЕР ЯКУБОВИЧ]</span>
-                        <span>ИНН 910228340090</span>
-                        <span>Email: [enver.isliamov@yandex.com]</span>
-                    </div>
+      {/* 5. FEATURES SECTION (New) */}
+      <FeaturesBlock />
+
+      {/* 6. PRICING / ROADMAP */}
+      <div className="py-24 bg-black border-t border-zinc-900">
+          <div className="max-w-7xl mx-auto px-4 text-center mb-16">
+              <h2 className="text-3xl font-bold text-white mb-4">{t('roadmap.title')}</h2>
+              <p className="text-zinc-400">{t('roadmap.subtitle')}</p>
+          </div>
+          <div className="max-w-5xl mx-auto px-4">
+              <RoadmapBlock />
+          </div>
+      </div>
+
+      {/* 7. INTEGRATIONS & FOOTER */}
+      <IntegrationBlock />
+
+      {/* FOOTER */}
+      <footer className="py-8 bg-black border-t border-zinc-800 text-center text-xs text-zinc-600">
+            <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>Anotee © {new Date().getFullYear()}</div>
+                <div className="flex gap-6">
+                    <button onClick={() => onNavigate('TERMS')} className="hover:text-white transition-colors">{t('nav.terms')}</button>
+                    <button onClick={() => onNavigate('PRIVACY')} className="hover:text-white transition-colors">{t('nav.privacy')}</button>
                 </div>
-        </footer>
+            </div>
+      </footer>
     </div>
   );
 };
