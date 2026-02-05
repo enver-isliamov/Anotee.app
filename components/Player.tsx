@@ -446,7 +446,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleRemoveDeadVersion = async () => { if (!confirm("Remove version?")) return; const uV = asset.versions.filter(v => v.id !== version.id); if (uV.length === 0) { onBack(); return; } let newIdx = Math.min(currentVersionIdx, uV.length - 1); if (newIdx < 0) newIdx = 0; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a); setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(newIdx); onUpdateProject({ ...project, assets: uA }); notify("Version removed", "info"); };
 
-  // DRIVE LOADING
+  // DRIVE LOADING - OPTIMIZED
   useEffect(() => {
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
@@ -466,10 +466,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId);
             setDriveUrl(streamUrl);
             setLoadingDrive(false);
-        } else if (version?.localFileUrl) { setLocalFileSrc(version.localFileUrl); setLocalFileName(version.localFileName || 'Local File'); } else { setLocalFileSrc(null); setLocalFileName(null); if (version && !version.url) setVideoError(false); }
+        } else if (version?.localFileUrl) { 
+            setLocalFileSrc(version.localFileUrl); 
+            setLocalFileName(version.localFileName || 'Local File'); 
+        } else { 
+            setLocalFileSrc(null); 
+            setLocalFileName(null); 
+            if (version && !version.url && !version.googleDriveId) setVideoError(false); 
+        }
     };
     checkDriveStatus();
-    if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; videoRef.current.load(); }
+    // Removed explicit videoRef.current.load() to prevent race condition with empty src
   }, [version?.id, isMockMode, isOwner]); 
 
   // Player Handlers
@@ -510,7 +517,57 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
-  const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
+  
+  // HANDLER: Video Error with Auto-Heal
+  const handleVideoError = async () => { 
+      if (loadingDrive) return; 
+      
+      if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
+          // 1. First Retry (Generic Timestamp Busting)
+          if (!driveUrlRetried) { 
+              setDriveUrlRetried(true); 
+              const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; 
+              setDriveUrl(fallbackUrl); 
+              return; 
+          } 
+          
+          setLoadingDrive(true); 
+          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
+          
+          if (status !== 'ok') { 
+              setLoadingDrive(false);
+              setDriveFileMissing(true); 
+          } else { 
+              // 2. Auto-Heal Permission
+              // If file exists but video error persists, it's likely a permission issue (403 Forbidden).
+              // Try to fix it automatically if user is Manager.
+              if (isManager) { 
+                  // Notify user we are trying to fix it
+                  notify("Optimizing playback permissions...", "info");
+                  
+                  const fixed = await GoogleDriveService.makeFilePublic(version.googleDriveId);
+                  
+                  if (fixed) {
+                      notify("Ready to play!", "success");
+                      // Force new URL refresh with retry param
+                      const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId);
+                      setDriveUrl(`${streamUrl}&retry=${Date.now()}`);
+                      
+                      setLoadingDrive(false);
+                      setVideoError(false);
+                      setDrivePermissionError(false);
+                      return;
+                  }
+              }
+              
+              setLoadingDrive(false);
+              setDrivePermissionError(true); 
+              setVideoError(true); 
+          } 
+      } else { 
+          setVideoError(true); 
+      } 
+  };
   
   // TIMELINE SCRUBBING
   const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
