@@ -755,4 +755,23 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       </div>
 
       <div className="fixed z-[9999] floating-controls touch-none transition-all duration-300" style={{ transform: `translate(${controlsPos.x}px, ${controlsPos.y}px)`, bottom: 'calc(80px + env(safe-area-inset-bottom))', right: '16px', left: 'auto' }}>
-        <div className={`flex flex-col md:flex-row items-center gap-2 md:gap-1 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md rounded-xl p-2 md:p-1.5 border border-zinc-200 dark:border-zinc-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-opacity ${
+        <div className={`flex flex-col md:flex-row items-center gap-2 md:gap-1 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md rounded-xl p-2 md:p-1.5 border border-zinc-200 dark:border-zinc-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-opacity ${isLocked ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+            <div onPointerDown={handleDragStart} onPointerMove={handleDragMove} onPointerUp={handleDragEnd} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800 md:mr-1 pointer-events-auto"><GripVertical size={14} /></div>
+            
+            <div className="flex items-center gap-1">
+                <button onClick={handleQuickMarker} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title={t('player.marker.quick')}><MapPin size={20} /></button>
+                <button onClick={(e) => { e.stopPropagation(); seek(-5); }} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors pointer-events-auto"><RotateCcw size={20} /></button>
+                <div className="hidden md:block w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-0.5"></div>
+                <button onClick={(e) => { e.stopPropagation(); seek(5); }} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors pointer-events-auto"><RotateCw size={20} /></button>
+            </div>
+
+            <div className="flex items-center gap-1 w-full md:w-auto justify-center">
+                <button onClick={handleSetInPoint} className={`flex-1 md:flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
+                <button onClick={handleSetOutPoint} className={`flex-1 md:flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
+                {(markerInPoint !== null || markerOutPoint !== null) && (<button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>)}
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
