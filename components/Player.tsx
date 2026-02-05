@@ -225,6 +225,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [drivePermissionError, setDrivePermissionError] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const permissionFixAttempted = useRef(false);
 
   const [isScrubbing, setIsScrubbing] = useState(false);
   const isDragRef = useRef(false); 
@@ -451,6 +452,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
     setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null);
+    permissionFixAttempted.current = false; // Reset permission attempt logic
 
     const checkDriveStatus = async () => {
         if (!isMockMode && version?.storageType === 'drive' && version.googleDriveId) {
@@ -540,21 +542,25 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
               setLoadingDrive(false);
               setDriveFileMissing(true); 
           } else { 
-              // 2. Auto-Heal Permission
-              if (isManager) { 
+              // 2. Auto-Heal Permission (STRICT ONE-TIME CHECK)
+              if (isManager && !permissionFixAttempted.current) { 
                   notify("Optimizing playback permissions...", "info");
                   
+                  // Mark as attempted so we don't loop if this fails
+                  permissionFixAttempted.current = true;
+
                   const fixed = await GoogleDriveService.makeFilePublic(version.googleDriveId);
                   
                   if (fixed) {
-                      notify("Ready to play!", "success");
-                      // Force new URL refresh with retry param using LEGACY format
-                      const streamUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&retry=${Date.now()}`;
-                      setDriveUrl(streamUrl);
-                      
-                      setLoadingDrive(false);
-                      setVideoError(false);
-                      setDrivePermissionError(false);
+                      // Slight delay to allow propagation
+                      setTimeout(() => {
+                          notify("Ready to play!", "success");
+                          const streamUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&retry=${Date.now()}`;
+                          setDriveUrl(streamUrl);
+                          setLoadingDrive(false);
+                          setVideoError(false);
+                          setDrivePermissionError(false);
+                      }, 1000);
                       return;
                   }
               }
@@ -774,7 +780,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
-                    <video key={driveUrl || version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} crossOrigin="anonymous" />
+                    {/* CRITICAL CHANGE: Removed crossOrigin="anonymous" to fix Drive playback CORS issues (opaque response) */}
+                    <video key={driveUrl || version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
                 <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
