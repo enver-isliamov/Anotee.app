@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -713,7 +712,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
         
         {/* Persistent Onboarding: Compact Mode on other pages */}
-        {view.type !== 'DASHBOARD' && view.type !== 'LIVE_DEMO' && (
+        {view.type !== 'DASHBOARD' && (
              <OnboardingWidget 
                 projects={onboardingProjects}
                 variant="compact"
