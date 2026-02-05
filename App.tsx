@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -558,8 +557,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 title={tourTitle}
                 description={tourDesc}
                 onDismiss={handleDismissTour}
-                hide={hideOnboarding}
-                projects={[]} variant="compact" onCreateProject={() => {}} onGoToProject={() => {}} onInvite={() => {}} // Legacy props ignored
             />
         )}
 
