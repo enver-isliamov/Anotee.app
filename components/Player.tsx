@@ -25,7 +25,7 @@ interface PlayerProps {
   isMockMode?: boolean;
 }
 
-const VALID_FPS = [23.976, 24, 25, 29.97, 30, 50, 60];
+const VALID_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
 
 const TRANSCRIBE_LANGUAGES = [
     { code: 'auto', label: 'Auto-Detect' },
@@ -196,7 +196,6 @@ const PlayerSidebar = React.memo(({
 // ... (Rest of file unchanged, just export Player) ...
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
 // ... existing implementation ...
-// (Returning full file content to ensure context is kept)
   const { t } = useLanguage();
   const { organization } = useOrganization();
   const { isPro } = useSubscription();
@@ -452,8 +451,60 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // Player Handlers
   useEffect(() => { const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); }; document.addEventListener('fullscreenchange', handleFsChange); return () => document.removeEventListener('fullscreenchange', handleFsChange); }, []);
-  const startFpsDetection = () => { if (isFpsDetected) return; fpsDetectionRef.current = { frames: [], lastTime: performance.now(), active: true }; };
-  useEffect(() => { let handle: number; const detectLoop = () => { if (fpsDetectionRef.current.active && isPlaying) { const now = performance.now(); const delta = now - fpsDetectionRef.current.lastTime; fpsDetectionRef.current.lastTime = now; if (delta > 5 && delta < 100) fpsDetectionRef.current.frames.push(delta); if (fpsDetectionRef.current.frames.length > 30) { const avg = fpsDetectionRef.current.frames.reduce((a, b) => a + b, 0) / fpsDetectionRef.current.frames.length; const est = 1000 / avg; const closest = VALID_FPS.reduce((p, c) => Math.abs(c - est) < Math.abs(p - est) ? c : p); setVideoFps(closest); setIsFpsDetected(true); fpsDetectionRef.current.active = false; } else { handle = requestAnimationFrame(detectLoop); } } }; if (isPlaying && !isFpsDetected) { startFpsDetection(); handle = requestAnimationFrame(detectLoop); } return () => cancelAnimationFrame(handle); }, [isPlaying, isFpsDetected]);
+  
+  // REAL FRAME RATE DETECTION using requestVideoFrameCallback
+  useEffect(() => {
+        if (!isPlaying || isFpsDetected || !videoRef.current) return;
+
+        const video = videoRef.current;
+        let handle: number;
+        let frameSamples: number[] = [];
+        let lastMediaTime = -1;
+
+        const fpsCallback = (now: number, metadata: any) => { // metadata type is VideoFrameCallbackMetadata
+            const mediaTime = metadata.mediaTime;
+            
+            // We need valid sequential frames
+            if (lastMediaTime !== -1 && mediaTime > lastMediaTime) {
+                const diff = mediaTime - lastMediaTime;
+                if (diff > 0) {
+                    frameSamples.push(diff);
+                }
+            }
+            lastMediaTime = mediaTime;
+
+            // Collect enough samples (e.g. 20-30 frames)
+            if (frameSamples.length >= 30) {
+                const avgFrameDuration = frameSamples.reduce((a, b) => a + b, 0) / frameSamples.length;
+                const calculatedFps = 1 / avgFrameDuration;
+
+                // Find closest standard FPS
+                const closest = VALID_FPS.reduce((prev, curr) => 
+                    Math.abs(curr - calculatedFps) < Math.abs(prev - calculatedFps) ? curr : prev
+                );
+
+                setVideoFps(closest);
+                setIsFpsDetected(true);
+            } else {
+                // Continue loop
+                if ('requestVideoFrameCallback' in video) {
+                    handle = (video as any).requestVideoFrameCallback(fpsCallback);
+                }
+            }
+        };
+
+        if ('requestVideoFrameCallback' in video) {
+            handle = (video as any).requestVideoFrameCallback(fpsCallback);
+        } else {
+            console.warn("Browser does not support requestVideoFrameCallback. FPS detection disabled.");
+        }
+
+        return () => {
+            if ('cancelVideoFrameCallback' in video && handle) {
+                (video as any).cancelVideoFrameCallback(handle);
+            }
+        };
+    }, [isPlaying, isFpsDetected]);
   
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
