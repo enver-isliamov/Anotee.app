@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Project, User } from '../types';
-import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload } from 'lucide-react';
+import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
@@ -30,6 +30,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
   const { isPro } = useSubscription();
+  
+  // Onboarding Visibility State
+  const [hideOnboarding, setHideOnboarding] = useState(() => {
+      return localStorage.getItem('anotee_hide_onboarding') === 'true';
+  });
   
   // CLERK ORG CONTEXT
   const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
@@ -73,15 +78,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       }
       
       // 2. If Personal Workspace (no Org selected):
-      // Show projects where orgId is missing, null, empty string OR 'null' string (legacy)
-      // AND user has access (Owner or Team)
       const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
-      
-      // Strict Check for Personal Dashboard:
-      // - I am Owner
-      // - OR I am in the Team list (ID or Email)
       const isOwner = p.ownerId === currentUser.id;
-      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id); // Loose check for email legacy
+      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id); 
       
       return isPersonal && (isOwner || isInTeam);
   });
@@ -91,16 +90,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
     : t('dash.my_projects');
 
   // LIMIT CHECK
-  // Limits apply to Personal Workspace only. Organizations might have different logic, but here we enforce on user.
   const createdProjectsCount = projects.filter(p => p.ownerId === currentUser.id && !p.orgId).length;
-  const canCreate = isPro || createdProjectsCount < FREE_PROJECT_LIMIT || !!activeOrgId; // Orgs usually have separate billing, allowing strict user limit on personal
+  const canCreate = isPro || createdProjectsCount < FREE_PROJECT_LIMIT || !!activeOrgId; 
 
   // PERMISSION CHECKS (Project Level)
   const canManageProject = (project: Project) => {
-      // Personal: Only Owner
       if (!project.orgId) return project.ownerId === currentUser.id;
-      // Org: Owner OR Admin
       return project.ownerId === currentUser.id || isAdmin;
+  };
+
+  // --- ONBOARDING LOGIC ---
+  const hasProjects = displayedProjects.length > 0;
+  const hasAssets = displayedProjects.some(p => p.assets.length > 0);
+  const hasInvites = displayedProjects.some(p => (p.team && p.team.length > 1) || p.publicAccess === 'view');
+  
+  // Auto-hide if everything is done (unless user wants to see it, but usually we hide)
+  // Logic: Show if NOT hidden AND (steps incomplete)
+  const showOnboarding = !hideOnboarding && (!hasProjects || !hasAssets || !hasInvites);
+
+  const handleDismissOnboarding = () => {
+      setHideOnboarding(true);
+      localStorage.setItem('anotee_hide_onboarding', 'true');
+  };
+
+  const handleGoToLatestProject = () => {
+      if (displayedProjects.length > 0) {
+          // Sort by created most recent
+          const sorted = [...displayedProjects].sort((a, b) => b.createdAt - a.createdAt);
+          onSelectProject(sorted[0]);
+      }
   };
 
   const handleCreateProject = (e: React.FormEvent) => {
@@ -116,7 +134,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       description,
       createdAt: Date.now(), 
       updatedAt: 'Just now',
-      // If Org: Clean Team (Managed by Clerk). If Personal: Add Self.
       team: activeOrgId ? [] : [currentUser],
       ownerId: currentUser.id,
       orgId: activeOrgId || null, 
@@ -127,7 +144,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
     onAddProject(newProject);
     
-    // Reset and Close
     setIsCreating(false);
     setIsModalOpen(false);
     setName('');
@@ -168,45 +184,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const handleSubmitEdit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editingProject) return;
-      
       setIsSavingEdit(true);
-
       try {
-          // Attempt to rename Drive Folder if name changed
           if (editingProject.name !== editName && GoogleDriveService.isAuthenticated()) {
               notify("Syncing name change to Google Drive...", "info");
               await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
           }
-
-          // USE PATCH (Partial Update)
           if (!isMockMode) {
               await api.patchProject(editingProject.id, {
                   name: editName,
                   client: editClient,
                   description: editDesc
               }, editingProject._version || 0);
-              
-              // Optimistic local update
-              onEditProject(editingProject.id, {
-                  name: editName,
-                  client: editClient,
-                  description: editDesc
-              });
+              onEditProject(editingProject.id, { name: editName, client: editClient, description: editDesc });
           } else {
-              onEditProject(editingProject.id, {
-                  name: editName,
-                  client: editClient,
-                  description: editDesc
-              });
+              onEditProject(editingProject.id, { name: editName, client: editClient, description: editDesc });
           }
-          
           notify("Project updated", "success");
       } catch (err: any) {
           if (err.code === 'CONFLICT') {
              notify("Conflict detected! Someone modified this project. Please refresh.", "error");
           } else {
              notify("Failed to update project", "error");
-             console.error(err);
           }
       } finally {
           setIsSavingEdit(false);
@@ -247,37 +246,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       if (!confirm(t('dash.delete_confirm'))) {
           return;
       }
-
       setIsDeleting(project.id);
-      
       try {
-          // 1. Delete Assets (Blobs)
           const urlsToDelete: string[] = [];
           project.assets.forEach(asset => {
               asset.versions.forEach(v => {
-                  if (v.url.startsWith('http')) {
-                      urlsToDelete.push(v.url);
-                  }
+                  if (v.url.startsWith('http')) urlsToDelete.push(v.url);
               });
           });
-
           if (!isMockMode && urlsToDelete.length > 0) {
               await api.deleteAssets(urlsToDelete, project.id);
           }
-
-          // 2. Delete Project Row (DB)
           if (!isMockMode) {
               const res = await fetch(`/api/data?projectId=${project.id}`, {
                   method: 'DELETE',
-                  headers: {
-                      'Authorization': `Bearer ${await getToken()}`
-                  }
+                  headers: { 'Authorization': `Bearer ${await getToken()}` }
               });
-              if (!res.ok) {
-                  throw new Error("Failed to delete project row");
-              }
+              if (!res.ok) throw new Error("Failed to delete project row");
           }
-
           onDeleteProject(project.id);
           notify("Project deleted successfully", "success");
       } catch(e) {
@@ -290,66 +276,136 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
   const renderOnboarding = () => {
       return (
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 mb-8 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 mb-8 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <button 
+                  onClick={handleDismissOnboarding}
+                  className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-white p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors z-20"
+              >
+                  <X size={16} />
+              </button>
+              
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
               
-              <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center gap-3 mb-6 relative z-10">
                   <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">
                       <Layout size={24} />
                   </div>
                   <div>
                       <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with Anotee</h3>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Follow these steps to set up your first review workflow.</p>
+                      <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+                          <span>Complete setup:</span>
+                          <div className="h-1.5 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-green-500 transition-all duration-500" 
+                                style={{ width: `${(Number(hasProjects) + Number(hasAssets) + Number(hasInvites)) / 3 * 100}%` }}
+                              />
+                          </div>
+                      </div>
                   </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
-                  {/* Step 1: Create Project (Active) */}
-                  <div className="border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl p-5 flex flex-col items-start relative group hover:shadow-md transition-all">
-                      <div className="absolute top-4 right-4 text-indigo-200 dark:text-indigo-800 font-black text-4xl opacity-20">01</div>
-                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-indigo-600 shadow-sm">
-                          <Plus size={20} />
+                  {/* Step 1: Create Project */}
+                  <div className={`
+                        border rounded-2xl p-5 flex flex-col items-start relative transition-all duration-300
+                        ${hasProjects 
+                            ? 'border-green-200 dark:border-green-500/30 bg-green-50/50 dark:bg-green-900/10' 
+                            : 'border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10 shadow-md ring-1 ring-indigo-500/20'
+                        }
+                  `}>
+                      <div className="absolute top-4 right-4 text-4xl font-black opacity-10 pointer-events-none">01</div>
+                      
+                      <div className={`mb-3 p-2 rounded-lg shadow-sm ${hasProjects ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-white dark:bg-zinc-800 text-indigo-600'}`}>
+                          {hasProjects ? <Check size={20} /> : <Plus size={20} />}
                       </div>
-                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">Create Project</h4>
-                      <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed">
+                      
+                      <h4 className={`font-bold mb-1 ${hasProjects ? 'text-green-700 dark:text-green-400' : 'text-zinc-900 dark:text-white'}`}>Create Project</h4>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed flex-1">
                           Initialize a workspace for your media assets and team collaboration.
                       </p>
-                      <button 
-                          onClick={() => setIsModalOpen(true)}
-                          className="mt-auto w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"
-                      >
-                          Start Here <ArrowRight size={12} />
-                      </button>
+                      
+                      {hasProjects ? (
+                          <div className="mt-auto w-full py-2 bg-green-200/50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2">
+                              Completed
+                          </div>
+                      ) : (
+                          <button 
+                              onClick={() => setIsModalOpen(true)}
+                              className="mt-auto w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"
+                          >
+                              Create Now <ArrowRight size={12} />
+                          </button>
+                      )}
                   </div>
 
-                  {/* Step 2: Upload (Pending) */}
-                  <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl p-5 flex flex-col items-start relative opacity-70 grayscale">
-                      <div className="absolute top-4 right-4 text-zinc-200 dark:text-zinc-800 font-black text-4xl opacity-20">02</div>
-                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
-                          <Upload size={20} />
+                  {/* Step 2: Upload */}
+                  <div className={`
+                        border rounded-2xl p-5 flex flex-col items-start relative transition-all duration-300
+                        ${hasAssets 
+                            ? 'border-green-200 dark:border-green-500/30 bg-green-50/50 dark:bg-green-900/10' 
+                            : hasProjects
+                                ? 'border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-zinc-900/50 hover:border-indigo-400 cursor-pointer'
+                                : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30 opacity-70 grayscale'
+                        }
+                  `} onClick={() => !hasAssets && hasProjects && handleGoToLatestProject()}>
+                      <div className="absolute top-4 right-4 text-4xl font-black opacity-10 pointer-events-none">02</div>
+                      
+                      <div className={`mb-3 p-2 rounded-lg shadow-sm ${hasAssets ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-white dark:bg-zinc-800 text-zinc-400'}`}>
+                          {hasAssets ? <Check size={20} /> : <Upload size={20} />}
                       </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Upload Media</h4>
-                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          Drag & drop video files. We automatically generate proxies for smooth playback.
+                      
+                      <h4 className={`font-bold mb-1 ${hasAssets ? 'text-green-700 dark:text-green-400' : 'text-zinc-700 dark:text-zinc-300'}`}>Upload Media</h4>
+                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed flex-1">
+                          Drag & drop video files inside your project. We generate instant proxies.
                       </p>
-                      <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          Waiting for Project...
-                      </div>
+                      
+                      {hasAssets ? (
+                          <div className="mt-auto w-full py-2 bg-green-200/50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2">
+                              Completed
+                          </div>
+                      ) : (
+                          <button 
+                              disabled={!hasProjects}
+                              className={`mt-auto w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 ${hasProjects ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+                          >
+                              {hasProjects ? 'Go to Project' : 'Waiting for Project...'}
+                          </button>
+                      )}
                   </div>
 
-                  {/* Step 3: Invite (Pending) */}
-                  <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl p-5 flex flex-col items-start relative opacity-70 grayscale">
-                      <div className="absolute top-4 right-4 text-zinc-200 dark:text-zinc-800 font-black text-4xl opacity-20">03</div>
-                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
-                          <Share2 size={20} />
+                  {/* Step 3: Invite */}
+                  <div className={`
+                        border rounded-2xl p-5 flex flex-col items-start relative transition-all duration-300
+                        ${hasInvites
+                            ? 'border-green-200 dark:border-green-500/30 bg-green-50/50 dark:bg-green-900/10' 
+                            : hasAssets
+                                ? 'border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-zinc-900/50 hover:border-indigo-400 cursor-pointer'
+                                : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30 opacity-70 grayscale'
+                        }
+                  `} onClick={() => !hasInvites && hasAssets && handleGoToLatestProject()}>
+                      <div className="absolute top-4 right-4 text-4xl font-black opacity-10 pointer-events-none">03</div>
+                      
+                      <div className={`mb-3 p-2 rounded-lg shadow-sm ${hasInvites ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-white dark:bg-zinc-800 text-zinc-400'}`}>
+                          {hasInvites ? <Check size={20} /> : <Share2 size={20} />}
                       </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Invite Team</h4>
-                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          Share a secure link with clients or editors for frame-accurate feedback.
+                      
+                      <h4 className={`font-bold mb-1 ${hasInvites ? 'text-green-700 dark:text-green-400' : 'text-zinc-700 dark:text-zinc-300'}`}>Invite Team</h4>
+                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed flex-1">
+                          Share a secure link with clients or invite editors for frame-accurate feedback.
                       </p>
-                      <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          Waiting for Upload...
-                      </div>
+                      
+                      {hasInvites ? (
+                          <div className="mt-auto w-full py-2 bg-green-200/50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2">
+                              Completed
+                          </div>
+                      ) : (
+                          <button 
+                              disabled={!hasAssets}
+                              className={`mt-auto w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 ${hasAssets ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+                          >
+                              {hasAssets ? 'Invite Collaborators' : 'Waiting for Media...'}
+                          </button>
+                      )}
                   </div>
               </div>
           </div>
@@ -357,8 +413,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   };
 
   const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode) => {
+      // ... (existing grid rendering logic)
       return (
-          <div className="mb-8">
+          <div className="mb-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+              {/* ... existing headers ... */}
               <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4">
                   {icon}
                   {title}
@@ -368,8 +426,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               </h2>
               
               {projectList.length === 0 ? (
-                  // Use new Onboarding if generic empty state
-                  renderOnboarding()
+                  <div className="bg-zinc-50 dark:bg-zinc-900/30 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center h-48">
+                        <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-3 text-zinc-400">
+                            <FileVideo size={24} />
+                        </div>
+                        <p className="text-zinc-500 font-medium text-sm">No projects found in this workspace.</p>
+                  </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {projectList.map((project) => {
@@ -541,6 +603,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                 )}
             </div>
       </div>
+
+      {showOnboarding && renderOnboarding()}
 
       {renderProjectGrid(
           displayedProjects, 
