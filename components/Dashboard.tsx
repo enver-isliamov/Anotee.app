@@ -255,10 +255,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode) => {
-      // ... (existing grid rendering logic)
       return (
           <div className="mb-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
-              {/* ... existing headers ... */}
               <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4">
                   {icon}
                   {title}
@@ -337,7 +335,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                             <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
                                 
-                                {/* TEAM / ORG DISPLAY */}
                                 {isOrgProject && organization ? (
                                     <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
                                         <div className="w-5 h-5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border border-zinc-200 dark:border-zinc-700">
@@ -363,7 +360,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     </div>
                                 )}
                                 
-                                {/* ACTIONS */}
                                 {canManage && (
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button 
@@ -426,15 +422,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 )}
             </h2>
              
-             {/* Spacer for alignment on mobile where header controls are */}
             <div className="lg:hidden"></div>
 
             <div className="ml-auto relative group">
                 <button 
+                  id="tour-create-btn"
                   onClick={() => canCreate ? setCreateModalOpen(true) : onNavigate('PRICING')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold shadow-lg ${
                       canCreate ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 cursor-not-allowed border border-zinc-700'
-                  } ${highlightNewProject ? 'ring-4 ring-indigo-500/70 ring-offset-2 ring-offset-zinc-950 z-50 relative animate-pulse' : ''}`}
+                  }`}
                 >
                   {canCreate ? <Plus size={16} /> : <Lock size={16} />}
                   {t('dash.new_project')}
@@ -454,7 +450,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           activeOrgId ? <Building2 size={18} className="text-indigo-500"/> : <UserIcon size={18} className="text-indigo-500"/>
       )}
       
-      {/* UPSELL BLOCK */}
       <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
           <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-50 dark:from-indigo-900/10 to-transparent pointer-events-none"></div>
           
@@ -464,7 +459,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
-                  {/* Left: Free/Guest */}
                   <div className="space-y-4 opacity-60 grayscale">
                        <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-bold uppercase text-xs tracking-wider border-b border-zinc-200 dark:border-zinc-800 pb-2">
                            <Lock size={12} /> {t('upsell.free.title')}
@@ -476,7 +470,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                        </ul>
                   </div>
 
-                  {/* Right: Founder */}
                   <div className="space-y-4">
                        <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-xs tracking-wider border-b border-indigo-200 dark:border-indigo-500/30 pb-2">
                            <Crown size={12} fill="currentColor"/> {t('upsell.founder.title')}
@@ -500,7 +493,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
       </div>
 
-      {/* CREATE MODAL */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -544,7 +536,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
-      {/* EDIT MODAL */}
       {editingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -576,7 +567,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
       )}
 
-      {/* SHARE MODAL */}
       {sharingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200 p-6">
