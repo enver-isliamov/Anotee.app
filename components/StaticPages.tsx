@@ -139,33 +139,37 @@ export const AboutPage: React.FC = () => {
     return (
         <div className="flex flex-col gap-12 max-w-5xl mx-auto py-8">
             
-            {/* 1. Hero / Mission */}
-            <div className="bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900/50 dark:to-transparent border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 md:p-16 text-center shadow-lg dark:shadow-2xl relative overflow-hidden transition-colors">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500"></div>
+            {/* 1. Hero / Mission (REDESIGNED) */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-10 md:p-16 text-center shadow-2xl relative overflow-hidden group">
+                {/* Glow Effect */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1/2 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
                 
-                <h2 className="text-3xl md:text-5xl font-bold text-zinc-900 dark:text-white mb-6 leading-tight">
-                    {t('hero.title.speed')}
-                </h2>
-                <div className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold mb-8 shadow-sm">
-                    <span className="text-indigo-600 dark:text-indigo-400">Anotee</span> Mission
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="inline-block px-4 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-8 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                        Anotee Mission
+                    </div>
+                    <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight tracking-tight">
+                        {t('hero.title.speed')}
+                    </h2>
+                    <p className="text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+                        {t('hero.desc_new')}
+                    </p>
                 </div>
-                <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-                    {t('hero.desc_new')}
-                </p>
             </div>
 
-            {/* 2. 10x Faster Feature Banner (Redesigned) */}
-            <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 p-10 md:p-16 rounded-3xl flex flex-col justify-center items-center text-center relative overflow-hidden group shadow-2xl transition-colors">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-50 dark:from-indigo-900/20 via-white dark:via-zinc-950 to-white dark:to-zinc-950 pointer-events-none"></div>
+            {/* 2. 10x Faster Feature Banner (REDESIGNED) */}
+            <div className="bg-zinc-950 border border-zinc-800 p-10 md:p-16 rounded-3xl flex flex-col justify-center items-center text-center relative overflow-hidden group shadow-2xl">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/10 via-zinc-950 to-zinc-950 pointer-events-none"></div>
                 
                 <div className="relative z-10">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 mb-8 shadow-lg shadow-indigo-900/10 dark:shadow-indigo-900/20 ring-1 ring-indigo-500/20">
-                        <Rocket size={32} />
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl text-white mb-8 shadow-lg shadow-indigo-900/30">
+                        <Rocket size={32} fill="currentColor" className="text-white/90" />
                     </div>
-                    <h2 className="text-3xl md:text-5xl font-bold text-zinc-900 dark:text-white mb-6 tracking-tight">
-                        {t('page.about.feat.fast.title').replace('Anotee', '')} <span className="text-indigo-600 dark:text-indigo-400">Anotee</span>
+                    <h2 className="text-3xl md:text-4xl font-bold text-white mb-6 tracking-tight">
+                        {t('page.about.feat.fast.title').replace('Anotee', '')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Anotee</span>
                     </h2>
-                    <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto text-lg leading-relaxed font-light">
+                    <p className="text-zinc-400 max-w-2xl mx-auto text-base leading-relaxed font-light">
                         {t('page.about.feat.fast.desc')}
                     </p>
                 </div>
@@ -198,7 +202,7 @@ export const AboutPage: React.FC = () => {
 
             {/* 4. Instant Playback & Tech Stack Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {/* Instant Playback Block (UPDATED for Light Mode) */}
+                 {/* Instant Playback Block */}
                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 rounded-3xl flex flex-col items-center text-center relative overflow-hidden justify-center hover:border-yellow-500/30 transition-colors shadow-lg dark:shadow-2xl">
                     <div className="p-4 bg-yellow-50 dark:bg-yellow-500/10 rounded-full text-yellow-600 dark:text-yellow-500 mb-6 shadow-lg shadow-yellow-500/10 dark:shadow-[0_0_15px_rgba(234,179,8,0.2)]">
                         <Zap size={32} fill="currentColor" />
