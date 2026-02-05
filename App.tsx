@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -603,6 +604,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return !p.orgId && (p.ownerId === currentUser?.id || p.team?.some(m => m.id === currentUser?.id));
   });
 
+  // --- SMART ONBOARDING STATE ---
+  const hasProjects = onboardingProjects.length > 0;
+  const hasAssets = onboardingProjects.some(p => p.assets.length > 0);
+  const hasInvites = onboardingProjects.some(p => (p.team && p.team.length > 1) || p.publicAccess === 'view');
+  
+  // Logic: 
+  // 1. If 0 projects, FORCE onboarding (ignore hideOnboarding).
+  // 2. Else respect hideOnboarding.
+  // 3. Calculate step for UI highlighting.
+  const showOnboarding = (!hideOnboarding || !hasProjects) && !(hasProjects && hasAssets && hasInvites);
+  
+  let onboardingActiveStep = 0;
+  if (showOnboarding) {
+      if (!hasProjects) onboardingActiveStep = 1;
+      else if (!hasAssets) onboardingActiveStep = 2;
+      else if (!hasInvites) onboardingActiveStep = 3;
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
       <main className="h-full">
@@ -619,7 +638,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                         projects={onboardingProjects}
                         variant="full"
                         onDismiss={handleDismissOnboarding}
-                        hide={hideOnboarding}
+                        hide={!showOnboarding}
                         onCreateProject={() => setCreateModalOpen(true)}
                         onGoToProject={handleGoToLatestProject}
                         onInvite={handleGoToLatestProject}
@@ -639,6 +658,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     isMockMode={isMockMode}
                     isCreateModalOpen={isCreateModalOpen}
                     setCreateModalOpen={setCreateModalOpen}
+                    highlightNewProject={onboardingActiveStep === 1}
                 />
                 )}
                 {view.type === 'PROFILE' && (
@@ -669,6 +689,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 restrictedAssetId={view.restrictedAssetId}
                 isMockMode={isMockMode}
                 onUploadAsset={handleUploadAsset} 
+                onboardingActiveStep={onboardingActiveStep}
             />
           </ErrorBoundary>
         )}
@@ -692,12 +713,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
         
         {/* Persistent Onboarding: Compact Mode on other pages */}
-        {view.type !== 'DASHBOARD' && (
+        {view.type !== 'DASHBOARD' && view.type !== 'LIVE_DEMO' && (
              <OnboardingWidget 
                 projects={onboardingProjects}
                 variant="compact"
                 onDismiss={handleDismissOnboarding}
-                hide={hideOnboarding}
+                hide={!showOnboarding}
                 onCreateProject={() => {
                     handleBackToDashboard(); // Go to dash first
                     setTimeout(() => setCreateModalOpen(true), 100);

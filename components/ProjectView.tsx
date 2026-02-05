@@ -23,9 +23,10 @@ interface ProjectViewProps {
   restrictedAssetId?: string;
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
+  onboardingActiveStep?: number;
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, onboardingActiveStep = 0 }) => {
   const { t } = useLanguage();
   
   // --- CLERK ORGANIZATION LOGIC ---
@@ -380,7 +381,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               {project.orgId ? (
                   <button 
                     onClick={handleOrgInviteClick}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
+                    className={`flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium ${onboardingActiveStep === 3 ? 'ring-4 ring-indigo-500/70 ring-offset-2 ring-offset-zinc-900 animate-pulse relative z-50' : ''}`}
                     title="Manage Organization Members"
                   >
                     <UserPlus size={16} />
@@ -389,7 +390,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               ) : (
                   <button 
                     onClick={handleShareProject}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
+                    className={`flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium ${onboardingActiveStep === 3 ? 'ring-4 ring-indigo-500/70 ring-offset-2 ring-offset-zinc-900 animate-pulse relative z-50' : ''}`}
                     title="Share via Public Link"
                   >
                     <Globe size={16} />
@@ -454,7 +455,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={!isMockMode && !isDriveReady}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center"
+                        className={`flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center ${onboardingActiveStep === 2 ? 'ring-4 ring-indigo-500/70 ring-offset-2 ring-offset-zinc-950 animate-pulse relative z-50' : ''}`}
                         title={!isMockMode && !isDriveReady ? "Connect Google Drive to Upload" : "Upload Video"}
                     >
                         <Upload size={14} />
@@ -474,7 +475,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                 notify("Connect Drive to upload", "error");
                             }
                         }}
-                        className={`col-span-full h-[60vh] border-2 border-dashed rounded-3xl flex flex-col items-center justify-center transition-all group relative overflow-hidden ${!isMockMode && !isDriveReady ? 'border-red-800/50 bg-red-900/10 cursor-not-allowed' : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer'}`}
+                        className={`col-span-full h-[60vh] border-2 border-dashed rounded-3xl flex flex-col items-center justify-center transition-all group relative overflow-hidden ${!isMockMode && !isDriveReady ? 'border-red-800/50 bg-red-900/10 cursor-not-allowed' : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer'} ${onboardingActiveStep === 2 ? 'ring-4 ring-indigo-500/50 z-40' : ''}`}
                     >
                         <div className="absolute top-0 right-0 p-8 opacity-10 font-black text-9xl text-indigo-500 rotate-12 pointer-events-none">02</div>
                         
@@ -490,8 +491,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             </>
                         ) : (
                             <>
-                                <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm relative z-10">
-                                    <Upload size={32} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                                <div className={`w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm relative z-10 ${onboardingActiveStep === 2 ? 'animate-bounce' : ''}`}>
+                                    <Upload size={32} className={`text-zinc-400 group-hover:text-indigo-500 transition-colors ${onboardingActiveStep === 2 ? 'text-indigo-500' : ''}`} />
                                 </div>
                                 <h3 className="text-xl font-bold mb-2 relative z-10 text-zinc-700 dark:text-zinc-300">Step 2: Upload Video</h3>
                                 <p className="text-sm max-w-xs text-center mb-6 relative z-10 text-zinc-500">

@@ -24,6 +24,7 @@ interface DashboardProps {
   // Lifted state from App.tsx
   isCreateModalOpen: boolean;
   setCreateModalOpen: (open: boolean) => void;
+  highlightNewProject?: boolean;
 }
 
 const FREE_PROJECT_LIMIT = 3;
@@ -31,7 +32,7 @@ const FREE_PROJECT_LIMIT = 3;
 export const Dashboard: React.FC<DashboardProps> = ({ 
     projects, currentUser, onSelectProject, onAddProject, onDeleteProject, 
     onEditProject, onNavigate, notify, isMockMode = false,
-    isCreateModalOpen, setCreateModalOpen
+    isCreateModalOpen, setCreateModalOpen, highlightNewProject
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
@@ -431,7 +432,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="ml-auto relative group">
                 <button 
                   onClick={() => canCreate ? setCreateModalOpen(true) : onNavigate('PRICING')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold shadow-lg ${canCreate ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 cursor-not-allowed border border-zinc-700'}`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold shadow-lg ${
+                      canCreate ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 cursor-not-allowed border border-zinc-700'
+                  } ${highlightNewProject ? 'ring-4 ring-indigo-500/70 ring-offset-2 ring-offset-zinc-950 z-50 relative animate-pulse' : ''}`}
                 >
                   {canCreate ? <Plus size={16} /> : <Lock size={16} />}
                   {t('dash.new_project')}
