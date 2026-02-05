@@ -10,9 +10,14 @@ interface MainLayoutProps {
   currentView: string;
   onNavigate: (page: string) => void;
   onBack: () => void;
+  onStartTour?: () => void; // Added prop
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, currentView, onNavigate, onBack }) => {
+// We need to allow passing onStartTour from App.tsx. 
+// Since App.tsx renders MainLayout, we need to update the prop usage in App.tsx as well.
+// But first, update the component definition.
+
+export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, currentView, onNavigate, onBack, onStartTour }) => {
   const { t } = useLanguage();
 
   return (
@@ -22,6 +27,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
         currentView={currentView} 
         onNavigate={onNavigate}
         onBack={onBack}
+        onStartTour={onStartTour}
       />
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
          <div className="max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col min-h-full">

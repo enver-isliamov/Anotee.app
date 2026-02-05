@@ -87,6 +87,29 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
     );
 };
 
+interface TourStep {
+    id: string;
+    title: string;
+    desc: string;
+    position?: 'top' | 'bottom' | 'left' | 'right';
+}
+
+// --- TOUR CONFIGURATION ---
+const TOUR_STEPS: Record<string, TourStep[]> = {
+    DASHBOARD: [
+        { id: 'tour-create-btn', title: '1. Создание проекта', desc: 'Начните с создания нового проекта для загрузки видео.' }
+    ],
+    PROJECT_VIEW: [
+        { id: 'tour-upload-btn', title: '1. Загрузка видео', desc: 'Загрузите видеофайлы. Мы создадим прокси для быстрой работы.' },
+        { id: 'tour-share-btn', title: '2. Приглашение', desc: 'Отправьте ссылку клиенту или коллегам для совместной работы.' }
+    ],
+    PLAYER: [
+        { id: 'tour-comment-input', title: '1. Комментарии', desc: 'Оставляйте таймкод-комментарии. Используйте Enter для быстрой отправки.' },
+        { id: 'tour-sidebar-tabs', title: '2. Инструменты', desc: 'Переключайтесь между комментариями и AI-транскрипцией.', position: 'right' as const },
+        { id: 'tour-export-btn', title: '3. Экспорт', desc: 'Скачивайте маркеры для DaVinci Resolve или Premiere Pro.', position: 'left' as const }
+    ]
+};
+
 interface AppLayoutProps {
     clerkUser: any | null;
     isLoaded: boolean;
@@ -115,6 +138,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [hideOnboarding, setHideOnboarding] = useState(() => {
       return localStorage.getItem('anotee_hide_tour') === 'true';
   });
+
+  // Manual Tour State
+  const [isManualTourActive, setIsManualTourActive] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
 
   // Modal State for Create Project
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -431,14 +458,42 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleDismissTour = () => {
       setHideOnboarding(true);
       localStorage.setItem('anotee_hide_tour', 'true');
+      setIsManualTourActive(false);
+      setTourStep(0);
   };
 
-  // Determine Active Tour Step based on Context
+  const handleStartTour = () => {
+      setIsManualTourActive(true);
+      setTourStep(0);
+  };
+
+  // Calculate active tour step
   let tourTargetId = '';
   let tourTitle = '';
   let tourDesc = '';
+  let tourTotalSteps = 1;
+  let tourCurrentStep = 1;
+  let tourPosition: 'top' | 'bottom' | 'left' | 'right' | undefined = 'bottom';
 
-  if (!hideOnboarding && view.type !== 'LIVE_DEMO') {
+  // Manual Tour Logic (Overrides Smart Logic)
+  if (isManualTourActive && view.type !== 'LIVE_DEMO') {
+      const config = TOUR_STEPS[view.type as keyof typeof TOUR_STEPS] || [];
+      if (config.length > 0 && tourStep < config.length) {
+          const step = config[tourStep];
+          tourTargetId = step.id;
+          tourTitle = step.title;
+          tourDesc = step.desc;
+          tourPosition = step.position || 'bottom';
+          tourTotalSteps = config.length;
+          tourCurrentStep = tourStep + 1;
+      } else {
+          // Tour finished
+          setIsManualTourActive(false);
+          setTourStep(0);
+      }
+  } 
+  // Smart Logic (Only if Manual is inactive and user hasn't dismissed hints)
+  else if (!hideOnboarding && view.type !== 'LIVE_DEMO') {
       if (view.type === 'DASHBOARD' && !hasProjects) {
           tourTargetId = 'tour-create-btn';
           tourTitle = '1. Создайте проект';
@@ -451,12 +506,26 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           tourTargetId = 'tour-comment-input';
           tourTitle = '3. Оставьте комментарий';
           tourDesc = 'Напишите таймкод-комментарий или используйте голосовой ввод.';
-      } else if (hasProjects && hasAssets && hasComments) {
+      } else if (hasProjects && hasAssets && hasComments && view.type === 'PROJECT_VIEW') {
           tourTargetId = 'tour-share-btn';
           tourTitle = '4. Пригласите команду';
           tourDesc = 'Отправьте ссылку клиенту или коллегам для ревью.';
       }
   }
+
+  const handleNextStep = () => {
+      if (isManualTourActive) {
+          const config = TOUR_STEPS[view.type as keyof typeof TOUR_STEPS] || [];
+          if (tourStep < config.length - 1) {
+              setTourStep(prev => prev + 1);
+          } else {
+              setIsManualTourActive(false);
+              setTourStep(0);
+          }
+      } else {
+          handleDismissTour();
+      }
+  };
 
   // --- RENDER ---
 
@@ -491,7 +560,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
       <main className="h-full">
         {isPlatformView && (
-            <MainLayout currentUser={currentUser} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}>
+            <MainLayout 
+                currentUser={currentUser} 
+                currentView={view.type} 
+                onNavigate={handleNavigate} 
+                onBack={handleBackToDashboard}
+                onStartTour={handleStartTour}
+            >
                 {view.type === 'DASHBOARD' && (
                 <Dashboard 
                     projects={projects} 
@@ -557,6 +632,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 title={tourTitle}
                 description={tourDesc}
                 onDismiss={handleDismissTour}
+                onNext={isManualTourActive ? handleNextStep : undefined}
+                currentStep={tourCurrentStep}
+                totalSteps={tourTotalSteps}
+                position={tourPosition}
             />
         )}
 
@@ -568,6 +647,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 };
 
+// ... Rest of file (AuthWrapper, App) unchanged ...
 const AuthWrapper: React.FC = () => {
     const { user, isLoaded, isSignedIn } = useUser();
     const { getToken, signOut } = useAuth();
