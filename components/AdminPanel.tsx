@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, MoreVertical, Search, Crown } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, MoreVertical, Search, Crown, Layout, Cpu } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG } from '../types';
 
 interface AdminUser {
@@ -16,16 +16,24 @@ interface AdminUser {
 }
 
 const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
+    // Features
     max_projects: "Лимиты проектов",
     export_xml: "Экспорт (XML/Resolve)",
     export_csv: "Экспорт (CSV/Excel)",
-    google_drive: "Google Drive Интеграция",
+    google_drive: "Google Drive API",
     ai_transcription: "AI Транскрибация",
     team_collab: "Командная работа",
     local_file_link: "Локальные файлы (Offline)",
     high_res_proxies: "4K Прокси / Оригиналы",
     project_locking: "Блокировка (NDA)",
-    version_comparison: "Сравнение версий"
+    version_comparison: "Сравнение версий",
+    
+    // UI Elements
+    ui_upsell_banner: "Баннер 'Купить Pro' (Дашборд)",
+    ui_roadmap_block: "Блок Roadmap (Профиль)",
+    ui_help_button: "Кнопка 'Тур/Помощь'",
+    ui_footer: "Футер приложения",
+    ui_drive_connect: "Кнопка 'Подключить Drive'"
 };
 
 export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -174,9 +182,84 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }));
     };
 
+    // Helper to render a config row
+    const renderConfigRow = (key: string, rule: FeatureRule) => (
+        <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+            <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg shrink-0 ${key.startsWith('ui_') ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
+                    {key.startsWith('ui_') ? <Layout size={16} /> : <Settings size={16} />}
+                </div>
+                <div>
+                    <div className="font-bold text-xs md:text-sm text-zinc-900 dark:text-white capitalize truncate">{key.replace(/_/g, ' ')}</div>
+                    <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate max-w-[200px] md:max-w-none">
+                        {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || "Система"}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 md:gap-6 w-full md:w-auto mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-100 dark:border-zinc-800">
+                {/* Limits Input (Only for max_projects) */}
+                {(key === 'max_projects') && (
+                    <div className="flex items-center gap-2 mr-auto md:mr-4 w-full md:w-auto">
+                        <div className="flex flex-col flex-1">
+                            <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Free Limit</label>
+                            <input 
+                                type="number" 
+                                value={rule.limitFree || 0}
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
+                                className="w-full md:w-16 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500"
+                            />
+                        </div>
+                        <div className="flex flex-col flex-1">
+                            <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Pro Limit</label>
+                            <input 
+                                type="number" 
+                                value={rule.limitPro || 0}
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
+                                className="w-full md:w-16 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex gap-4 w-full md:w-auto justify-between md:justify-start">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className="relative">
+                            <input 
+                                type="checkbox" 
+                                checked={rule.enabledForFree} 
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
+                                className="peer sr-only"
+                            />
+                            <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                        </div>
+                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white">Free</span>
+                    </label>
+                    
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className="relative">
+                            <input 
+                                type="checkbox" 
+                                checked={rule.enabledForPro} 
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
+                                className="peer sr-only"
+                            />
+                            <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                        </div>
+                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white">Pro</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    );
+
     // Stats
     const totalUsers = users.length;
     const proUsers = users.filter(u => u.plan === 'pro').length;
+
+    // Split Config
+    const featureEntries = Object.entries(config).filter(([key]) => !key.startsWith('ui_'));
+    const uiEntries = Object.entries(config).filter(([key]) => key.startsWith('ui_'));
 
     return (
         <div className="max-w-5xl mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-20">
@@ -360,75 +443,31 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         <div>
                             <h3 className="text-xs font-bold text-yellow-800 dark:text-yellow-400">Глобальные флаги</h3>
                             <p className="text-[10px] text-yellow-700/80 dark:text-yellow-500/80 leading-relaxed">
-                                Влияет на всех пользователей. Применяется мгновенно.
+                                Влияет на доступность функций и видимость UI для всех пользователей мгновенно.
                             </p>
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        {Object.entries(config).map(([key, rule]) => (
-                            <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg shrink-0">
-                                        <Settings size={16} className="text-zinc-500" />
-                                    </div>
-                                    <div>
-                                        <div className="font-bold text-xs md:text-sm text-zinc-900 dark:text-white capitalize truncate">{key.replace('_', ' ')}</div>
-                                        <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate max-w-[150px] md:max-w-none">
-                                            {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || "Система"}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap items-center gap-3 md:gap-6 w-full md:w-auto mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-100 dark:border-zinc-800">
-                                    {/* Limits Input */}
-                                    {(key === 'max_projects') && (
-                                        <div className="flex items-center gap-2 mr-auto md:mr-4 w-full md:w-auto">
-                                            <div className="flex flex-col flex-1">
-                                                <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Free</label>
-                                                <input 
-                                                    type="number" 
-                                                    value={rule.limitFree || 0}
-                                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
-                                                    className="w-full md:w-16 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col flex-1">
-                                                <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Pro</label>
-                                                <input 
-                                                    type="number" 
-                                                    value={rule.limitPro || 0}
-                                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
-                                                    className="w-full md:w-16 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="flex gap-4 w-full md:w-auto justify-between md:justify-start">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={rule.enabledForFree} 
-                                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
-                                                className="w-4 h-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
-                                            />
-                                            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Free</span>
-                                        </label>
-                                        
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={rule.enabledForPro} 
-                                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
-                                                className="w-4 h-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
-                                            />
-                                            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Pro</span>
-                                        </label>
-                                    </div>
-                                </div>
+                    <div className="space-y-8">
+                        {/* SECTION 1: FUNCTIONAL FEATURES */}
+                        <div>
+                            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Cpu size={16} /> Функциональные возможности
+                            </h3>
+                            <div className="space-y-3">
+                                {featureEntries.map(([key, rule]) => renderConfigRow(key, rule))}
                             </div>
-                        ))}
+                        </div>
+
+                        {/* SECTION 2: UI CONTROL */}
+                        <div>
+                            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Layout size={16} /> Интерфейс (UI Control)
+                            </h3>
+                            <div className="space-y-3">
+                                {uiEntries.map(([key, rule]) => renderConfigRow(key, rule))}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="mt-6 flex justify-end sticky bottom-4 z-10">
