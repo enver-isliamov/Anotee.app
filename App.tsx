@@ -23,6 +23,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
 import { DriveProvider, useDrive } from './services/driveContext';
+import useSWR, { mutate } from 'swr';
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -37,9 +38,6 @@ type ViewState =
   | { type: 'TERMS' }
   | { type: 'PRIVACY' }
   | { type: 'LIVE_DEMO' };
-
-// INCREASED TO 20s to prevent Rate Limiting on full Auth checks
-const POLLING_INTERVAL_MS = 20000;
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
@@ -119,8 +117,87 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Track the last local modification to prevent server overwrites
   const lastLocalUpdateRef = useRef<number>(0);
   
-  // Track last known server data timestamp to minimize fetching
-  const lastServerTimestampRef = useRef<number>(0);
+  // SWR Key Generation
+  const getKey = () => {
+      if (!currentUser) return null;
+      // Direct Link Check
+      const params = new URLSearchParams(window.location.search);
+      const directProjectId = params.get('projectId');
+      
+      return ['/api/data', currentUser.id, organization?.id, directProjectId || ''];
+  };
+
+  // SWR Fetcher
+  const fetcher = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const directProjectId = params.get('projectId');
+      
+      // Pass token implicitly via api client logic or get it fresh
+      // Using explicit token getter in api client handles refresh
+      return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined);
+  };
+
+  // --- DATA FETCHING (SWR) ---
+  const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
+      refreshInterval: 20000, // Poll every 20s (optimized)
+      revalidateOnFocus: true, // Refresh when user comes back
+      dedupingInterval: 5000,
+      keepPreviousData: true
+  });
+
+  // Sync SWR Data to Local State (Preserving Blob URLs)
+  useEffect(() => {
+      if (serverProjects && Array.isArray(serverProjects)) {
+          // If we just modified data locally, skip this sync cycle to prevent jumping
+          if (Date.now() - lastLocalUpdateRef.current < 2000) return;
+
+          setProjects(currentLocalProjects => {
+              // Optimization: Compare hashes to avoid re-render if data is identical
+              const prevHash = currentLocalProjects.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+              const newHash = serverProjects.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
+              
+              if (prevHash === newHash && currentLocalProjects.length === serverProjects.length) {
+                  return currentLocalProjects;
+              }
+
+              // Merge logic: Preserve localFileUrl (Blob URLs) which are not on server
+              const mergedProjects = serverProjects.map(serverProj => {
+                  const localProj = currentLocalProjects.find(p => p.id === serverProj.id);
+                  
+                  if (localProj) {
+                      const mergedAssets = serverProj.assets.map(serverAsset => {
+                          const localAsset = localProj.assets.find(a => a.id === serverAsset.id);
+                          if (!localAsset) return serverAsset;
+
+                          const mergedVersions = serverAsset.versions.map(serverVer => {
+                              const localVer = localAsset.versions.find(v => v.id === serverVer.id);
+                              if (localVer && localVer.localFileUrl) {
+                                  // Keep local blob URL if valid
+                                  if (!isMockMode && localVer.localFileUrl.startsWith('blob:')) {
+                                      return {
+                                          ...serverVer,
+                                          localFileUrl: localVer.localFileUrl,
+                                          localFileName: localVer.localFileName
+                                      };
+                                  }
+                              }
+                              return serverVer;
+                          });
+
+                          return { ...serverAsset, versions: mergedVersions };
+                      });
+                      return { ...serverProj, assets: mergedAssets };
+                  }
+                  return serverProj;
+              });
+
+              return mergedProjects;
+          });
+          
+          setIsSyncing(false);
+      }
+  }, [serverProjects, isMockMode]);
+
 
   const notify = (message: string, type: ToastType = 'info') => {
     const id = generateId();
@@ -152,6 +229,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           if (userObj && userObj.reload) {
               userObj.reload().then(() => {
                   console.log("User metadata refreshed");
+                  mutateProjects(); // Refresh SWR
                   setView({ type: 'PROFILE' });
               });
           }
@@ -164,7 +242,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           const newUrl = window.location.pathname;
           window.history.replaceState({}, '', newUrl);
       }
-  }, [userObj]);
+  }, [userObj, mutateProjects]);
 
   // --- NAVIGATION HANDLER (HISTORY API) ---
   useEffect(() => {
@@ -272,90 +350,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     window.history.pushState({}, '', '/');
   };
 
-  const fetchCloudData = useCallback(async (userOverride?: User, force = false) => {
-      const userToUse = userOverride || currentUser;
-      if (!userToUse) return;
-      
-      // Don't fetch if we just modified data locally to prevent flickering
-      if (Date.now() - lastLocalUpdateRef.current < 2000) {
-          return;
-      }
-
-      let token: string | null = null;
-      if (authMode === 'clerk') {
-          try { token = await getToken(); } catch (e) {}
-      }
-
-      // Check URL parameters for direct link access
-      const params = new URLSearchParams(window.location.search);
-      const directProjectId = params.get('projectId');
-
-      // OPTIMIZATION: Check if we need to fetch full data
-      if (!force && !directProjectId && !isMockMode) {
-          try {
-              const lastModified = await api.checkUpdates(organization?.id);
-              if (lastModified > 0 && lastModified <= lastServerTimestampRef.current) {
-                  return;
-              }
-              if (lastModified > 0) lastServerTimestampRef.current = lastModified;
-          } catch(e) {
-              console.warn("Failed update check, falling back to full fetch");
-          }
-      }
-
-      try {
-         setIsSyncing(true);
-         const serverData = await api.getProjects(userToUse, token, organization?.id, directProjectId || undefined);
-         
-         if (serverData && Array.isArray(serverData)) {
-            setProjects(currentLocalProjects => {
-                const prevHash = currentLocalProjects.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
-                const newHash = serverData.map(p => `${p.id}:${p._version || 0}`).sort().join('|');
-                
-                if (prevHash === newHash && currentLocalProjects.length === serverData.length) {
-                    return currentLocalProjects;
-                }
-
-                const mergedProjects = serverData.map(serverProj => {
-                    const localProj = currentLocalProjects.find(p => p.id === serverProj.id);
-                    
-                    if (localProj) {
-                        const mergedAssets = serverProj.assets.map(serverAsset => {
-                            const localAsset = localProj.assets.find(a => a.id === serverAsset.id);
-                            if (!localAsset) return serverAsset;
-
-                            const mergedVersions = serverAsset.versions.map(serverVer => {
-                                const localVer = localAsset.versions.find(v => v.id === serverVer.id);
-                                if (localVer && localVer.localFileUrl) {
-                                    if (!isMockMode && localVer.localFileUrl.startsWith('blob:')) {
-                                        return serverVer;
-                                    }
-                                    return {
-                                        ...serverVer,
-                                        localFileUrl: localVer.localFileUrl,
-                                        localFileName: localVer.localFileName
-                                    };
-                                }
-                                return serverVer;
-                            });
-
-                            return { ...serverAsset, versions: mergedVersions };
-                        });
-                        return { ...serverProj, assets: mergedAssets };
-                    }
-                    return serverProj;
-                });
-
-                return mergedProjects;
-            });
-         }
-      } catch (e) {
-         console.error("Fetch failed", e);
-      } finally {
-         setIsSyncing(false);
-      }
-  }, [currentUser, getToken, authMode, organization, isMockMode]);
-
   const forceSync = async (projectsData: Project[]) => {
       if (!currentUser) return;
       
@@ -376,14 +370,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                   }
                   return p;
               }));
-              lastServerTimestampRef.current = Date.now();
+              // Trigger SWR revalidation silently to ensure consistency
+              mutateProjects();
           }
       } catch (e: any) {
           console.error("Sync failed", e);
           if (e.code === 'CONFLICT') {
               notify("Conflict detected. Reloading...", "warning");
               lastLocalUpdateRef.current = 0; 
-              fetchCloudData(undefined, true); 
+              mutateProjects(); // Fetch server state immediately
           } else {
               notify("Failed to save changes. Check internet.", "error");
           }
@@ -402,23 +397,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       isMockMode,
       getToken 
   );
-
-  useEffect(() => {
-    if (!currentUser) return; 
-    fetchCloudData(undefined, true);
-  }, [currentUser, fetchCloudData]);
-
-  useEffect(() => {
-    if (!currentUser || isMockMode) return;
-    const shouldPoll = ['DASHBOARD', 'PROJECT_VIEW', 'PLAYER'].includes(view.type);
-    if (!shouldPoll) return;
-
-    const interval = setInterval(() => {
-        if (isSyncing) return;
-        fetchCloudData();
-    }, POLLING_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [isSyncing, currentUser, view.type, isMockMode, fetchCloudData]);
 
   const handleSelectProject = (project: Project) => {
     setView({ type: 'PROJECT_VIEW', projectId: project.id });
