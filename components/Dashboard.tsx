@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
-import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload } from 'lucide-react';
+import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
@@ -21,12 +21,18 @@ interface DashboardProps {
   onNavigate: (page: string) => void; 
   notify: (msg: string, type: ToastType) => void;
   isMockMode?: boolean;
+  // Lifted state from App.tsx
+  isCreateModalOpen: boolean;
+  setCreateModalOpen: (open: boolean) => void;
 }
 
 const FREE_PROJECT_LIMIT = 3;
 
-export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onSelectProject, onAddProject, onDeleteProject, onEditProject, onNavigate, notify, isMockMode = false }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+export const Dashboard: React.FC<DashboardProps> = ({ 
+    projects, currentUser, onSelectProject, onAddProject, onDeleteProject, 
+    onEditProject, onNavigate, notify, isMockMode = false,
+    isCreateModalOpen, setCreateModalOpen
+}) => {
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
   const { isPro } = useSubscription();
@@ -73,15 +79,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       }
       
       // 2. If Personal Workspace (no Org selected):
-      // Show projects where orgId is missing, null, empty string OR 'null' string (legacy)
-      // AND user has access (Owner or Team)
       const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
-      
-      // Strict Check for Personal Dashboard:
-      // - I am Owner
-      // - OR I am in the Team list (ID or Email)
       const isOwner = p.ownerId === currentUser.id;
-      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id); // Loose check for email legacy
+      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id); 
       
       return isPersonal && (isOwner || isInTeam);
   });
@@ -91,15 +91,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
     : t('dash.my_projects');
 
   // LIMIT CHECK
-  // Limits apply to Personal Workspace only. Organizations might have different logic, but here we enforce on user.
   const createdProjectsCount = projects.filter(p => p.ownerId === currentUser.id && !p.orgId).length;
-  const canCreate = isPro || createdProjectsCount < FREE_PROJECT_LIMIT || !!activeOrgId; // Orgs usually have separate billing, allowing strict user limit on personal
+  const canCreate = isPro || createdProjectsCount < FREE_PROJECT_LIMIT || !!activeOrgId; 
 
   // PERMISSION CHECKS (Project Level)
   const canManageProject = (project: Project) => {
-      // Personal: Only Owner
       if (!project.orgId) return project.ownerId === currentUser.id;
-      // Org: Owner OR Admin
       return project.ownerId === currentUser.id || isAdmin;
   };
 
@@ -116,7 +113,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       description,
       createdAt: Date.now(), 
       updatedAt: 'Just now',
-      // If Org: Clean Team (Managed by Clerk). If Personal: Add Self.
       team: activeOrgId ? [] : [currentUser],
       ownerId: currentUser.id,
       orgId: activeOrgId || null, 
@@ -127,9 +123,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
     onAddProject(newProject);
     
-    // Reset and Close
     setIsCreating(false);
-    setIsModalOpen(false);
+    setCreateModalOpen(false);
     setName('');
     setClient('');
     setDescription('');
@@ -168,45 +163,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
   const handleSubmitEdit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editingProject) return;
-      
       setIsSavingEdit(true);
-
       try {
-          // Attempt to rename Drive Folder if name changed
           if (editingProject.name !== editName && GoogleDriveService.isAuthenticated()) {
               notify("Syncing name change to Google Drive...", "info");
               await GoogleDriveService.renameProjectFolder(editingProject.name, editName);
           }
-
-          // USE PATCH (Partial Update)
           if (!isMockMode) {
               await api.patchProject(editingProject.id, {
                   name: editName,
                   client: editClient,
                   description: editDesc
               }, editingProject._version || 0);
-              
-              // Optimistic local update
-              onEditProject(editingProject.id, {
-                  name: editName,
-                  client: editClient,
-                  description: editDesc
-              });
+              onEditProject(editingProject.id, { name: editName, client: editClient, description: editDesc });
           } else {
-              onEditProject(editingProject.id, {
-                  name: editName,
-                  client: editClient,
-                  description: editDesc
-              });
+              onEditProject(editingProject.id, { name: editName, client: editClient, description: editDesc });
           }
-          
           notify("Project updated", "success");
       } catch (err: any) {
           if (err.code === 'CONFLICT') {
              notify("Conflict detected! Someone modified this project. Please refresh.", "error");
           } else {
              notify("Failed to update project", "error");
-             console.error(err);
           }
       } finally {
           setIsSavingEdit(false);
@@ -247,37 +225,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       if (!confirm(t('dash.delete_confirm'))) {
           return;
       }
-
       setIsDeleting(project.id);
-      
       try {
-          // 1. Delete Assets (Blobs)
           const urlsToDelete: string[] = [];
           project.assets.forEach(asset => {
               asset.versions.forEach(v => {
-                  if (v.url.startsWith('http')) {
-                      urlsToDelete.push(v.url);
-                  }
+                  if (v.url.startsWith('http')) urlsToDelete.push(v.url);
               });
           });
-
           if (!isMockMode && urlsToDelete.length > 0) {
               await api.deleteAssets(urlsToDelete, project.id);
           }
-
-          // 2. Delete Project Row (DB)
           if (!isMockMode) {
               const res = await fetch(`/api/data?projectId=${project.id}`, {
                   method: 'DELETE',
-                  headers: {
-                      'Authorization': `Bearer ${await getToken()}`
-                  }
+                  headers: { 'Authorization': `Bearer ${await getToken()}` }
               });
-              if (!res.ok) {
-                  throw new Error("Failed to delete project row");
-              }
+              if (!res.ok) throw new Error("Failed to delete project row");
           }
-
           onDeleteProject(project.id);
           notify("Project deleted successfully", "success");
       } catch(e) {
@@ -288,77 +253,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       }
   };
 
-  const renderOnboarding = () => {
-      return (
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 mb-8 shadow-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
-              
-              <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">
-                      <Layout size={24} />
-                  </div>
-                  <div>
-                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Get Started with Anotee</h3>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Follow these steps to set up your first review workflow.</p>
-                  </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
-                  {/* Step 1: Create Project (Active) */}
-                  <div className="border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl p-5 flex flex-col items-start relative group hover:shadow-md transition-all">
-                      <div className="absolute top-4 right-4 text-indigo-200 dark:text-indigo-800 font-black text-4xl opacity-20">01</div>
-                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-indigo-600 shadow-sm">
-                          <Plus size={20} />
-                      </div>
-                      <h4 className="font-bold text-zinc-900 dark:text-white mb-1">Create Project</h4>
-                      <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4 leading-relaxed">
-                          Initialize a workspace for your media assets and team collaboration.
-                      </p>
-                      <button 
-                          onClick={() => setIsModalOpen(true)}
-                          className="mt-auto w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"
-                      >
-                          Start Here <ArrowRight size={12} />
-                      </button>
-                  </div>
-
-                  {/* Step 2: Upload (Pending) */}
-                  <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl p-5 flex flex-col items-start relative opacity-70 grayscale">
-                      <div className="absolute top-4 right-4 text-zinc-200 dark:text-zinc-800 font-black text-4xl opacity-20">02</div>
-                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
-                          <Upload size={20} />
-                      </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Upload Media</h4>
-                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          Drag & drop video files. We automatically generate proxies for smooth playback.
-                      </p>
-                      <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          Waiting for Project...
-                      </div>
-                  </div>
-
-                  {/* Step 3: Invite (Pending) */}
-                  <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl p-5 flex flex-col items-start relative opacity-70 grayscale">
-                      <div className="absolute top-4 right-4 text-zinc-200 dark:text-zinc-800 font-black text-4xl opacity-20">03</div>
-                      <div className="mb-3 p-2 bg-white dark:bg-zinc-800 rounded-lg text-zinc-400 shadow-sm">
-                          <Share2 size={20} />
-                      </div>
-                      <h4 className="font-bold text-zinc-700 dark:text-zinc-300 mb-1">Invite Team</h4>
-                      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-                          Share a secure link with clients or editors for frame-accurate feedback.
-                      </p>
-                      <div className="mt-auto w-full py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                          Waiting for Upload...
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
-  };
-
   const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode) => {
+      // ... (existing grid rendering logic)
       return (
-          <div className="mb-8">
+          <div className="mb-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+              {/* ... existing headers ... */}
               <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4">
                   {icon}
                   {title}
@@ -368,8 +267,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
               </h2>
               
               {projectList.length === 0 ? (
-                  // Use new Onboarding if generic empty state
-                  renderOnboarding()
+                  <div className="bg-zinc-50 dark:bg-zinc-900/30 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center h-48">
+                        <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-3 text-zinc-400">
+                            <FileVideo size={24} />
+                        </div>
+                        <p className="text-zinc-500 font-medium text-sm">No projects found in this workspace.</p>
+                  </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {projectList.map((project) => {
@@ -527,7 +430,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
 
             <div className="ml-auto relative group">
                 <button 
-                  onClick={() => canCreate ? setIsModalOpen(true) : onNavigate('PRICING')}
+                  onClick={() => canCreate ? setCreateModalOpen(true) : onNavigate('PRICING')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold shadow-lg ${canCreate ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 cursor-not-allowed border border-zinc-700'}`}
                 >
                   {canCreate ? <Plus size={16} /> : <Lock size={16} />}
@@ -595,11 +498,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
       </div>
 
       {/* CREATE MODAL */}
-      {isModalOpen && (
+      {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
             <button 
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => setCreateModalOpen(false)}
               className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             >
               <X size={20} />
@@ -630,7 +533,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, currentUser, onS
                 </div>
               </div>
               <div className="mt-8 flex justify-end gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">{t('cancel')}</button>
+                <button type="button" onClick={() => setCreateModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">{t('cancel')}</button>
                 <button type="submit" disabled={isCreating || !name || !client} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">{isCreating && <Loader2 size={14} className="animate-spin" />}{isCreating ? t('loading') : t('dash.new_project')}</button>
               </div>
             </form>
