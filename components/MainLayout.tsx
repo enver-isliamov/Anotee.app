@@ -13,10 +13,6 @@ interface MainLayoutProps {
   onStartTour?: () => void; // Added prop
 }
 
-// We need to allow passing onStartTour from App.tsx. 
-// Since App.tsx renders MainLayout, we need to update the prop usage in App.tsx as well.
-// But first, update the component definition.
-
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, currentView, onNavigate, onBack, onStartTour }) => {
   const { t } = useLanguage();
 
@@ -47,12 +43,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
 
                     {/* Links */}
                     <div className="flex flex-col gap-2 text-xs">
-                        <button onClick={() => onNavigate('TERMS')} className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left">
+                        <a 
+                            href="/terms"
+                            onClick={(e) => { e.preventDefault(); onNavigate('TERMS'); }} 
+                            className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left"
+                        >
                             {t('nav.terms')} (Публичная оферта)
-                        </button>
-                        <button onClick={() => onNavigate('PRIVACY')} className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left">
+                        </a>
+                        <a 
+                            href="/privacy"
+                            onClick={(e) => { e.preventDefault(); onNavigate('PRIVACY'); }} 
+                            className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left text-center md:text-left"
+                        >
                             {t('nav.privacy')} (Политика конфиденциальности)
-                        </button>
+                        </a>
                     </div>
 
                     {/* Contacts (Required by YooKassa) */}
