@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -261,8 +262,25 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         const aId = params.get('assetId');
         const path = window.location.pathname;
 
+        // Routing Logic
         if (path === '/panel' || path === '/admin') {
             setView({ type: 'ADMIN' });
+        } else if (path === '/terms') {
+            setView({ type: 'TERMS' });
+        } else if (path === '/privacy') {
+            setView({ type: 'PRIVACY' });
+        } else if (path === '/pricing') {
+            setView({ type: 'PRICING' });
+        } else if (path === '/about') {
+            setView({ type: 'ABOUT' });
+        } else if (path === '/workflow') {
+            setView({ type: 'WORKFLOW' });
+        } else if (path === '/ai') {
+            setView({ type: 'AI_FEATURES' });
+        } else if (path === '/profile') {
+            setView({ type: 'PROFILE' });
+        } else if (path === '/demo') {
+            setView({ type: 'LIVE_DEMO' });
         } else if (pId && aId) {
             setView({ type: 'PLAYER', projectId: pId, assetId: aId });
         } else if (pId) {
@@ -427,7 +445,22 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
   
   const handleNavigate = (page: string) => {
-      window.history.pushState({}, '', '/');
+      let path = '/';
+      switch(page) {
+          case 'WORKFLOW': path = '/workflow'; break;
+          case 'ABOUT': path = '/about'; break;
+          case 'PRICING': path = '/pricing'; break;
+          case 'PROFILE': path = '/profile'; break;
+          case 'ADMIN': path = '/admin'; break; 
+          case 'AI_FEATURES': path = '/ai'; break;
+          case 'LIVE_DEMO': path = '/demo'; break;
+          case 'DASHBOARD': path = '/'; break;
+          case 'TERMS': path = '/terms'; break;
+          case 'PRIVACY': path = '/privacy'; break;
+      }
+      
+      window.history.pushState({}, '', path);
+
       switch(page) {
           case 'WORKFLOW': setView({ type: 'WORKFLOW' }); break;
           case 'ABOUT': setView({ type: 'ABOUT' }); break;

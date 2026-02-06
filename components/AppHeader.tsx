@@ -71,10 +71,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         {navItems.map(page => {
                         const pageKey = page === 'ai' ? 'AI_FEATURES' : page.toUpperCase();
                         const isActive = currentView === pageKey;
+                        const href = page === 'ai' ? '/ai' : `/${page}`;
                         return (
-                            <button 
+                            <a 
                                 key={page}
-                                onClick={() => onNavigate(pageKey)}
+                                href={href}
+                                onClick={(e) => { e.preventDefault(); onNavigate(pageKey); }}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all
                                     ${isActive 
                                         ? 'text-white bg-zinc-800' 
@@ -83,16 +85,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                 `}
                             >
                                 {t(`nav.${page}`)}
-                            </button>
+                            </a>
                         );
                     })}
                     {!currentUser && (
-                        <button 
-                            onClick={() => onNavigate('LIVE_DEMO')}
+                        <a 
+                            href="/demo"
+                            onClick={(e) => { e.preventDefault(); onNavigate('LIVE_DEMO'); }}
                             className="px-3 py-1.5 text-sm font-bold text-red-400 hover:text-red-300 rounded-lg transition-all hover:bg-red-900/20 flex items-center gap-2"
                         >
                             <PlayCircle size={14} /> {t('nav.demo')}
-                        </button>
+                        </a>
                     )}
                     </div>
                 )}
@@ -105,13 +108,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {currentUser && (
                     <div className="flex items-center gap-2 pl-2">
                         {/* Settings Link */}
-                        <button 
-                            onClick={() => onNavigate('PROFILE')}
+                        <a 
+                            href="/profile"
+                            onClick={(e) => { e.preventDefault(); onNavigate('PROFILE'); }}
                             className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
                             title="Subscription & Settings"
                         >
                             <Settings size={20} />
-                        </button>
+                        </a>
 
                         {/* Combined Identity Block */}
                         <div className="flex items-center bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-full pl-1 pr-1 py-1 transition-all">
