@@ -317,7 +317,7 @@ export const AiFeaturesPage: React.FC = () => {
                 <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto text-lg">{t('page.ai.subtitle')}</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
                 
                 {/* COLUMN 1: WORKFLOW */}
                 <div>
@@ -325,10 +325,12 @@ export const AiFeaturesPage: React.FC = () => {
                         {t('page.ai.col1')}
                     </h2>
                     <div className="space-y-4">
-                        {renderCard('page.ai.card1.title', 'page.ai.card1.desc', 'page.ai.card1.benefit', 
-                            { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
-                        
+                        {/* Note: Annotation card removed as per request */}
                         {renderCard('page.ai.card2.title', 'page.ai.card2.desc', 'page.ai.card2.benefit', 
+                            { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
+                        {renderCard('page.ai.card11.title', 'page.ai.card11.desc', 'page.ai.card11.benefit', 
+                            { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
+                        {renderCard('page.ai.card13.title', 'page.ai.card13.desc', 'page.ai.card13.benefit', 
                             { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
                     </div>
                 </div>
@@ -358,9 +360,35 @@ export const AiFeaturesPage: React.FC = () => {
                         
                         {renderCard('page.ai.card6.title', 'page.ai.card6.desc', 'page.ai.card6.benefit', 
                             { text: 'SECURITY', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' }, 'text-emerald-600 dark:text-emerald-500')}
+                        
+                        {renderCard('page.ai.card12.title', 'page.ai.card12.desc', 'page.ai.card12.benefit', 
+                            { text: 'STORAGE', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' }, 'text-emerald-600 dark:text-emerald-500')}
+                        
+                        {renderCard('page.ai.card14.title', 'page.ai.card14.desc', 'page.ai.card14.benefit', 
+                            { text: 'MOBILE', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' }, 'text-emerald-600 dark:text-emerald-500')}
                     </div>
                 </div>
+            </div>
 
+            {/* FUTURE ROADMAP SECTION */}
+            <div className="mt-16 border-t border-zinc-200 dark:border-zinc-800 pt-16">
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-8 text-center tracking-tight flex items-center justify-center gap-2">
+                    <Rocket size={24} className="text-purple-500" />
+                    {t('page.ai.future')}
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {renderCard('page.ai.card7.title', 'page.ai.card7.desc', 'page.ai.card7.benefit', 
+                        { text: 'PLANNED', color: 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 border border-purple-100 dark:border-purple-500/20' }, 'text-purple-600 dark:text-purple-400')}
+                    
+                    {renderCard('page.ai.card8.title', 'page.ai.card8.desc', 'page.ai.card8.benefit', 
+                        { text: 'PLANNED', color: 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 border border-purple-100 dark:border-purple-500/20' }, 'text-purple-600 dark:text-purple-400')}
+                        
+                    {renderCard('page.ai.card9.title', 'page.ai.card9.desc', 'page.ai.card9.benefit', 
+                        { text: 'PLANNED', color: 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 border border-purple-100 dark:border-purple-500/20' }, 'text-purple-600 dark:text-purple-400')}
+                        
+                    {renderCard('page.ai.card10.title', 'page.ai.card10.desc', 'page.ai.card10.benefit', 
+                        { text: 'PLANNED', color: 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 border border-purple-100 dark:border-purple-500/20' }, 'text-purple-600 dark:text-purple-400')}
+                </div>
             </div>
         </div>
     );
