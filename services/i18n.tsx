@@ -205,6 +205,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.ai.col1': '01. PROCESS (WORKFLOW)',
     'page.ai.col2': '02. INTELLIGENCE (AI)',
     'page.ai.col3': '03. TECHNOLOGY (CORE)',
+    'page.ai.future': 'P2P INNOVATIONS (ROADMAP)',
     'page.ai.card1.title': 'Annotations on Canvas',
     'page.ai.card1.desc': 'Drawing arrows and circles over video footage.',
     'page.ai.card1.benefit': 'Benefit: Eliminates "broken phone". The editor immediately understands which object in the frame needs fixing.',
@@ -223,6 +224,20 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.ai.card6.title': 'NDA Protection',
     'page.ai.card6.desc': 'Password protection and link expiration dates.',
     'page.ai.card6.benefit': 'Benefit: IP Safety. You control who views content and when.',
+    
+    // P2P Roadmap
+    'page.ai.card7.title': 'Anotee Drop',
+    'page.ai.card7.desc': 'Direct P2P transfer of heavy source files (RAW/ProRes) without cloud upload limits.',
+    'page.ai.card7.benefit': 'Benefit: Bypass server storage caps. Send 100GB files instantly.',
+    'page.ai.card8.title': 'Studio LAN Mode',
+    'page.ai.card8.desc': 'Lightning fast sync for devices on the same Wi-Fi/Office network.',
+    'page.ai.card8.benefit': 'Benefit: Zero latency scrubbing for local teams.',
+    'page.ai.card9.title': 'Remote Voice-Over',
+    'page.ai.card9.desc': 'Record audio directly into the project timeline from a remote browser.',
+    'page.ai.card9.benefit': 'Benefit: No need for external studio links. Record scratch vocals instantly.',
+    'page.ai.card10.title': 'NLE Live Link',
+    'page.ai.card10.desc': 'Stream your Premiere/Resolve viewport directly to the client.',
+    'page.ai.card10.benefit': 'Benefit: "Over-the-shoulder" remote editing experience.',
 
     // Roadmap
     'rm.founders_club': "Founder's Club",
@@ -409,6 +424,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.ai.col1': '01. ПРОЦЕСС (WORKFLOW)',
     'page.ai.col2': '02. ИНТЕЛЛЕКТ (AI)',
     'page.ai.col3': '03. ТЕХНОЛОГИИ (CORE)',
+    'page.ai.future': 'P2P ИННОВАЦИИ (ROADMAP)',
     'page.ai.card1.title': 'Аннотации на холсте',
     'page.ai.card1.desc': 'Рисование стрелок и кругов поверх видеоряда.',
     'page.ai.card1.benefit': 'Выгода: Исключает "глухой телефон". Монтажер сразу понимает, какой объект в кадре нужно поправить.',
@@ -427,6 +443,20 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.ai.card6.title': 'NDA Protection',
     'page.ai.card6.desc': 'Защита паролем и сроки действия ссылок.',
     'page.ai.card6.benefit': 'Выгода: Безопасность IP. Вы контролируете, кто и когда смотрит контент.',
+
+    // P2P Roadmap
+    'page.ai.card7.title': 'Anotee Drop',
+    'page.ai.card7.desc': 'Прямая P2P передача тяжелых исходников (RAW/ProRes) без лимитов облака.',
+    'page.ai.card7.benefit': 'Выгода: Обход лимитов хранилища. Отправляйте файлы по 100GB мгновенно.',
+    'page.ai.card8.title': 'Studio LAN Mode',
+    'page.ai.card8.desc': 'Мгновенная синхронизация для устройств в одной Wi-Fi сети или офисе.',
+    'page.ai.card8.benefit': 'Выгода: Нулевая задержка при скраббинге для локальных команд.',
+    'page.ai.card9.title': 'Remote Voice-Over',
+    'page.ai.card9.desc': 'Запись аудио прямо в таймлайн проекта из удаленного браузера.',
+    'page.ai.card9.benefit': 'Выгода: Не нужны внешние ссылки. Записывайте черновую озвучку мгновенно.',
+    'page.ai.card10.title': 'NLE Live Link',
+    'page.ai.card10.desc': 'Стриминг окна Premiere/Resolve (вьюпорта) напрямую клиенту.',
+    'page.ai.card10.benefit': 'Выгода: Эффект присутствия "за плечом" монтажера.',
 
     // Others
     'upsell.title': 'Почему стоит обновиться?',
