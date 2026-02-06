@@ -180,7 +180,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- UPDATE CONFIG ---
+        // --- UPDATE FEATURE FLAGS ---
         if (action === 'update_config') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const config = req.body;
@@ -188,6 +188,34 @@ export default async function handler(req, res) {
             await sql`
                 INSERT INTO system_settings (key, value) 
                 VALUES ('feature_flags', ${JSON.stringify(config)}::jsonb)
+                ON CONFLICT (key) 
+                DO UPDATE SET value = ${JSON.stringify(config)}::jsonb;
+            `;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- GET PAYMENT CONFIG ---
+        if (action === 'get_payment_config') {
+            if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+            
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'payment_config'`;
+            // Return empty object if not set, UI handles defaults
+            return res.status(200).json(rows.length > 0 ? rows[0].value : {});
+        }
+
+        // --- UPDATE PAYMENT CONFIG ---
+        if (action === 'update_payment_config') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const config = req.body;
+            
+            // Validate minimal structure
+            if (!config || !['yookassa', 'prodamus'].includes(config.activeProvider)) {
+                return res.status(400).json({ error: "Invalid payment config" });
+            }
+
+            await sql`
+                INSERT INTO system_settings (key, value) 
+                VALUES ('payment_config', ${JSON.stringify(config)}::jsonb)
                 ON CONFLICT (key) 
                 DO UPDATE SET value = ${JSON.stringify(config)}::jsonb;
             `;

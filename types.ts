@@ -125,3 +125,22 @@ export const DEFAULT_CONFIG: AppConfig = {
     ui_footer: { enabledForFree: true, enabledForPro: true },
     ui_drive_connect: { enabledForFree: false, enabledForPro: true }, // Drive UI hidden for free by default
 };
+
+// --- PAYMENT INTEGRATION CONFIG ---
+export interface PaymentConfig {
+    activeProvider: 'yookassa' | 'prodamus';
+    yookassa: {
+        shopId: string;
+        secretKey: string;
+    };
+    prodamus: {
+        url: string; // e.g. https://demo.payform.ru
+        secretKey: string;
+    };
+}
+
+export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
+    activeProvider: 'yookassa',
+    yookassa: { shopId: '', secretKey: '' },
+    prodamus: { url: '', secretKey: '' }
+};
