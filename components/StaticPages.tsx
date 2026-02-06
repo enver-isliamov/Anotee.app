@@ -328,6 +328,10 @@ export const AiFeaturesPage: React.FC = () => {
                         {/* Note: Annotation card removed as per request */}
                         {renderCard('page.ai.card2.title', 'page.ai.card2.desc', 'page.ai.card2.benefit', 
                             { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
+                        {renderCard('page.ai.card11.title', 'page.ai.card11.desc', 'page.ai.card11.benefit', 
+                            { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
+                        {renderCard('page.ai.card13.title', 'page.ai.card13.desc', 'page.ai.card13.benefit', 
+                            { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
                     </div>
                 </div>
 
@@ -356,6 +360,12 @@ export const AiFeaturesPage: React.FC = () => {
                         
                         {renderCard('page.ai.card6.title', 'page.ai.card6.desc', 'page.ai.card6.benefit', 
                             { text: 'SECURITY', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' }, 'text-emerald-600 dark:text-emerald-500')}
+                        
+                        {renderCard('page.ai.card12.title', 'page.ai.card12.desc', 'page.ai.card12.benefit', 
+                            { text: 'STORAGE', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' }, 'text-emerald-600 dark:text-emerald-500')}
+                        
+                        {renderCard('page.ai.card14.title', 'page.ai.card14.desc', 'page.ai.card14.benefit', 
+                            { text: 'MOBILE', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20' }, 'text-emerald-600 dark:text-emerald-500')}
                     </div>
                 </div>
             </div>

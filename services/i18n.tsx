@@ -225,6 +225,19 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.ai.card6.desc': 'Password protection and link expiration dates.',
     'page.ai.card6.benefit': 'Benefit: IP Safety. You control who views content and when.',
     
+    'page.ai.card11.title': 'NLE Integration',
+    'page.ai.card11.desc': 'Export comments to DaVinci Resolve (.xml), Premiere Pro (.csv).',
+    'page.ai.card11.benefit': 'Benefit: Instant timeline markers. No manual entry.',
+    'page.ai.card12.title': 'Hybrid Storage',
+    'page.ai.card12.desc': 'We stream directly from your Google Drive. No re-uploading needed.',
+    'page.ai.card12.benefit': 'Benefit: Zero storage costs on platform. You own the files.',
+    'page.ai.card13.title': 'Checklist Mode',
+    'page.ai.card13.desc': 'Mark comments as "Resolved" to track progress.',
+    'page.ai.card13.benefit': 'Benefit: Nothing gets forgotten before render.',
+    'page.ai.card14.title': 'Mobile Review',
+    'page.ai.card14.desc': 'Full functionality on smartphones. Touch gestures supported.',
+    'page.ai.card14.benefit': 'Benefit: Approve edits while commuting.',
+
     // P2P Roadmap
     'page.ai.card7.title': 'Anotee Drop',
     'page.ai.card7.desc': 'Direct P2P transfer of heavy source files (RAW/ProRes) without cloud upload limits.',
@@ -443,6 +456,19 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'page.ai.card6.title': 'NDA Protection',
     'page.ai.card6.desc': 'Защита паролем и сроки действия ссылок.',
     'page.ai.card6.benefit': 'Выгода: Безопасность IP. Вы контролируете, кто и когда смотрит контент.',
+    
+    'page.ai.card11.title': 'Интеграция с NLE',
+    'page.ai.card11.desc': 'Экспорт комментариев в DaVinci Resolve (.xml), Premiere Pro (.csv).',
+    'page.ai.card11.benefit': 'Выгода: Мгновенные маркеры на таймлайне.',
+    'page.ai.card12.title': 'Гибридное Хранение',
+    'page.ai.card12.desc': 'Стриминг напрямую с вашего Google Drive. Не нужно перезаливать файлы.',
+    'page.ai.card12.benefit': 'Выгода: Ноль расходов на хранилище платформы.',
+    'page.ai.card13.title': 'Режим Чек-листа',
+    'page.ai.card13.desc': 'Отмечайте комментарии как "Решено" для отслеживания прогресса.',
+    'page.ai.card13.benefit': 'Выгода: Ничего не забудется перед рендером.',
+    'page.ai.card14.title': 'Мобильное Ревью',
+    'page.ai.card14.desc': 'Полный функционал на смартфонах. Поддержка жестов.',
+    'page.ai.card14.benefit': 'Выгода: Утверждайте правки в дороге.',
 
     // P2P Roadmap
     'page.ai.card7.title': 'Anotee Drop',
