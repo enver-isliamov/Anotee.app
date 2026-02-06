@@ -325,9 +325,7 @@ export const AiFeaturesPage: React.FC = () => {
                         {t('page.ai.col1')}
                     </h2>
                     <div className="space-y-4">
-                        {renderCard('page.ai.card1.title', 'page.ai.card1.desc', 'page.ai.card1.benefit', 
-                            { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
-                        
+                        {/* Note: Annotation card removed as per request */}
                         {renderCard('page.ai.card2.title', 'page.ai.card2.desc', 'page.ai.card2.benefit', 
                             { text: 'FEATURE', color: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20' }, 'text-indigo-600 dark:text-indigo-400')}
                     </div>

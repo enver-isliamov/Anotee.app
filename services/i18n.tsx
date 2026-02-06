@@ -29,7 +29,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.pricing': 'Pricing',
     'nav.about': 'About',
     'nav.demo': 'Live Demo',
-    'nav.ai': 'AI Features',
+    'nav.ai': 'Road.Map',
     'nav.terms': 'Terms of Service',
     'nav.privacy': 'Privacy Policy',
     
@@ -293,7 +293,7 @@ const DICTIONARIES: Record<Language, Record<string, string>> = {
     'nav.pricing': 'Цены',
     'nav.about': 'О нас',
     'nav.demo': 'Демо',
-    'nav.ai': 'AI/Планы',
+    'nav.ai': 'Road.Map',
     'nav.terms': 'Оферта',
     'nav.privacy': 'Политика',
 
