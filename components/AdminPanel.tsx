@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3 } from 'lucide-react';
-import { FeatureRule, AppConfig, DEFAULT_CONFIG } from '../types';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink } from 'lucide-react';
+import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG } from '../types';
 
 interface AdminUser {
     id: string;
@@ -56,7 +56,7 @@ const SUB_TABS = [
 
 export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { getToken } = useAuth();
-    const [activeTab, setActiveTab] = useState<'users' | 'features' | 'strategy'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy'>('users');
     const [settingsSubTab, setSettingsSubTab] = useState('general');
     
     // User Data
@@ -70,6 +70,11 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
     const [configLoading, setConfigLoading] = useState(false);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+    // Payment Data
+    const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+    const [paymentLoading, setPaymentLoading] = useState(false);
+    const [isSavingPayment, setIsSavingPayment] = useState(false);
 
     // Grant Modal State
     const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
@@ -126,9 +131,34 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
     };
 
+    const fetchPaymentConfig = async () => {
+        setPaymentLoading(true);
+        try {
+            const token = await getToken();
+            const res = await fetch('/api/admin?action=get_payment_config', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                // Ensure defaults are merged
+                setPaymentConfig({ 
+                    ...DEFAULT_PAYMENT_CONFIG, 
+                    ...data, 
+                    yookassa: { ...DEFAULT_PAYMENT_CONFIG.yookassa, ...(data.yookassa || {}) },
+                    prodamus: { ...DEFAULT_PAYMENT_CONFIG.prodamus, ...(data.prodamus || {}) }
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setPaymentLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'users') fetchUsers();
         if (activeTab === 'features') fetchConfig();
+        if (activeTab === 'payments') fetchPaymentConfig();
     }, [activeTab]);
 
     const handleGrantPro = async () => {
@@ -188,6 +218,26 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             alert("Не удалось сохранить конфигурацию");
         } finally {
             setIsSavingConfig(false);
+        }
+    };
+
+    const handleSavePaymentConfig = async () => {
+        setIsSavingPayment(true);
+        try {
+            const token = await getToken();
+            await fetch('/api/admin?action=update_payment_config', {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(paymentConfig)
+            });
+            alert("Настройки интеграций сохранены!");
+        } catch (e) {
+            alert("Не удалось сохранить настройки платежей");
+        } finally {
+            setIsSavingPayment(false);
         }
     };
 
@@ -298,7 +348,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </div>
                 
                 {/* Main Tabs */}
-                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded-xl w-full max-w-lg overflow-x-auto">
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded-xl w-full max-w-2xl overflow-x-auto">
                     <button 
                         onClick={() => setActiveTab('users')}
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'users' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
@@ -310,6 +360,12 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'features' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
                         <Settings size={16} /> Настройки
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('payments')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'payments' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                    >
+                        <CreditCard size={16} /> Интеграции
                     </button>
                     <button 
                         onClick={() => setActiveTab('strategy')}
@@ -622,6 +678,133 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             Сохранить изменения
                         </button>
                     </div>
+                </div>
+            )}
+
+            {/* TAB: PAYMENTS */}
+            {activeTab === 'payments' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-2xl mx-auto">
+                    <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-6 rounded-2xl mb-8 text-center">
+                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежных Шлюзов</h2>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">Выберите активного провайдера для обработки новых платежей.</p>
+                    </div>
+
+                    {paymentLoading ? (
+                        <div className="flex justify-center p-12"><RefreshCw className="animate-spin text-zinc-400" /></div>
+                    ) : (
+                        <div className="space-y-6">
+                            {/* Provider Selection */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
+                                    <input 
+                                        type="radio" 
+                                        name="provider" 
+                                        value="yookassa" 
+                                        checked={paymentConfig.activeProvider === 'yookassa'}
+                                        onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                        className="sr-only"
+                                    />
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="w-10 h-10 rounded-full bg-[#7B61FF] text-white flex items-center justify-center font-bold text-xs">Yoo</div>
+                                        <span className="font-bold text-zinc-900 dark:text-white">ЮKassa</span>
+                                        {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                    </div>
+                                </label>
+
+                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
+                                    <input 
+                                        type="radio" 
+                                        name="provider" 
+                                        value="prodamus" 
+                                        checked={paymentConfig.activeProvider === 'prodamus'}
+                                        onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                        className="sr-only"
+                                    />
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">Pr</div>
+                                        <span className="font-bold text-zinc-900 dark:text-white">Prodamus</span>
+                                        {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                    </div>
+                                </label>
+                            </div>
+
+                            {/* YooKassa Settings */}
+                            <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-[#7B61FF]"></div>
+                                    Настройки ЮKassa
+                                </h3>
+                                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
+                                        <input 
+                                            type="text" 
+                                            value={paymentConfig.yookassa.shopId} 
+                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                            placeholder="Enter Shop ID"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
+                                        <input 
+                                            type="password" 
+                                            value={paymentConfig.yookassa.secretKey} 
+                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                            placeholder="test_..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Prodamus Settings */}
+                            <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                                    Настройки Prodamus
+                                </h3>
+                                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={paymentConfig.prodamus.url} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                                placeholder="https://yourschool.payform.ru"
+                                            />
+                                            <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
+                                                <ExternalLink size={16} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
+                                        <input 
+                                            type="password" 
+                                            value={paymentConfig.prodamus.secretKey} 
+                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                            placeholder="Secret key for signature"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex justify-end">
+                                <button 
+                                    onClick={handleSavePaymentConfig}
+                                    disabled={isSavingPayment}
+                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
+                                >
+                                    {isSavingPayment ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
+                                    Сохранить настройки
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
