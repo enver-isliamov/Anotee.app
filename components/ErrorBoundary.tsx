@@ -40,19 +40,19 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           
           <h1 className="text-2xl font-bold mb-3">
-            {isChunkError ? "Connection Failed" : "Something went wrong"}
+            {isChunkError ? "Ошибка соединения" : "Что-то пошло не так"}
           </h1>
           
           <p className="text-zinc-400 mb-6 max-w-md text-sm leading-relaxed">
             {isChunkError 
-                ? "The application failed to load necessary files. This usually happens due to unstable internet or blocked protocols." 
-                : "The application encountered an unexpected error."
+                ? "Приложению не удалось загрузить необходимые файлы. Это часто случается из-за нестабильного интернета или блокировок провайдера." 
+                : "Произошла непредвиденная ошибка в приложении."
             }
           </p>
 
           {/* Technical Details */}
           <div className="bg-zinc-900/80 p-4 rounded-lg border border-zinc-800 mb-8 max-w-md w-full overflow-hidden text-left">
-             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Error Details</div>
+             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Детали ошибки</div>
              <code className="font-mono text-xs text-red-300 block break-words">
                 {this.state.error?.message || "Unknown Error"}
              </code>
@@ -68,16 +68,16 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:scale-[1.02]"
             >
                 <RotateCw size={18} />
-                Reload Page
+                Обновить страницу
             </button>
 
             {isLikelyQuicBlock && (
                 <div className="mt-4 text-xs text-zinc-500">
-                    <p className="font-bold mb-1 text-zinc-400">If reloading doesn't work:</p>
+                    <p className="font-bold mb-1 text-zinc-400">Советы по исправлению:</p>
                     <ul className="list-disc pl-4 space-y-1 text-left">
-                        <li>Disable <strong>HTTP/3 (QUIC)</strong> in Cloudflare Network settings.</li>
-                        <li>Try opening in Incognito mode (Cache clear).</li>
-                        <li>Check if your ISP blocks UDP port 443.</li>
+                        <li>Включите <strong>VPN</strong>.</li>
+                        <li>Попробуйте открыть сайт через мобильный интернет.</li>
+                        <li>Попробуйте другой браузер (Chrome/Firefox).</li>
                     </ul>
                 </div>
             )}
