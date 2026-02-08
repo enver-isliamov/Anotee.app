@@ -107,19 +107,23 @@
 
 Для стабильной работы в РФ необходимо скрыть IP Vercel за прокси Cloudflare, но при этом отключить современные протоколы шифрования, которые блокируются ТСПУ (DPI).
 
-**Настройки Cloudflare (Оранжевое облако / Proxied):**
+**Настройки Cloudflare (Вкладка DNS):**
 
-1.  **DNS**:
-    *   `A | anotee.com` -> **Proxied**
-    *   `CNAME | www` -> **Proxied**
-    *   *Цель:* Скрыть IP `76.76.21.21` (он забанен).
+1.  **Проверка NS-серверов (В регистраторе домена):**
+    *   Убедитесь, что домен делегирован на NS-серверы Cloudflare (например, `joselyn.ns.cloudflare.com`), а не Beget/Reg.ru.
+    *   *Симптом ошибки:* В панели хостинга (Beget) написано "Домен делегирован сторонним DNS". Это хорошо! Значит, управляем через Cloudflare.
 
-2.  **Network**:
+2.  **DNS Записи (CNAME Flattening):**
+    *   `CNAME | @ | cname.vercel-dns.com` -> **Proxied (Оранжевое облако)**
+    *   `CNAME | www | cname.vercel-dns.com` -> **Proxied (Оранжевое облако)**
+    *   *Важно:* Удалите все `A` записи для корня (`@`), если используете CNAME Flattening. Это самый надежный способ.
+
+3.  **Network (Вкладка Network):**
     *   **HTTP/3 (with QUIC)**: ⛔ **OFF**
     *   **0-RTT Connection Resumption**: ⛔ **OFF**
-    *   **IPv6 Compatibility**: ⛔ **OFF** (Важно! РКН часто блокирует IPv6 подсети).
+    *   **IPv6 Compatibility**: ⛔ **OFF** (Отключается через API/Консоль).
 
-3.  **SSL/TLS -> Edge Certificates**:
+4.  **SSL/TLS (Вкладка Edge Certificates):**
     *   **TLS 1.3**: ⛔ **OFF** (Disabled).
     *   **Minimum TLS Version**: **1.2**.
-    *   *Цель:* Отключение TLS 1.3 автоматически отключает **ECH (Encrypted Client Hello)**, который является главной причиной блокировок Cloudflare в 2024-2025 годах.
+    *   *Цель:* Отключение TLS 1.3 автоматически отключает **ECH**, который блокируется ТСПУ.
