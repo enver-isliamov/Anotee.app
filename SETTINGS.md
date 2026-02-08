@@ -42,7 +42,7 @@
 ### 1. Формат Ссылки (URL Format)
 *   **ОБЯЗАТЕЛЬНО**: Использовать "Legacy" формат экспорта:
     `https://drive.google.com/uc?export=download&confirm=t&id={FILE_ID}`
-*   **ЗАПРЕЩЕНО**: Использовать `googleapis.com/drive/v3/files/...` с заголовком `Authorization`.
+*   **ЗАПРЕЩЕНО**: Использовать API v3 (`googleapis.com/drive/v3/files/...`) с заголовком `Authorization`.
     *   *Причина*: Браузер отправляет `OPTIONS` запрос (preflight) перед загрузкой видео. Google API для эндпоинта `/files` часто блокирует заголовки `Range` (необходимые для перемотки) в CORS-ответах, если передается токен авторизации. Ссылки формата `uc?export=download` работают через стандартные Cookie/Public access и поддерживают Byte-Range запросы.
 
 ### 2. Атрибут CORS (Cross-Origin Attribute)
@@ -103,16 +103,27 @@
     *   Родительский контейнер заголовка в `Player.tsx` не должен иметь `overflow: hidden`, чтобы список мог выпадать поверх видео.
 
 ## 9. Доступность в РФ (Cloudflare Settings)
-**⚠️ КРИТИЧНО ДЛЯ РАБОТЫ В РОССИИ ⚠️**
+**⚠️ КРИТИЧНО ДЛЯ РАБОТЫ В РОССИИ (RKN Bypass) ⚠️**
 
-Из-за особенностей блокировок DPI и проблем с IPv6/HTTP3 через прокси Cloudflare, для доменов на Vercel необходимо использовать режим **DNS Only**.
+Для стабильной работы в РФ необходимо скрыть IP Vercel за прокси Cloudflare, но при этом отключить современные протоколы шифрования, которые блокируются ТСПУ (DPI).
 
-*   **Настройка Cloudflare**:
-    1.  Перейти в **DNS** -> **Records**.
-    2.  Найти записи `A` (root) и `CNAME` (www).
-    3.  Переключить **Proxy status** в состояние **DNS Only** (Серое облако / Grey Cloud).
-    4.  Сохранить.
+**Настройки Cloudflare (Вкладка DNS):**
 
-*   **Почему это нужно**:
-    *   В режиме "Orange Cloud" (Proxied) Cloudflare принудительно включает IPv6 Compatibility, который часто сбрасывает соединения (ERR_CONNECTION_RESET) у российских провайдеров при загрузке JS-скриптов.
-    *   Vercel предоставляет свой собственный SSL и DDoS защиту, поэтому проксирование через Cloudflare не является обязательным для безопасности, но мешает доступности.
+1.  **Проверка NS-серверов (В регистраторе домена):**
+    *   Убедитесь, что домен делегирован на NS-серверы Cloudflare (например, `joselyn.ns.cloudflare.com`), а не Beget/Reg.ru.
+    *   *Симптом ошибки:* В панели хостинга (Beget) написано "Домен делегирован сторонним DNS". Это хорошо! Значит, управляем через Cloudflare.
+
+2.  **DNS Записи (CNAME Flattening):**
+    *   `CNAME | @ | cname.vercel-dns.com` -> **Proxied (Оранжевое облако)**
+    *   `CNAME | www | cname.vercel-dns.com` -> **Proxied (Оранжевое облако)**
+    *   *Важно:* Удалите все `A` записи для корня (`@`), если используете CNAME Flattening. Это самый надежный способ.
+
+3.  **Network (Вкладка Network):**
+    *   **HTTP/3 (with QUIC)**: ⛔ **OFF**
+    *   **0-RTT Connection Resumption**: ⛔ **OFF**
+    *   **IPv6 Compatibility**: ⛔ **OFF** (Отключается через API/Консоль).
+
+4.  **SSL/TLS (Вкладка Edge Certificates):**
+    *   **TLS 1.3**: ⛔ **OFF** (Disabled).
+    *   **Minimum TLS Version**: **1.2**.
+    *   *Цель:* Отключение TLS 1.3 автоматически отключает **ECH**, который блокируется ТСПУ.
