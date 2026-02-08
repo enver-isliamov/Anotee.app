@@ -18,7 +18,7 @@ import { MainLayout } from './components/MainLayout';
 import { GoogleDriveService } from './services/googleDrive';
 import { useUser, useClerk, useAuth, ClerkProvider, useOrganization } from '@clerk/clerk-react';
 import { api } from './services/apiClient';
-import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw, PartyPopper } from 'lucide-react';
+import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw, PartyPopper, WifiOff, Shield } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
@@ -562,7 +562,32 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   // --- RENDER ---
 
-  if (!isLoaded) return <div className="h-screen w-screen bg-zinc-950 flex flex-col items-center justify-center p-4"><Loader2 size={32} className="text-indigo-500 animate-spin mb-4" />{showTimeoutMsg && <div className="text-zinc-500 text-sm">Loading is taking longer than usual...</div>}</div>;
+  if (!isLoaded) return (
+        <div className="h-screen w-screen bg-zinc-950 flex flex-col items-center justify-center p-4 text-center">
+            <Loader2 size={48} className="text-indigo-500 animate-spin mb-6" />
+            {showTimeoutMsg && (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-sm bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-2xl">
+                    <div className="flex justify-center mb-4">
+                        <div className="p-3 bg-red-500/10 rounded-full text-red-500">
+                            <WifiOff size={24} />
+                        </div>
+                    </div>
+                    <h3 className="text-white font-bold mb-2">Медленное соединение</h3>
+                    <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
+                        Загрузка занимает дольше обычного. Это часто случается из-за замедления трафика провайдером.
+                    </p>
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-left">
+                        <p className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Рекомендация:</p>
+                        <p className="text-zinc-300 text-xs flex items-center gap-2">
+                            <Shield size={12} className="text-indigo-500" />
+                            Попробуйте включить <strong>VPN</strong>
+                        </p>
+                    </div>
+                </div>
+            )}
+        </div>
+  );
+
   if (view.type === 'LIVE_DEMO') return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
