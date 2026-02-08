@@ -39,11 +39,11 @@ export const LegalPage: React.FC<LegalPageProps> = ({ type }) => {
                 <p>2.2. Территория использования: весь мир. Срок использования: определяется оплаченным Тарифом.</p>
             </section>
 
-            <section>
+            <section className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl">
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">3. Стоимость и порядок расчетов</h3>
-                <p>3.1. Стоимость лицензии определяется Тарифами, опубликованными на сайте в разделе «Цены» (Pricing).</p>
-                <p>3.2. Оплата производится в безналичном порядке через платежного агрегатора ЮKassa.</p>
-                <p>3.3. Исполнитель применяет специальный налоговый режим «Налог на профессиональный доход». Чеки формируются и направляются Пользователю в электронном виде на Email.</p>
+                <p>3.1. Стоимость лицензии определяется Тарифами, опубликованными на сайте в сети Интернет по адресу: <strong><a href="/pricing" className="text-indigo-600 dark:text-indigo-400 underline">https://anotee.com/pricing</a></strong>. Указанная страница является неотъемлемой частью настоящей Оферты.</p>
+                <p className="mt-2">3.2. Оплата производится в безналичном порядке через платежного агрегатора (Prodamus/ЮKassa). Обязательство по оплате считается исполненным с момента зачисления средств на счет платежного агента Исполнителя.</p>
+                <p className="mt-2">3.3. Исполнитель применяет специальный налоговый режим «Налог на профессиональный доход». НДС не облагается. Чеки формируются и направляются Пользователю в электронном виде на Email, указанный при оплате.</p>
             </section>
 
             <section className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
@@ -85,8 +85,9 @@ export const LegalPage: React.FC<LegalPageProps> = ({ type }) => {
 
             <section className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">Реквизиты Исполнителя</h3>
-                <div className="text-xs font-mono bg-zinc-50 dark:bg-zinc-900 p-4 rounded-lg">
-                    <p className="font-bold">{CONTACT_INFO.name}</p>
+                <div className="text-xs font-mono bg-zinc-50 dark:bg-zinc-900 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <p className="font-bold text-sm mb-2">{CONTACT_INFO.name}</p>
+                    <p>{CONTACT_INFO.status}</p>
                     <p>ИНН: {CONTACT_INFO.inn}</p>
                     <p>Email: {CONTACT_INFO.email}</p>
                     <p>Телефон: {CONTACT_INFO.phone}</p>
@@ -104,90 +105,46 @@ export const LegalPage: React.FC<LegalPageProps> = ({ type }) => {
 
             <section>
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">1. Общие положения</h3>
-                <p>Настоящая Политика описывает порядок обработки персональных данных при использовании сервиса Anotee. Оператором данных является {CONTACT_INFO.name} (ИНН {CONTACT_INFO.inn}). Мы уважаем вашу конфиденциальность и обрабатываем данные в соответствии с законодательством.</p>
+                <p>Настоящая Политика описывает порядок обработки персональных данных при использовании сервиса Anotee. Оператором данных является {CONTACT_INFO.name} (ИНН {CONTACT_INFO.inn}). Мы уважаем вашу конфиденциальность и обрабатываем данные в соответствии с законодательством РФ (ФЗ-152).</p>
             </section>
 
             <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">2. Персональные данные, подлежащие обработке</h3>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">2. Персональные данные</h3>
                 <ul className="list-disc pl-5 space-y-1">
-                    <li><strong>Идентификационные данные:</strong> Email, имя, фото профиля (предоставляются через сервис Clerk/Google).</li>
-                    <li><strong>Данные контента:</strong> Загруженные видео, комментарии, текстовые расшифровки (транскрипты), названия проектов.</li>
-                    <li><strong>Технические данные:</strong> IP-адрес, тип устройства, версия браузера, файлы cookie, логи активности.</li>
-                    <li><strong>Платежные данные:</strong> Токен платежного метода и маскированный номер карты (хранятся на стороне ЮKassa, мы получаем только идентификатор для рекуррентных списаний).</li>
+                    <li><strong>Идентификация:</strong> Email, имя, фото (через Clerk/Google).</li>
+                    <li><strong>Контент:</strong> Проекты, комментарии, метаданные видео.</li>
+                    <li><strong>Технические данные:</strong> IP-адрес, cookie, логи.</li>
+                    <li><strong>Платежи:</strong> Мы не храним полные данные карт. Обработка производится на стороне сертифицированного оператора (Продамус/ЮKassa).</li>
                 </ul>
             </section>
 
             <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">3. Цели обработки персональных данных</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                    <li>Предоставление доступа к функционалу Сервиса (совместная работа, плеер).</li>
-                    <li>Осуществление платежей и управление подписками.</li>
-                    <li>Обеспечение безопасности аккаунта и предотвращение мошенничества.</li>
-                    <li>Связь с пользователем (техническая поддержка, уведомления об изменениях).</li>
-                    <li>Выполнение требований законодательства (налоговый учет).</li>
-                </ul>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">4. Передача данных третьим сторонам</h3>
-                <p>Для обеспечения работы Сервиса мы используем надежных партнеров. Вы соглашаетесь на передачу (включая трансграничную) данных следующим обработчикам:</p>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">3. Цели и Передача</h3>
+                <p>Данные используются для предоставления доступа к Сервису и исполнения оферты. Мы передаем данные партнерам только для этих целей:</p>
                 <div className="grid md:grid-cols-2 gap-4 mt-3">
                     <div className="p-3 border rounded border-zinc-200 dark:border-zinc-800">
-                        <span className="font-bold block text-zinc-900 dark:text-white">Clerk Inc. (США)</span>
-                        <span className="text-xs">Аутентификация, управление сессиями.</span>
+                        <span className="font-bold block text-zinc-900 dark:text-white">Clerk Inc.</span>
+                        <span className="text-xs">Авторизация</span>
                     </div>
                     <div className="p-3 border rounded border-zinc-200 dark:border-zinc-800">
-                        <span className="font-bold block text-zinc-900 dark:text-white">Vercel Inc. (США)</span>
-                        <span className="text-xs">Хостинг инфраструктуры, базы данных, хранение файлов.</span>
+                        <span className="font-bold block text-zinc-900 dark:text-white">Vercel Inc.</span>
+                        <span className="text-xs">Хостинг и База данных</span>
                     </div>
                     <div className="p-3 border rounded border-zinc-200 dark:border-zinc-800">
-                        <span className="font-bold block text-zinc-900 dark:text-white">Google LLC (США)</span>
-                        <span className="text-xs">Интеграция с Google Drive (по запросу пользователя).</span>
+                        <span className="font-bold block text-zinc-900 dark:text-white">Google LLC</span>
+                        <span className="text-xs">Интеграция Drive</span>
                     </div>
                     <div className="p-3 border rounded border-zinc-200 dark:border-zinc-800">
-                        <span className="font-bold block text-zinc-900 dark:text-white">ЮMoney / ЮKassa (РФ)</span>
-                        <span className="text-xs">Обработка платежей и чеков.</span>
+                        <span className="font-bold block text-zinc-900 dark:text-white">Prodamus / ЮKassa</span>
+                        <span className="text-xs">Прием платежей</span>
                     </div>
                 </div>
             </section>
 
-            <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">5. Правовые основания и Сроки хранения</h3>
-                <p>5.1. Обработка осуществляется на основании исполнения Договора (Оферты), согласия субъекта и законных интересов Оператора.</p>
-                <p>5.2. Персональные данные хранятся в течение срока использования Сервиса и 5 лет после удаления аккаунта (в части, необходимой для налоговой отчетности).</p>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">6. Права пользователей</h3>
-                <p>Вы имеете право:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                    <li>Отозвать согласие на обработку (через удаление аккаунта).</li>
-                    <li>Запросить копию своих данных.</li>
-                    <li>Отменить подписку и удалить платежные методы.</li>
-                </ul>
-                <p className="mt-2 text-xs">Для реализации прав пишите на {CONTACT_INFO.email}.</p>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">7. Обработка данных пользователями через Anotee</h3>
-                <p>В отношении контента (видео), который вы загружаете в Anotee, вы выступаете Оператором данных, а Anotee — Обработчиком. Вы несете ответственность за получение согласия лиц, изображенных на ваших видео, на обработку их изображений в нашем Сервисе.</p>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">8. Использование куки (Cookies)</h3>
-                <p>Мы используем технические файлы cookie для авторизации и сохранения настроек интерфейса. Мы не используем сторонние рекламные cookie. Отключение cookie может привести к недоступности Сервиса.</p>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">9. Автоматизированная обработка</h3>
-                <p>Сервис предоставляет функции на базе ИИ (транскрибация речи). Обработка происходит автоматически. Пользователь понимает, что машинная обработка может содержать неточности и не является юридически значимой расшифровкой.</p>
-            </section>
-
             <section className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">Заключение</h3>
-                <p>Политика может обновляться. Продолжение использования Сервиса означает согласие с изменениями.</p>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-3">Контакты</h3>
                 <div className="mt-4 text-xs text-zinc-500">
-                    Контакты: {CONTACT_INFO.email}
+                    По вопросам данных пишите на: {CONTACT_INFO.email}
                 </div>
             </section>
         </div>
