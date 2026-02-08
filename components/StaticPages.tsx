@@ -223,7 +223,7 @@ export const AboutPage: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         {['React 19', 'TypeScript', 'Tailwind', 'Vercel Blob', 'Postgres', 'Vite'].map(tech => (
-                            <div key={tech} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 rounded-xl text-sm text-zinc-600 dark:text-zinc-400 font-mono text-center hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-default shadow-sm">
+                            <div key={tech} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-4 py-3 rounded-xl text-sm text-zinc-600 dark:text-zinc-400 font-mono text-center hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-default shadow-sm">
                                 {tech}
                             </div>
                         ))}
@@ -255,6 +255,15 @@ export const AboutPage: React.FC = () => {
 
 export const PricingPage: React.FC = () => {
     const { t } = useLanguage();
+    
+    // КОНТАКТНЫЕ ДАННЫЕ ИСПОЛНИТЕЛЯ (Для Продамуса)
+    const CONTACT_INFO = {
+        name: "ИСЛЯМОВ ЭНВЕР ЯКУБОВИЧ",
+        status: "ИП/Самозанятый",
+        inn: "910228340090",
+        email: "enver.isliamov@yandex.com"
+    };
+
     return (
         <div className="max-w-5xl mx-auto py-8">
              <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-8 text-center">{t('page.pricing.title')}</h1>
@@ -279,6 +288,15 @@ export const PricingPage: React.FC = () => {
              </div>
 
              <RoadmapBlock />
+             
+             {/* LEGAL FOOTER FOR PAYMENT PROCESSOR COMPLIANCE */}
+             <div className="mt-16 pt-8 border-t border-zinc-200 dark:border-zinc-800 text-center">
+                 <p className="text-xs text-zinc-500 dark:text-zinc-600">
+                     Услуги оказывает: {CONTACT_INFO.status} {CONTACT_INFO.name} (ИНН {CONTACT_INFO.inn}). <br/>
+                     НДС не облагается (Налог на профессиональный доход). <br/>
+                     По вопросам оплаты: <a href={`mailto:${CONTACT_INFO.email}`} className="underline">{CONTACT_INFO.email}</a>
+                 </p>
+             </div>
         </div>
     );
 };
