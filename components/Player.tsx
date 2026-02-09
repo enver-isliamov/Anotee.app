@@ -485,7 +485,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         let frameSamples: number[] = [];
         let lastMediaTime = -1;
 
-        const fpsCallback = (now: number, metadata: any) => { // metadata type is VideoFrameCallbackMetadata
+        const fpsCallback = (now: number, metadata: any) => { // metadata type is VideoFrameCallbackMetadata.
             const mediaTime = metadata.mediaTime;
             
             // We need valid sequential frames
