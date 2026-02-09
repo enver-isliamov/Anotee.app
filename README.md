@@ -58,6 +58,10 @@
 *   **Роли:** Владелец, Редактор, Наблюдатель.
 *   **Организации:** Управление командами через Clerk Organizations.
 
+### 🛡️ Администрирование
+*   **Admin Panel:** Полный контроль пользователей и подписок.
+*   **Feature Flags:** Управление функционалом без пересборки приложения.
+
 ---
 
 ## 🏆 Founder's Club (Маркетинг)
@@ -83,8 +87,9 @@
 *   **Styling:** Tailwind CSS, Lucide Icons
 *   **Auth & Users:** Clerk (Organizations, Metadata sync)
 *   **Backend / DB:** Vercel Serverless Functions, Vercel Postgres (Neon)
-*   **Storage:** Vercel Blob + Google Drive API
-*   **Payments:** ЮKassa (API v3) + Vercel Cron
+*   **Storage:** Google Drive API (Primary), Vercel Blob (System)
+*   **Payments:** ЮKassa API v3, Prodamus (Multi-provider support)
+*   **Automation:** Vercel Cron (Auto-renewal)
 *   **AI:** HuggingFace Transformers.js (In-browser execution)
 
 ---
