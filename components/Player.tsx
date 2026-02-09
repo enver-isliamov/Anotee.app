@@ -232,7 +232,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isDragRef = useRef(false); 
   
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean }>({ startX: 0, startTime: 0, isDragging: false });
+  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false });
 
   // Floating controls position
   const [controlsPos, setControlsPos] = useState(() => {
@@ -524,12 +524,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       videoScrubRef.current = { 
           startX: e.clientX, 
           startTime: currentTime, 
-          isDragging: false 
+          isDragging: false,
+          isPressed: true // CRITICAL: Mark as pressed to filter hovers
       }; 
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); 
   };
 
   const handleVideoDragMove = (e: React.PointerEvent) => { 
+      // IGNORE if not pressed (hover)
+      if (!videoScrubRef.current.isPressed) return;
+
       const { startX, startTime, isDragging } = videoScrubRef.current;
 
       // Threshold check (10px dead zone)
@@ -557,12 +561,13 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleVideoDragEnd = (e: React.PointerEvent) => { 
       // If we didn't drag past threshold, interpret as click (Play/Pause)
-      if (!videoScrubRef.current.isDragging) {
+      if (videoScrubRef.current.isPressed && !videoScrubRef.current.isDragging) {
           togglePlay();
       }
 
       setIsVideoScrubbing(false); 
       videoScrubRef.current.isDragging = false; 
+      videoScrubRef.current.isPressed = false; // Reset pressed state
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); 
   };
 
