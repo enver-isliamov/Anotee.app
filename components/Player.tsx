@@ -232,7 +232,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isDragRef = useRef(false); 
   
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number }>({ startX: 0, startTime: 0 });
+  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false });
 
   // Floating controls position
   const [controlsPos, setControlsPos] = useState(() => {
@@ -518,9 +518,58 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
 
   // VIDEO PRECISION SCRUBBING
-  const handleVideoDragStart = (e: React.PointerEvent) => { e.preventDefault(); setIsVideoScrubbing(true); if (isPlaying) togglePlay(); videoScrubRef.current = { startX: e.clientX, startTime: currentTime }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleVideoDragMove = (e: React.PointerEvent) => { if (!isVideoScrubbing) return; const deltaX = e.clientX - videoScrubRef.current.startX; const pixelsPerFrame = 5; const framesMoved = deltaX / pixelsPerFrame; const timeChange = framesMoved * (1 / videoFps); const newTime = Math.max(0, Math.min(duration, videoScrubRef.current.startTime + timeChange)); setCurrentTime(newTime); if(videoRef.current) videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handleVideoDragEnd = (e: React.PointerEvent) => { setIsVideoScrubbing(false); (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); };
+  const handleVideoDragStart = (e: React.PointerEvent) => { 
+      e.preventDefault(); 
+      // Capture initial state
+      videoScrubRef.current = { 
+          startX: e.clientX, 
+          startTime: currentTime, 
+          isDragging: false,
+          isPressed: true // CRITICAL: Mark as pressed to filter hovers
+      }; 
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); 
+  };
+
+  const handleVideoDragMove = (e: React.PointerEvent) => { 
+      // IGNORE if not pressed (hover)
+      if (!videoScrubRef.current.isPressed) return;
+
+      const { startX, startTime, isDragging } = videoScrubRef.current;
+
+      // Threshold check (10px dead zone)
+      if (!isDragging) {
+          if (Math.abs(e.clientX - startX) > 10) {
+              videoScrubRef.current.isDragging = true;
+              setIsVideoScrubbing(true); // Visual feedback
+              if (isPlaying) togglePlay(); // Pause for scrubbing
+          } else {
+              return; // Inside dead zone
+          }
+      }
+
+      // Scrubbing logic
+      const deltaX = e.clientX - startX; 
+      const pixelsPerFrame = 5; 
+      const framesMoved = deltaX / pixelsPerFrame; 
+      const timeChange = framesMoved * (1 / videoFps); 
+      const newTime = Math.max(0, Math.min(duration, startTime + timeChange)); 
+      
+      setCurrentTime(newTime); 
+      if(videoRef.current) videoRef.current.currentTime = newTime; 
+      if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; 
+  };
+
+  const handleVideoDragEnd = (e: React.PointerEvent) => { 
+      // If we didn't drag past threshold, interpret as click (Play/Pause)
+      if (videoScrubRef.current.isPressed && !videoScrubRef.current.isDragging) {
+          togglePlay();
+      }
+
+      setIsVideoScrubbing(false); 
+      videoScrubRef.current.isDragging = false; 
+      videoScrubRef.current.isPressed = false; // Reset pressed state
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); 
+  };
 
   const toggleFullScreen = () => { if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen(); else document.exitFullscreen(); };
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
