@@ -533,7 +533,32 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
-  const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
+  
+  const handleVideoError = async () => { 
+      if (loadingDrive) return; 
+      
+      // Strict logic for Drive files: try fallback once, then fail.
+      if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
+          if (!driveUrlRetried) { 
+              setDriveUrlRetried(true); 
+              // IMPORTANT: Add &confirm=t to bypass virus scan warning for large files, which causes network errors
+              const fallbackUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&retry=${Date.now()}`; 
+              setDriveUrl(fallbackUrl); 
+              return; 
+          } 
+          setLoadingDrive(true); 
+          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
+          setLoadingDrive(false); 
+          if (status !== 'ok') { 
+              setDriveFileMissing(true); 
+          } else { 
+              setDrivePermissionError(true); 
+              setVideoError(true); 
+          } 
+      } else { 
+          setVideoError(true); 
+      } 
+  };
   
   // TIMELINE SCRUBBING
   const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
@@ -670,6 +695,19 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   if (!version) return null; 
+
+  // CRITICAL FIX: Safe source selection to avoid race conditions with Drive URLs
+  const getSafeSrc = () => {
+      if (localFileSrc) return localFileSrc;
+      if (!isMockMode && version.storageType === 'drive') {
+          // If it's a Drive file, we MUST use the driveUrl calculated by useEffect.
+          // Fallback to empty string if not ready, to prevent <video> from erroring on stale version.url
+          return driveUrl || undefined; 
+      }
+      return version.url; // Legacy/Mock fallback
+  };
+
+  const effectiveSrc = getSafeSrc();
 
   return (
     <div className="flex flex-col h-[100dvh] bg-white dark:bg-zinc-950 overflow-hidden select-none fixed inset-0 transition-colors">
@@ -812,7 +850,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
                     {/* FIXED: Removed crossOrigin="anonymous" to comply with SETTINGS.md for Drive uc links */}
-                    <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
+                    {effectiveSrc && (
+                        <video key={version.id} ref={videoRef} src={effectiveSrc} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
+                    )}
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
                 <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoPointerDown} onPointerMove={handleVideoPointerMove} onPointerUp={handleVideoPointerUp} onPointerLeave={handleVideoPointerUp} onContextMenu={(e) => e.preventDefault()}></div>
