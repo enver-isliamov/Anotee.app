@@ -236,7 +236,13 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isDragRef = useRef(false); 
   
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number, wasPlaying: boolean, isDragging: boolean }>({ startX: 0, startTime: 0, wasPlaying: false, isDragging: false });
+  const videoScrubRef = useRef<{ startX: number, startTime: number, startTimestamp: number, wasPlaying: boolean, isDragging: boolean }>({ 
+      startX: 0, 
+      startTime: 0,
+      startTimestamp: 0, 
+      wasPlaying: false, 
+      isDragging: false 
+  });
 
   // Floating controls position
   const [controlsPos, setControlsPos] = useState(() => {
@@ -538,18 +544,21 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // VIDEO PRECISION SCRUBBING - REFACTORED
   const handleVideoPointerDown = (e: React.PointerEvent) => { 
       e.preventDefault(); 
+      e.stopPropagation(); // Stop bubbling to avoid double triggers
       videoScrubRef.current = { 
           startX: e.clientX, 
-          startTime: currentTime, 
+          startTime: currentTime,
+          startTimestamp: Date.now(),
           wasPlaying: isPlaying,
-          isDragging: false // Reset strict
+          isDragging: false 
       }; 
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); 
   };
 
   const handleVideoPointerMove = (e: React.PointerEvent) => { 
+      e.preventDefault();
       // Safe guard against weird initial events
-      if (videoScrubRef.current.startX === 0) return;
+      if (videoScrubRef.current.startTimestamp === 0) return;
 
       const deltaX = e.clientX - videoScrubRef.current.startX;
       
@@ -578,16 +587,20 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   const handleVideoPointerUp = (e: React.PointerEvent) => { 
+      e.preventDefault();
+      e.stopPropagation();
       setIsVideoScrubbing(false); 
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); 
       
-      // If we didn't drag (distance < 15px), treat as CLICK -> Toggle Play
-      if (!videoScrubRef.current.isDragging) {
+      const isShortClick = (Date.now() - videoScrubRef.current.startTimestamp) < 200;
+      
+      // If we didn't drag OR it was a very quick tap, treat as CLICK -> Toggle Play
+      if (!videoScrubRef.current.isDragging || isShortClick) {
           togglePlay();
       }
       
       // Reset ref
-      videoScrubRef.current = { startX: 0, startTime: 0, wasPlaying: false, isDragging: false };
+      videoScrubRef.current = { startX: 0, startTime: 0, startTimestamp: 0, wasPlaying: false, isDragging: false };
   };
 
   const toggleFullScreen = async () => { 
@@ -802,7 +815,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
-                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoPointerDown} onPointerMove={handleVideoPointerMove} onPointerUp={handleVideoPointerUp} onPointerLeave={handleVideoPointerUp}></div>
+                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoPointerDown} onPointerMove={handleVideoPointerMove} onPointerUp={handleVideoPointerUp} onPointerLeave={handleVideoPointerUp} onContextMenu={(e) => e.preventDefault()}></div>
              </div>
           </div>
 
