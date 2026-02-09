@@ -213,11 +213,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isLocked = project.isLocked || version?.isLocked || false;
   
   const [showMobileViewMenu, setShowMobileViewMenu] = useState(false);
-  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
-  const [isManualFullscreen, setIsManualFullscreen] = useState(false);
-  
-  const isFullscreen = isNativeFullscreen || isManualFullscreen;
-
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -236,13 +232,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isDragRef = useRef(false); 
   
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number, startTimestamp: number, wasPlaying: boolean, isDragging: boolean }>({ 
-      startX: 0, 
-      startTime: 0,
-      startTimestamp: 0, 
-      wasPlaying: false, 
-      isDragging: false 
-  });
+  const videoScrubRef = useRef<{ startX: number, startTime: number }>({ startX: 0, startTime: 0 });
 
   // Floating controls position
   const [controlsPos, setControlsPos] = useState(() => {
@@ -460,21 +450,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   }, [version?.id, isMockMode, isOwner]); 
 
   // Player Handlers
-  useEffect(() => { 
-      const handleFsChange = () => { 
-          // Standard API check
-          const isFs = !!document.fullscreenElement; 
-          setIsNativeFullscreen(isFs); 
-          if (!isFs && !isManualFullscreen) setShowVoiceModal(false); 
-      }; 
-      document.addEventListener('fullscreenchange', handleFsChange); 
-      // Also handle webkitfullscreenchange for iOS if supported
-      document.addEventListener('webkitfullscreenchange', handleFsChange);
-      return () => {
-          document.removeEventListener('fullscreenchange', handleFsChange);
-          document.removeEventListener('webkitfullscreenchange', handleFsChange);
-      }
-  }, [isManualFullscreen]);
+  useEffect(() => { const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); }; document.addEventListener('fullscreenchange', handleFsChange); return () => document.removeEventListener('fullscreenchange', handleFsChange); }, []);
   
   // REAL FRAME RATE DETECTION using requestVideoFrameCallback
   useEffect(() => {
@@ -533,32 +509,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
-  
-  const handleVideoError = async () => { 
-      if (loadingDrive) return; 
-      
-      // Strict logic for Drive files: try fallback once, then fail.
-      if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
-          if (!driveUrlRetried) { 
-              setDriveUrlRetried(true); 
-              // IMPORTANT: Add &confirm=t to bypass virus scan warning for large files, which causes network errors
-              const fallbackUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${version.googleDriveId}&retry=${Date.now()}`; 
-              setDriveUrl(fallbackUrl); 
-              return; 
-          } 
-          setLoadingDrive(true); 
-          const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); 
-          setLoadingDrive(false); 
-          if (status !== 'ok') { 
-              setDriveFileMissing(true); 
-          } else { 
-              setDrivePermissionError(true); 
-              setVideoError(true); 
-          } 
-      } else { 
-          setVideoError(true); 
-      } 
-  };
+  const handleVideoError = async () => { if (loadingDrive) return; if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } setLoadingDrive(true); const status = await GoogleDriveService.checkFileStatus(version.googleDriveId); setLoadingDrive(false); if (status !== 'ok') { setDriveFileMissing(true); } else { setDrivePermissionError(true); setVideoError(true); } } else { setVideoError(true); } };
   
   // TIMELINE SCRUBBING
   const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
@@ -566,91 +517,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const updateScrubPosition = (e: React.PointerEvent) => { if (!timelineRef.current || !videoRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const percentage = x / rect.width; const newTime = percentage * duration; setCurrentTime(newTime); videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
   const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
 
-  // VIDEO PRECISION SCRUBBING - REFACTORED
-  const handleVideoPointerDown = (e: React.PointerEvent) => { 
-      e.preventDefault(); 
-      e.stopPropagation(); // Stop bubbling to avoid double triggers
-      videoScrubRef.current = { 
-          startX: e.clientX, 
-          startTime: currentTime,
-          startTimestamp: Date.now(),
-          wasPlaying: isPlaying,
-          isDragging: false 
-      }; 
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); 
-  };
+  // VIDEO PRECISION SCRUBBING
+  const handleVideoDragStart = (e: React.PointerEvent) => { e.preventDefault(); setIsVideoScrubbing(true); if (isPlaying) togglePlay(); videoScrubRef.current = { startX: e.clientX, startTime: currentTime }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
+  const handleVideoDragMove = (e: React.PointerEvent) => { if (!isVideoScrubbing) return; const deltaX = e.clientX - videoScrubRef.current.startX; const pixelsPerFrame = 5; const framesMoved = deltaX / pixelsPerFrame; const timeChange = framesMoved * (1 / videoFps); const newTime = Math.max(0, Math.min(duration, videoScrubRef.current.startTime + timeChange)); setCurrentTime(newTime); if(videoRef.current) videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
+  const handleVideoDragEnd = (e: React.PointerEvent) => { setIsVideoScrubbing(false); (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); };
 
-  const handleVideoPointerMove = (e: React.PointerEvent) => { 
-      e.preventDefault();
-      // Safe guard against weird initial events
-      if (videoScrubRef.current.startTimestamp === 0) return;
-
-      const deltaX = e.clientX - videoScrubRef.current.startX;
-      
-      // Increased threshold to 15px to distinguish clumsy taps from swipes
-      if (!videoScrubRef.current.isDragging && Math.abs(deltaX) > 15) {
-          videoScrubRef.current.isDragging = true;
-          // Only now we enter scrubbing mode
-          setIsVideoScrubbing(true);
-          // Pause if was playing
-          if (videoScrubRef.current.wasPlaying) {
-              setIsPlaying(false);
-              videoRef.current?.pause();
-          }
-      }
-
-      if (videoScrubRef.current.isDragging) {
-          const pixelsPerFrame = 5; 
-          const framesMoved = deltaX / pixelsPerFrame; 
-          const timeChange = framesMoved * (1 / videoFps); 
-          const newTime = Math.max(0, Math.min(duration, videoScrubRef.current.startTime + timeChange)); 
-          
-          setCurrentTime(newTime); 
-          if(videoRef.current) videoRef.current.currentTime = newTime; 
-          if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; 
-      }
-  };
-
-  const handleVideoPointerUp = (e: React.PointerEvent) => { 
-      e.preventDefault();
-      e.stopPropagation();
-      setIsVideoScrubbing(false); 
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); 
-      
-      const isShortClick = (Date.now() - videoScrubRef.current.startTimestamp) < 200;
-      
-      // If we didn't drag OR it was a very quick tap, treat as CLICK -> Toggle Play
-      if (!videoScrubRef.current.isDragging || isShortClick) {
-          togglePlay();
-      }
-      
-      // Reset ref
-      videoScrubRef.current = { startX: 0, startTime: 0, startTimestamp: 0, wasPlaying: false, isDragging: false };
-  };
-
-  const toggleFullScreen = async () => { 
-      // Manual Toggle (Close)
-      if (isManualFullscreen) {
-          setIsManualFullscreen(false);
-          return;
-      }
-
-      // Try Native API
-      try {
-          if (playerContainerRef.current?.requestFullscreen) {
-              await playerContainerRef.current.requestFullscreen();
-          } else if ((playerContainerRef.current as any)?.webkitRequestFullscreen) {
-              await (playerContainerRef.current as any).webkitRequestFullscreen();
-          } else {
-              throw new Error("API unsupported");
-          }
-      } catch (e) {
-          // Fallback to CSS Fullscreen (Full Window)
-          console.log("Native fullscreen failed, using CSS fallback", e);
-          setIsManualFullscreen(true);
-      }
-  };
-
+  const toggleFullScreen = () => { if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen(); else document.exitFullscreen(); };
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
   const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
   const handleDragMove = (e: React.PointerEvent) => { if (isDraggingControls.current) { setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y }); } };
@@ -695,19 +567,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
 
   if (!version) return null; 
-
-  // CRITICAL FIX: Safe source selection to avoid race conditions with Drive URLs
-  const getSafeSrc = () => {
-      if (localFileSrc) return localFileSrc;
-      if (!isMockMode && version.storageType === 'drive') {
-          // If it's a Drive file, we MUST use the driveUrl calculated by useEffect.
-          // Fallback to empty string if not ready, to prevent <video> from erroring on stale version.url
-          return driveUrl || undefined; 
-      }
-      return version.url; // Legacy/Mock fallback
-  };
-
-  const effectiveSrc = getSafeSrc();
 
   return (
     <div className="flex flex-col h-[100dvh] bg-white dark:bg-zinc-950 overflow-hidden select-none fixed inset-0 transition-colors">
@@ -778,7 +637,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       {/* ... Rest of the component (Body) ... */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
-        <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
+        <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           {/* ... Video container ... */}
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
@@ -850,12 +709,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                     {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
                     {/* FIXED: Removed crossOrigin="anonymous" to comply with SETTINGS.md for Drive uc links */}
-                    {effectiveSrc && (
-                        <video key={version.id} ref={videoRef} src={effectiveSrc} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
-                    )}
+                    <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
-                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoPointerDown} onPointerMove={handleVideoPointerMove} onPointerUp={handleVideoPointerUp} onPointerLeave={handleVideoPointerUp} onContextMenu={(e) => e.preventDefault()}></div>
+                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
              </div>
           </div>
 

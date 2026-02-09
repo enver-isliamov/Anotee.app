@@ -297,10 +297,13 @@ export const GoogleDriveService = {
   },
 
   getVideoStreamUrlLegacy: (fileId: string): string => {
-      // NOTE: We deliberately IGNORE any VITE_GOOGLE_API_KEY if present.
-      // Using the 'v3/files' endpoint with an API Key often leads to 403 Forbidden 
-      // or CORS errors for video ranges. The 'uc?export=download' format is the 
-      // only battle-tested method for HTML5 video tags.
+      const env = (import.meta as any).env || {};
+      const apiKey = env.VITE_GOOGLE_API_KEY;
+      
+      if (apiKey) {
+         return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+      }
+      
       return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`;
   }
 };
