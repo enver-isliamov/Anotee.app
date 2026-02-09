@@ -535,24 +535,26 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const updateScrubPosition = (e: React.PointerEvent) => { if (!timelineRef.current || !videoRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const percentage = x / rect.width; const newTime = percentage * duration; setCurrentTime(newTime); videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
   const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
 
-  // VIDEO PRECISION SCRUBBING
-  const handleVideoDragStart = (e: React.PointerEvent) => { 
+  // VIDEO PRECISION SCRUBBING - REFACTORED
+  const handleVideoPointerDown = (e: React.PointerEvent) => { 
       e.preventDefault(); 
       videoScrubRef.current = { 
           startX: e.clientX, 
           startTime: currentTime, 
           wasPlaying: isPlaying,
-          isDragging: false // Reset
+          isDragging: false // Reset strict
       }; 
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); 
   };
 
-  const handleVideoDragMove = (e: React.PointerEvent) => { 
-      // Calculate distance traveled
+  const handleVideoPointerMove = (e: React.PointerEvent) => { 
+      // Safe guard against weird initial events
+      if (videoScrubRef.current.startX === 0) return;
+
       const deltaX = e.clientX - videoScrubRef.current.startX;
       
-      // Threshold check (10px) to distinguish Tap from Drag
-      if (!videoScrubRef.current.isDragging && Math.abs(deltaX) > 10) {
+      // Increased threshold to 15px to distinguish clumsy taps from swipes
+      if (!videoScrubRef.current.isDragging && Math.abs(deltaX) > 15) {
           videoScrubRef.current.isDragging = true;
           // Only now we enter scrubbing mode
           setIsVideoScrubbing(true);
@@ -575,42 +577,39 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       }
   };
 
-  const handleVideoDragEnd = (e: React.PointerEvent) => { 
+  const handleVideoPointerUp = (e: React.PointerEvent) => { 
       setIsVideoScrubbing(false); 
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); 
       
-      // If we didn't drag (distance < 10px), treat as CLICK -> Toggle Play
+      // If we didn't drag (distance < 15px), treat as CLICK -> Toggle Play
       if (!videoScrubRef.current.isDragging) {
           togglePlay();
       }
-      // If we DID drag, we stay paused (or could resume if desired, but pause is standard behavior for scrub)
+      
+      // Reset ref
+      videoScrubRef.current = { startX: 0, startTime: 0, wasPlaying: false, isDragging: false };
   };
 
   const toggleFullScreen = async () => { 
-      // Manual Toggle Logic
+      // Manual Toggle (Close)
       if (isManualFullscreen) {
           setIsManualFullscreen(false);
           return;
       }
 
-      // Try Native
-      if (!document.fullscreenElement) {
-          try {
-              if (playerContainerRef.current?.requestFullscreen) {
-                  await playerContainerRef.current.requestFullscreen();
-              } else if ((playerContainerRef.current as any)?.webkitRequestFullscreen) {
-                  // iOS Safari specific
-                  await (playerContainerRef.current as any).webkitRequestFullscreen();
-              } else {
-                  // Fallback if API missing
-                  throw new Error("Fullscreen API not supported");
-              }
-          } catch (e) {
-              console.log("Native fullscreen failed, using CSS fallback", e);
-              setIsManualFullscreen(true);
+      // Try Native API
+      try {
+          if (playerContainerRef.current?.requestFullscreen) {
+              await playerContainerRef.current.requestFullscreen();
+          } else if ((playerContainerRef.current as any)?.webkitRequestFullscreen) {
+              await (playerContainerRef.current as any).webkitRequestFullscreen();
+          } else {
+              throw new Error("API unsupported");
           }
-      } else {
-          document.exitFullscreen();
+      } catch (e) {
+          // Fallback to CSS Fullscreen (Full Window)
+          console.log("Native fullscreen failed, using CSS fallback", e);
+          setIsManualFullscreen(true);
       }
   };
 
@@ -728,7 +727,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       {/* ... Rest of the component (Body) ... */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
-        <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
+        <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           {/* ... Video container ... */}
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
@@ -803,7 +802,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
-                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
+                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoPointerDown} onPointerMove={handleVideoPointerMove} onPointerUp={handleVideoPointerUp} onPointerLeave={handleVideoPointerUp}></div>
              </div>
           </div>
 
