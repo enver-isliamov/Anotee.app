@@ -213,7 +213,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isLocked = project.isLocked || version?.isLocked || false;
   
   const [showMobileViewMenu, setShowMobileViewMenu] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+  const [isManualFullscreen, setIsManualFullscreen] = useState(false);
+  
+  const isFullscreen = isNativeFullscreen || isManualFullscreen;
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -232,7 +236,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isDragRef = useRef(false); 
   
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number }>({ startX: 0, startTime: 0 });
+  const videoScrubRef = useRef<{ startX: number, startTime: number, wasPlaying: boolean, isDragging: boolean }>({ startX: 0, startTime: 0, wasPlaying: false, isDragging: false });
 
   // Floating controls position
   const [controlsPos, setControlsPos] = useState(() => {
@@ -450,7 +454,21 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   }, [version?.id, isMockMode, isOwner]); 
 
   // Player Handlers
-  useEffect(() => { const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); }; document.addEventListener('fullscreenchange', handleFsChange); return () => document.removeEventListener('fullscreenchange', handleFsChange); }, []);
+  useEffect(() => { 
+      const handleFsChange = () => { 
+          // Standard API check
+          const isFs = !!document.fullscreenElement; 
+          setIsNativeFullscreen(isFs); 
+          if (!isFs && !isManualFullscreen) setShowVoiceModal(false); 
+      }; 
+      document.addEventListener('fullscreenchange', handleFsChange); 
+      // Also handle webkitfullscreenchange for iOS if supported
+      document.addEventListener('webkitfullscreenchange', handleFsChange);
+      return () => {
+          document.removeEventListener('fullscreenchange', handleFsChange);
+          document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      }
+  }, [isManualFullscreen]);
   
   // REAL FRAME RATE DETECTION using requestVideoFrameCallback
   useEffect(() => {
@@ -518,11 +536,84 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
 
   // VIDEO PRECISION SCRUBBING
-  const handleVideoDragStart = (e: React.PointerEvent) => { e.preventDefault(); setIsVideoScrubbing(true); if (isPlaying) togglePlay(); videoScrubRef.current = { startX: e.clientX, startTime: currentTime }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleVideoDragMove = (e: React.PointerEvent) => { if (!isVideoScrubbing) return; const deltaX = e.clientX - videoScrubRef.current.startX; const pixelsPerFrame = 5; const framesMoved = deltaX / pixelsPerFrame; const timeChange = framesMoved * (1 / videoFps); const newTime = Math.max(0, Math.min(duration, videoScrubRef.current.startTime + timeChange)); setCurrentTime(newTime); if(videoRef.current) videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handleVideoDragEnd = (e: React.PointerEvent) => { setIsVideoScrubbing(false); (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); };
+  const handleVideoDragStart = (e: React.PointerEvent) => { 
+      e.preventDefault(); 
+      videoScrubRef.current = { 
+          startX: e.clientX, 
+          startTime: currentTime, 
+          wasPlaying: isPlaying,
+          isDragging: false // Reset
+      }; 
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); 
+  };
 
-  const toggleFullScreen = () => { if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen(); else document.exitFullscreen(); };
+  const handleVideoDragMove = (e: React.PointerEvent) => { 
+      // Calculate distance traveled
+      const deltaX = e.clientX - videoScrubRef.current.startX;
+      
+      // Threshold check (10px) to distinguish Tap from Drag
+      if (!videoScrubRef.current.isDragging && Math.abs(deltaX) > 10) {
+          videoScrubRef.current.isDragging = true;
+          // Only now we enter scrubbing mode
+          setIsVideoScrubbing(true);
+          // Pause if was playing
+          if (videoScrubRef.current.wasPlaying) {
+              setIsPlaying(false);
+              videoRef.current?.pause();
+          }
+      }
+
+      if (videoScrubRef.current.isDragging) {
+          const pixelsPerFrame = 5; 
+          const framesMoved = deltaX / pixelsPerFrame; 
+          const timeChange = framesMoved * (1 / videoFps); 
+          const newTime = Math.max(0, Math.min(duration, videoScrubRef.current.startTime + timeChange)); 
+          
+          setCurrentTime(newTime); 
+          if(videoRef.current) videoRef.current.currentTime = newTime; 
+          if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; 
+      }
+  };
+
+  const handleVideoDragEnd = (e: React.PointerEvent) => { 
+      setIsVideoScrubbing(false); 
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); 
+      
+      // If we didn't drag (distance < 10px), treat as CLICK -> Toggle Play
+      if (!videoScrubRef.current.isDragging) {
+          togglePlay();
+      }
+      // If we DID drag, we stay paused (or could resume if desired, but pause is standard behavior for scrub)
+  };
+
+  const toggleFullScreen = async () => { 
+      // Manual Toggle Logic
+      if (isManualFullscreen) {
+          setIsManualFullscreen(false);
+          return;
+      }
+
+      // Try Native
+      if (!document.fullscreenElement) {
+          try {
+              if (playerContainerRef.current?.requestFullscreen) {
+                  await playerContainerRef.current.requestFullscreen();
+              } else if ((playerContainerRef.current as any)?.webkitRequestFullscreen) {
+                  // iOS Safari specific
+                  await (playerContainerRef.current as any).webkitRequestFullscreen();
+              } else {
+                  // Fallback if API missing
+                  throw new Error("Fullscreen API not supported");
+              }
+          } catch (e) {
+              console.log("Native fullscreen failed, using CSS fallback", e);
+              setIsManualFullscreen(true);
+          }
+      } else {
+          document.exitFullscreen();
+      }
+  };
+
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
   const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
   const handleDragMove = (e: React.PointerEvent) => { if (isDraggingControls.current) { setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y }); } };
