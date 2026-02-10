@@ -611,7 +611,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             {/* TAB: STRATEGY (S.M.A.R.T.) */}
             {activeTab === 'strategy' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8 w-full">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
@@ -873,7 +873,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             {/* TAB: PAYMENTS */}
             {activeTab === 'payments' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-4xl mx-auto">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 w-full mx-auto">
                     <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-6 rounded-2xl mb-8 text-center">
                         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежей</h2>
                         <p className="text-sm text-zinc-500 dark:text-zinc-400">Управление шлюзами и тарифными планами.</p>

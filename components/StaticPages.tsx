@@ -64,7 +64,7 @@ export const WorkflowPage: React.FC = () => {
 
     return (
         <>
-        <div className="max-w-7xl mx-auto py-8">
+        <div className="w-full mx-auto py-8">
              <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-12 text-center">{t('page.workflow.title')}</h1>
              
              {/* Compact Node-based Workflow */}
@@ -137,7 +137,7 @@ export const WorkflowPage: React.FC = () => {
 export const AboutPage: React.FC = () => {
     const { t } = useLanguage();
     return (
-        <div className="flex flex-col gap-12 max-w-7xl mx-auto py-8">
+        <div className="flex flex-col gap-12 w-full mx-auto py-8">
             
             {/* 1. Hero / Mission (REDESIGNED) */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-10 md:p-16 text-center shadow-2xl relative overflow-hidden group">
@@ -265,7 +265,7 @@ export const PricingPage: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto py-8">
+        <div className="w-full mx-auto py-8">
              <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-8 text-center">{t('page.pricing.title')}</h1>
              <div className="text-center mb-12">
                  <p className="text-zinc-600 dark:text-zinc-400 max-w-xl mx-auto text-lg">{t('page.pricing.subtitle')}</p>
