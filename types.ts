@@ -135,7 +135,7 @@ export interface PlanFeature {
 }
 
 export interface PlanConfig {
-    id: 'monthly' | 'lifetime' | 'team';
+    id: 'free' | 'monthly' | 'lifetime' | 'team';
     isActive: boolean; // If false -> Shows as "Phase X / Locked"
     title: string;
     subtitle?: string;
@@ -156,6 +156,7 @@ export interface PaymentConfig {
     };
     // Rich plan configuration
     plans: {
+        free: PlanConfig; // New Free Plan
         monthly: PlanConfig;
         lifetime: PlanConfig;
         team: PlanConfig;
@@ -177,6 +178,23 @@ export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
         monthly: 490
     },
     plans: {
+        free: {
+            id: 'free',
+            isActive: true,
+            title: 'Starter',
+            subtitle: 'Для личного использования',
+            price: 0,
+            currency: '₽',
+            features: [
+                { title: 'До 3-х проектов', desc: 'Лимит активных проектов.', isCore: true },
+                { title: '720p Прокси', desc: 'Базовое качество стриминга.', isCore: false },
+                { title: 'Google Drive', desc: 'Прямая интеграция.', isCore: false },
+                { title: 'Комментарии', desc: 'Базовые инструменты ревью.', isCore: false }
+            ],
+            phaseLabel: 'Базовый',
+            footerStatus: 'Всегда доступно',
+            footerLimit: 'Без ограничений'
+        },
         monthly: {
             id: 'monthly',
             isActive: false,

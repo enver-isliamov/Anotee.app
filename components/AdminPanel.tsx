@@ -314,8 +314,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     };
 
     // Render Plan Editor Card
-    const renderPlanEditor = (planKey: 'monthly' | 'lifetime' | 'team') => {
+    const renderPlanEditor = (planKey: 'free' | 'monthly' | 'lifetime' | 'team') => {
         const plan = paymentConfig.plans[planKey];
+        if (!plan) return null;
+        
         return (
             <div className={`p-4 rounded-xl border transition-all ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}>
                 <div className="flex justify-between items-start mb-4">
@@ -912,6 +914,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 </h3>
                                 
                                 <div className="space-y-4">
+                                    {renderPlanEditor('free')}
                                     {renderPlanEditor('monthly')}
                                     {renderPlanEditor('lifetime')}
                                     {renderPlanEditor('team')}

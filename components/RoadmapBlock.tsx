@@ -112,7 +112,7 @@ export const RoadmapBlock: React.FC = () => {
   const isMonthlyUser = plan === 'pro' && !isLifetimeUser;
 
   const renderCard = (
-      planKey: 'monthly' | 'lifetime' | 'team', 
+      planKey: 'free' | 'monthly' | 'lifetime' | 'team', 
       planData: PlanConfig, 
       userStatus: { isCurrent: boolean, isOwned: boolean }
   ) => {
@@ -129,6 +129,8 @@ export const RoadmapBlock: React.FC = () => {
       } else if (planKey === 'monthly') {
           borderColor = 'border-zinc-800';
           btnColor = 'bg-zinc-800 hover:bg-zinc-700';
+      } else if (planKey === 'free') {
+          borderColor = 'border-zinc-800';
       }
 
       const isLocked = !isActive;
@@ -165,9 +167,10 @@ export const RoadmapBlock: React.FC = () => {
             {/* Price & Action */}
             {!isLocked ? (
                 <div className="mt-auto">
-                    {userStatus.isOwned ? (
-                        <button disabled className="w-full py-3.5 bg-zinc-800 text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default border border-zinc-700">
-                            <CheckCircle2 size={16} /> {planKey === 'lifetime' ? 'Куплено' : 'Активно'}
+                    {userStatus.isOwned || planKey === 'free' ? (
+                        <button disabled className={`w-full py-3.5 bg-zinc-900 text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default border border-zinc-800 ${planKey === 'free' && !userStatus.isCurrent ? 'opacity-50' : ''}`}>
+                            {userStatus.isCurrent ? <CheckCircle2 size={16} className="text-green-500" /> : null} 
+                            {planKey === 'lifetime' ? 'Куплено' : (userStatus.isCurrent ? 'Активно' : 'Доступно')}
                         </button>
                     ) : (
                         <button 
@@ -199,8 +202,8 @@ export const RoadmapBlock: React.FC = () => {
 
   if (isLoading) {
       return (
-        <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
-            {[1, 2, 3].map((i) => (
+        <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto text-left">
+            {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 h-[500px] flex flex-col animate-pulse">
                     <div className="h-8 w-1/2 bg-zinc-800 rounded mb-4"></div>
                     <div className="h-4 w-3/4 bg-zinc-800/50 rounded mb-8"></div>
@@ -217,7 +220,8 @@ export const RoadmapBlock: React.FC = () => {
   }
 
   return (
-    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left animate-in fade-in duration-500">
+    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto text-left animate-in fade-in duration-500">
+        {renderCard('free', config.plans.free, { isCurrent: !isPro, isOwned: true })}
         {renderCard('monthly', config.plans.monthly, { isCurrent: isMonthlyUser, isOwned: isMonthlyUser || isLifetimeUser })}
         {renderCard('lifetime', config.plans.lifetime, { isCurrent: isLifetimeUser, isOwned: isLifetimeUser })}
         {renderCard('team', config.plans.team, { isCurrent: false, isOwned: false })}
