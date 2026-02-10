@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
-import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight } from 'lucide-react';
+import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight, Users } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
@@ -10,6 +10,7 @@ import { api } from '../services/apiClient';
 import { useOrganization, useUser, useAuth } from '@clerk/clerk-react';
 import { isOrgAdmin } from '../services/userUtils';
 import { useSubscription } from '../hooks/useSubscription';
+import { useAppConfig } from '../hooks/useAppConfig';
 
 interface DashboardProps {
   projects: Project[];
@@ -27,8 +28,6 @@ interface DashboardProps {
   highlightNewProject?: boolean;
 }
 
-const FREE_PROJECT_LIMIT = 3;
-
 export const Dashboard: React.FC<DashboardProps> = ({ 
     projects, currentUser, onSelectProject, onAddProject, onDeleteProject, 
     onEditProject, onNavigate, notify, isMockMode = false,
@@ -37,6 +36,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
   const { isPro } = useSubscription();
+  const { config, loading: configLoading } = useAppConfig();
   
   // CLERK ORG CONTEXT
   const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
@@ -70,30 +70,35 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [client, setClient] = useState('');
   const [description, setDescription] = useState('');
 
-  // --- FILTERING LOGIC (ORGANIZATION AWARE) ---
+  // --- FILTERING LOGIC (SEPARATE OWNED VS SHARED) ---
   const activeOrgId = organization?.id;
 
-  const displayedProjects = projects.filter(p => {
-      // 1. If Org is selected, show projects matching THAT Org
-      if (activeOrgId) {
-          return p.orgId === activeOrgId;
-      }
-      
-      // 2. If Personal Workspace (no Org selected):
-      const isPersonal = !p.orgId || p.orgId === 'null' || p.orgId === '';
-      const isOwner = p.ownerId === currentUser.id;
-      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id); 
-      
-      return isPersonal && (isOwner || isInTeam);
+  // Projects belonging to the current context (Org or Personal)
+  const contextProjects = projects.filter(p => {
+      if (activeOrgId) return p.orgId === activeOrgId;
+      // Personal workspace: projects with no orgId
+      return !p.orgId || p.orgId === 'null' || p.orgId === '';
   });
-  
-  const sectionTitle = activeOrgId 
-    ? (organization?.name || 'Organization') + ' Projects' 
-    : t('dash.my_projects');
 
-  // LIMIT CHECK
-  const createdProjectsCount = projects.filter(p => p.ownerId === currentUser.id && !p.orgId).length;
-  const canCreate = isPro || createdProjectsCount < FREE_PROJECT_LIMIT || !!activeOrgId; 
+  // Split into Owned vs Shared
+  const ownedProjects = contextProjects.filter(p => p.ownerId === currentUser.id);
+  
+  // Shared are projects where user is in team but NOT owner
+  const sharedProjects = contextProjects.filter(p => {
+      const isOwner = p.ownerId === currentUser.id;
+      const isInTeam = p.team?.some(m => m.id === currentUser.id || (currentUser as any).email === m.id);
+      return !isOwner && isInTeam;
+  });
+
+  // DYNAMIC LIMIT CHECK
+  const freeLimit = config.max_projects.limitFree || 3;
+  const currentLimit = isPro ? (config.max_projects.limitPro || 1000) : freeLimit;
+  const createdProjectsCount = ownedProjects.length;
+  const canCreate = createdProjectsCount < currentLimit; 
+
+  // SHARE PERMISSION CHECK
+  // If Free plan, check config.team_collab.enabledForFree
+  const canShareProjects = isPro || config.team_collab.enabledForFree;
 
   // PERMISSION CHECKS (Project Level)
   const canManageProject = (project: Project) => {
@@ -104,6 +109,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !client) return;
+
+    if (!canCreate) {
+        notify(`Limit reached (${currentLimit}). Upgrade to Pro.`, "error");
+        return;
+    }
 
     setIsCreating(true);
 
@@ -205,6 +215,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const handleShareClick = (e: React.MouseEvent, project: Project) => {
       e.stopPropagation();
+      
+      if (!canShareProjects) {
+          notify("Sharing is restricted on the Free plan. Upgrade to Pro.", "warning");
+          return;
+      }
+
       if (project.isLocked) {
           notify(t('dash.locked_msg'), "error");
           return;
@@ -254,23 +270,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
   };
 
-  const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode) => {
+  const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode, emptyMsg: string) => {
       return (
-          <div className="mb-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4">
+          <div className="mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4 border-b border-zinc-200 dark:border-zinc-800 pb-2">
                   {icon}
                   {title}
-                  <span className="text-xs font-normal text-zinc-600 dark:text-zinc-500 bg-zinc-200/50 dark:bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-800">
-                      {projectList.length}
-                  </span>
+                  {projectList.length > 0 && (
+                      <span className="text-xs font-normal text-zinc-600 dark:text-zinc-500 bg-zinc-200/50 dark:bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-800">
+                          {projectList.length}
+                      </span>
+                  )}
               </h2>
               
               {projectList.length === 0 ? (
-                  <div className="bg-zinc-50 dark:bg-zinc-900/30 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center h-48">
-                        <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-3 text-zinc-400">
-                            <FileVideo size={24} />
-                        </div>
-                        <p className="text-zinc-500 font-medium text-sm">No projects found in this workspace.</p>
+                  <div className="bg-zinc-50 dark:bg-zinc-900/30 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl p-8 text-center flex flex-col items-center justify-center h-32">
+                        <p className="text-zinc-500 font-medium text-xs">{emptyMsg}</p>
                   </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -360,7 +375,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     </div>
                                 )}
                                 
-                                {canManage && (
+                                {canManage ? (
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button 
                                             onClick={(e) => handleToggleLock(e, project)}
@@ -378,8 +393,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                         </button>
                                         <button 
                                             onClick={(e) => handleShareClick(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${project.isLocked ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
-                                            title={t('common.share')}
+                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProjects ? 'text-zinc-600 dark:text-zinc-600 cursor-not-allowed' : (project.isLocked ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400')}`}
+                                            title={!canShareProjects ? "Sharing blocked for Free plan" : t('common.share')}
                                         >
                                             <Share2 size={14} />
                                         </button>
@@ -391,9 +406,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                             <Trash2 size={14} />
                                         </button>
                                     </div>
-                                )}
-                                
-                                {!canManage && (
+                                ) : (
                                     <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-950 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-800">
                                         <FileVideo size={12} />
                                         <span>{project.assets.length}</span>
@@ -438,16 +451,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 
                 {!canCreate && (
                     <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
-                        You have reached the limit of <strong>{FREE_PROJECT_LIMIT} personal projects</strong> on the Free plan. <span className="text-indigo-400 font-bold block mt-1">Upgrade to Pro for unlimited access.</span>
+                        You have reached the limit of <strong>{currentLimit} personal projects</strong> on your current plan. <span className="text-indigo-400 font-bold block mt-1">Upgrade to Pro for unlimited access.</span>
                     </div>
                 )}
             </div>
       </div>
 
+      {/* SECTION 1: OWNED PROJECTS (MY WORKSPACE) */}
       {renderProjectGrid(
-          displayedProjects, 
-          sectionTitle, 
-          activeOrgId ? <Building2 size={18} className="text-indigo-500"/> : <UserIcon size={18} className="text-indigo-500"/>
+          ownedProjects, 
+          activeOrgId ? (organization?.name || "Organization") : t('dash.my_projects'), 
+          activeOrgId ? <Building2 size={18} className="text-indigo-500"/> : <UserIcon size={18} className="text-indigo-500"/>,
+          activeOrgId ? "No projects in this organization." : "You haven't created any projects yet."
+      )}
+
+      {/* SECTION 2: SHARED PROJECTS (GUEST ACCESS) */}
+      {(sharedProjects.length > 0 || !activeOrgId) && (
+          renderProjectGrid(
+              sharedProjects,
+              t('dash.shared_projects'),
+              <Users size={18} className="text-green-500" />,
+              "No projects shared with you."
+          )
       )}
       
       <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
@@ -465,7 +490,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                        </div>
                        <ul className="space-y-3 text-sm text-zinc-600 dark:text-zinc-500 font-medium">
                            <li className="flex items-center gap-2"><Check size={14}/> {t('upsell.free.feat1')}</li>
-                           <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><Check size={14}/> 3 Active Projects</li>
+                           <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><Check size={14}/> Max {freeLimit} Projects</li>
                            <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><X size={14}/> {t('upsell.free.feat3')}</li>
                        </ul>
                   </div>

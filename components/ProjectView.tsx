@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle } from 'lucide-react';
@@ -11,6 +12,8 @@ import { useOrganization, OrganizationProfile } from '@clerk/clerk-react';
 import { useDrive } from '../services/driveContext';
 import { mapClerkUserToAppUser, isOrgAdmin } from '../services/userUtils';
 import logo from '../logo.svg';
+import { useSubscription } from '../hooks/useSubscription';
+import { useAppConfig } from '../hooks/useAppConfig';
 
 interface ProjectViewProps {
   project: Project;
@@ -27,6 +30,8 @@ interface ProjectViewProps {
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
   const { t } = useLanguage();
+  const { isPro } = useSubscription();
+  const { config } = useAppConfig();
   
   // --- CLERK ORGANIZATION LOGIC ---
   const { organization, memberships } = useOrganization({
@@ -55,6 +60,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
   const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
   const isLocked = project.isLocked;
+
+  // SHARE PERMISSION CHECK
+  const canShare = isPro || config.team_collab.enabledForFree;
 
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
@@ -200,6 +208,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleShareProject = () => {
     if (isLocked) return;
+    if (!canShare) {
+        notify("Sharing is available on Pro plan.", "warning");
+        return;
+    }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
     setIsShareModalOpen(true);
   };
@@ -208,6 +220,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     e.stopPropagation(); 
     if (isLocked) {
         notify(t('dash.locked_msg'), "error");
+        return;
+    }
+    if (!canShare) {
+        notify("Sharing is available on Pro plan.", "warning");
         return;
     }
     setShareTarget({ type: 'asset', id: asset.id, name: asset.title });
@@ -374,7 +390,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
              </div>
           )}
 
-          {!isLocked && !restrictedAssetId && (
+          {!isLocked && !restrictedAssetId && canShare && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
               {project.orgId ? (
@@ -527,7 +543,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         />
                         {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                            {!isLocked && (
+                            {!isLocked && canShare && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}
                                     className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"

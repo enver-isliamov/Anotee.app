@@ -110,9 +110,9 @@ export const DEFAULT_CONFIG: AppConfig = {
     max_projects: { enabledForFree: true, enabledForPro: true, limitFree: 3, limitPro: 1000 },
     export_xml: { enabledForFree: false, enabledForPro: true },
     export_csv: { enabledForFree: false, enabledForPro: true },
-    google_drive: { enabledForFree: false, enabledForPro: true },
+    google_drive: { enabledForFree: false, enabledForPro: true }, // Logic handled in components, allowing drive for all but UI controlled
     ai_transcription: { enabledForFree: true, enabledForPro: true },
-    team_collab: { enabledForFree: true, enabledForPro: true },
+    team_collab: { enabledForFree: false, enabledForPro: true }, // Default: Block sharing for Free
     local_file_link: { enabledForFree: true, enabledForPro: true },
     high_res_proxies: { enabledForFree: false, enabledForPro: true },
     project_locking: { enabledForFree: false, enabledForPro: true },
@@ -123,7 +123,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     ui_roadmap_block: { enabledForFree: true, enabledForPro: false },
     ui_help_button: { enabledForFree: true, enabledForPro: true },
     ui_footer: { enabledForFree: true, enabledForPro: true },
-    ui_drive_connect: { enabledForFree: false, enabledForPro: true }, // Drive UI hidden for free by default
+    ui_drive_connect: { enabledForFree: true, enabledForPro: true }, // Enabled for free to allow upload
 };
 
 // --- PAYMENT INTEGRATION CONFIG ---
