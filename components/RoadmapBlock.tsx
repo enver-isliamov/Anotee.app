@@ -8,14 +8,24 @@ import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig } from '../types';
 
 export const RoadmapBlock: React.FC = () => {
   const { t } = useLanguage();
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   const { isPro, plan } = useSubscription();
   const [isBuying, setIsBuying] = useState<string | null>(null);
   const [config, setConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
       const loadConfig = async () => {
-          if (!isSignedIn) return;
+          // If auth is not ready yet, wait
+          if (!isLoaded) return;
+
+          // If not signed in, we can't fetch admin config (it is protected), 
+          // so we fallback to defaults immediately.
+          if (!isSignedIn) {
+              setIsLoading(false);
+              return;
+          }
+
           try {
               const token = await getToken();
               const res = await fetch('/api/admin?action=get_payment_config', {
@@ -57,11 +67,13 @@ export const RoadmapBlock: React.FC = () => {
                   });
               }
           } catch(e) {
-              // ignore
+              // ignore, keep defaults
+          } finally {
+              setIsLoading(false);
           }
       };
       loadConfig();
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, isLoaded]);
 
   const handleBuy = async (planType: 'lifetime' | 'monthly') => {
       if (!isSignedIn) {
@@ -185,8 +197,27 @@ export const RoadmapBlock: React.FC = () => {
       );
   };
 
+  if (isLoading) {
+      return (
+        <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
+            {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 h-[500px] flex flex-col animate-pulse">
+                    <div className="h-8 w-1/2 bg-zinc-800 rounded mb-4"></div>
+                    <div className="h-4 w-3/4 bg-zinc-800/50 rounded mb-8"></div>
+                    <div className="space-y-4 flex-1">
+                        <div className="h-4 w-full bg-zinc-800/30 rounded"></div>
+                        <div className="h-4 w-5/6 bg-zinc-800/30 rounded"></div>
+                        <div className="h-4 w-4/6 bg-zinc-800/30 rounded"></div>
+                    </div>
+                    <div className="h-12 w-full bg-zinc-800 rounded-xl mt-8"></div>
+                </div>
+            ))}
+        </div>
+      );
+  }
+
   return (
-    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
+    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left animate-in fade-in duration-500">
         {renderCard('monthly', config.plans.monthly, { isCurrent: isMonthlyUser, isOwned: isMonthlyUser || isLifetimeUser })}
         {renderCard('lifetime', config.plans.lifetime, { isCurrent: isLifetimeUser, isOwned: isLifetimeUser })}
         {renderCard('team', config.plans.team, { isCurrent: false, isOwned: false })}
