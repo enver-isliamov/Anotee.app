@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle } from 'lucide-react';
@@ -124,7 +123,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           return;
       }
 
-      const files = Array.from(e.dataTransfer.files);
+      const files = Array.from(e.dataTransfer.files) as File[];
       const videoFiles = files.filter(f => f.type.startsWith('video/'));
       
       if (videoFiles.length === 0) {

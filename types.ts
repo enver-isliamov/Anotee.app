@@ -129,6 +129,10 @@ export const DEFAULT_CONFIG: AppConfig = {
 // --- PAYMENT INTEGRATION CONFIG ---
 export interface PaymentConfig {
     activeProvider: 'yookassa' | 'prodamus';
+    prices: {
+        lifetime: number;
+        monthly: number;
+    };
     yookassa: {
         shopId: string;
         secretKey: string;
@@ -140,7 +144,11 @@ export interface PaymentConfig {
 }
 
 export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
-    activeProvider: 'yookassa',
+    activeProvider: 'prodamus',
+    prices: {
+        lifetime: 4900,
+        monthly: 490
+    },
     yookassa: { shopId: '', secretKey: '' },
     prodamus: { url: '', secretKey: '' }
 };

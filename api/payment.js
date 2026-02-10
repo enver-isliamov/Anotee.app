@@ -2,7 +2,6 @@
 import { verifyUser, getClerkClient } from './_auth.js';
 import { sql } from '@vercel/postgres';
 import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
 
 // Helper to get active payment config from DB or Fallback to Env
 async function getPaymentConfig() {
@@ -15,15 +14,16 @@ async function getPaymentConfig() {
         console.warn("Using Env Fallback for payment config");
     }
     
-    // Fallback Config (Env Variables)
+    // Fallback Config
     return {
         activeProvider: 'yookassa',
+        prices: { lifetime: 4900, monthly: 490 },
         yookassa: {
             shopId: process.env.YOOKASSA_SHOP_ID,
             secretKey: process.env.YOOKASSA_SECRET_KEY
         },
         prodamus: {
-            url: '',
+            url: '', // User must configure in Admin
             secretKey: ''
         }
     };
@@ -40,8 +40,19 @@ export default async function handler(req, res) {
             const user = await verifyUser(req);
             if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
+            const { planType } = req.body; // 'lifetime' or 'monthly'
+            const validPlan = planType === 'monthly' ? 'monthly' : 'lifetime';
+
             const config = await getPaymentConfig();
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.origin;
+
+            // Determine Price
+            const amountVal = config.prices[validPlan] || (validPlan === 'lifetime' ? 4900 : 490);
+            const amountStr = amountVal.toFixed(2);
+            
+            const description = validPlan === 'lifetime' 
+                ? `Anotee Lifetime Access for ${user.email || user.id}`
+                : `Anotee Pro Subscription (1 Month) for ${user.email || user.id}`;
 
             // --- STRATEGY: YOOKASSA ---
             if (config.activeProvider === 'yookassa') {
@@ -52,12 +63,12 @@ export default async function handler(req, res) {
                 }
 
                 const paymentData = {
-                    amount: { value: '2900.00', currency: 'RUB' },
+                    amount: { value: amountStr, currency: 'RUB' },
                     capture: true,
                     confirmation: { type: 'redirect', return_url: `${appUrl}/?payment=success` },
-                    description: `Anotee Founder Access for ${user.email || user.id}`,
-                    metadata: { userId: user.userId, plan: 'pro' },
-                    save_payment_method: true 
+                    description: description,
+                    metadata: { userId: user.userId, planType: validPlan },
+                    save_payment_method: validPlan === 'monthly' // Only save card for monthly
                 };
 
                 const authString = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
@@ -93,37 +104,24 @@ export default async function handler(req, res) {
                     return res.status(500).json({ error: 'Prodamus configuration missing' });
                 }
 
-                // Clean URL (remove trailing slash)
                 const paymentPageUrl = url.replace(/\/$/, '');
                 const orderId = `order_${user.userId}_${Date.now()}`;
-                const amount = '2900.00';
-                
-                // Construct Signature
-                // Sign format: {order_id}{products_sum}{currency}{secret_key} (Example, specific to Prodamus docs)
-                // Assuming simple redirect link generation with HMAC
-                // Note: Actual Prodamus link generation often involves passing params in URL and verifying on their side via callback.
-                // Standard Link: https://{url}/?order_id={id}&products[0][price]={price}&products[0][name]={name}&customer_email={email}...
-                // Signature is mostly used for callbacks, but let's build a robust link.
                 
                 const queryParams = new URLSearchParams({
                     order_id: orderId,
                     products_score: '1',
-                    'products[0][price]': amount,
+                    'products[0][price]': amountStr,
                     'products[0][quantity]': '1',
-                    'products[0][name]': 'Anotee Founder Access',
+                    'products[0][name]': description,
                     customer_email: user.email || '',
-                    do: 'link', // 'pay' or 'link'
-                    sys: JSON.stringify({ userId: user.userId, plan: 'pro' }), // Custom data passed back in webhook
+                    do: 'link', 
+                    // Pass planType in sys to recover it in webhook
+                    sys: JSON.stringify({ userId: user.userId, planType: validPlan }), 
                     urlReturn: `${appUrl}/?payment=success`,
                     urlSuccess: `${appUrl}/?payment=success`,
                     urlNotification: `${appUrl}/api/payment?action=webhook&provider=prodamus`
                 });
 
-                // Generate signature for link integrity if required by specific Prodamus settings,
-                // but usually Prodamus handles unsigned links fine for simple forms. 
-                // The critical part is verifying the WEBHOOK signature.
-                
-                // For simplicity, we redirect directly to the constructed form URL.
                 return res.status(200).json({
                     confirmationUrl: `${paymentPageUrl}/?${queryParams.toString()}`,
                     paymentId: orderId
@@ -147,16 +145,15 @@ export default async function handler(req, res) {
             if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
             const clerk = getClerkClient();
-            
-            // Fetch current metadata to preserve other fields
             const clerkUser = await clerk.users.getUser(user.userId);
             const currentMeta = clerkUser.publicMetadata || {};
 
-            // Remove payment method but keep plan and expiry
+            // Remove payment method but keep plan
             await clerk.users.updateUserMetadata(user.userId, {
                 publicMetadata: {
                     ...currentMeta,
-                    yookassaPaymentMethodId: null // Disable auto-charge
+                    yookassaPaymentMethodId: null, // Disable auto-charge
+                    billingStatus: 'canceled'
                 }
             });
 
@@ -171,8 +168,7 @@ export default async function handler(req, res) {
     if (action === 'webhook') {
         if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
-        const config = await getPaymentConfig();
-        const provider = req.query.provider || 'yookassa'; // Default to Yookassa
+        const provider = req.query.provider || 'yookassa'; 
 
         try {
             // --- YOOKASSA HANDLER ---
@@ -182,31 +178,30 @@ export default async function handler(req, res) {
 
                 if (event.type === 'payment.succeeded') {
                     const payment = event.object;
-                    const { userId, plan } = payment.metadata || {};
+                    const { userId, planType } = payment.metadata || {};
                     const paymentMethodId = payment.payment_method?.id;
 
                     if (userId) {
-                        console.log(`✅ YooKassa: Payment success for user: ${userId}`);
+                        console.log(`✅ YooKassa: Success for ${userId}, Plan: ${planType}`);
                         const clerk = getClerkClient();
                         
-                        // 30 days subscription (Example logic, adapt to Lifetime/Yearly as needed)
-                        // For Lifetime deals (2900 RUB in this context), set far future date.
-                        // Assuming current logic is Founder's Club (Lifetime) based on price point.
-                        // If recurring, logic differs. Let's assume Lifetime for simplicity or standard Pro.
+                        let updates = { plan: 'pro', status: 'active' };
                         
-                        // If price is 2900 (Founder), define as lifetime
-                        const isLifetime = payment.amount.value === '2900.00';
-                        const expiresAt = isLifetime 
-                            ? new Date('2099-12-31').getTime() 
-                            : Date.now() + (30 * 24 * 60 * 60 * 1000);
+                        // LIFETIME LOGIC
+                        if (planType === 'lifetime' || (!planType && payment.amount.value >= 2000)) {
+                             updates.plan = 'lifetime';
+                             updates.expiresAt = new Date('2100-01-01').getTime();
+                             updates.yookassaPaymentMethodId = null; // No recur needed
+                        } 
+                        // MONTHLY LOGIC
+                        else {
+                             updates.plan = 'pro';
+                             updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
+                             updates.yookassaPaymentMethodId = paymentMethodId || null;
+                        }
 
                         await clerk.users.updateUserMetadata(userId, {
-                            publicMetadata: {
-                                plan: 'pro',
-                                status: 'active',
-                                expiresAt: expiresAt,
-                                yookassaPaymentMethodId: paymentMethodId || null
-                            }
+                            publicMetadata: { ...updates }
                         });
                     }
                 }
@@ -215,34 +210,30 @@ export default async function handler(req, res) {
 
             // --- PRODAMUS HANDLER ---
             if (provider === 'prodamus') {
-                // Prodamus sends data in headers/body encoded
-                // Critical: Verify Signature (HMAC SHA256)
-                const secretKey = config.prodamus.secretKey;
-                const sign = req.headers['sign'] || req.body.sign;
-                
-                // Skip signature verification logic implementation details for brevity unless needed, 
-                // but usually it involves sorting keys and hashing.
-                // Assuming simplified acceptance for MVP.
-                // NOTE: Production must verify signature!
-                
-                // Data format usually multipart or urlencoded
-                const paymentStatus = req.body.payment_status; // 'success'
+                // Production: Verify Signature (req.headers['sign'])
+                const paymentStatus = req.body.payment_status; 
                 const sysData = req.body.sys ? JSON.parse(req.body.sys) : {};
                 const userId = sysData.userId;
+                const planType = sysData.planType;
 
                 if (paymentStatus === 'success' && userId) {
-                    console.log(`✅ Prodamus: Payment success for user: ${userId}`);
+                    console.log(`✅ Prodamus: Success for ${userId}, Plan: ${planType}`);
                     const clerk = getClerkClient();
                     
-                    const expiresAt = new Date('2099-12-31').getTime(); // Founder Lifetime assumption
+                    let updates = { plan: 'pro', status: 'active' };
+
+                    if (planType === 'lifetime') {
+                        updates.plan = 'lifetime';
+                        updates.expiresAt = new Date('2100-01-01').getTime();
+                    } else {
+                        updates.plan = 'pro';
+                        updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
+                        // Prodamus recurrent tokens logic would go here if supported via API
+                        // For now assuming manual renewal or simple integration
+                    }
 
                     await clerk.users.updateUserMetadata(userId, {
-                        publicMetadata: {
-                            plan: 'pro',
-                            status: 'active',
-                            expiresAt: expiresAt,
-                            yookassaPaymentMethodId: null // Prodamus handles recurrents differently, usually via token in their system
-                        }
+                        publicMetadata: { ...updates }
                     });
                 }
                 return res.status(200).send('OK');

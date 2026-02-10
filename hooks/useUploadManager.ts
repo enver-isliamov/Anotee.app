@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
