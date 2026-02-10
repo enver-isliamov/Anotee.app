@@ -128,14 +128,23 @@ export const DEFAULT_CONFIG: AppConfig = {
 
 // --- PAYMENT INTEGRATION CONFIG ---
 
+export interface PlanFeature {
+    title: string;
+    desc: string;
+    isCore: boolean;
+}
+
 export interface PlanConfig {
     id: 'monthly' | 'lifetime' | 'team';
     isActive: boolean; // If false -> Shows as "Phase X / Locked"
     title: string;
+    subtitle?: string;
     price: number;
     currency: string;
-    features: string[];
+    features: PlanFeature[];
     phaseLabel?: string; // e.g. "Phase 3"
+    footerStatus?: string; // e.g. "Открыто"
+    footerLimit?: string; // e.g. "Первые 150 пользователей"
 }
 
 export interface PaymentConfig {
@@ -162,38 +171,58 @@ export interface PaymentConfig {
 }
 
 export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
-    activeProvider: 'prodamus',
+    activeProvider: 'yookassa',
     prices: {
-        lifetime: 4900,
+        lifetime: 2900,
         monthly: 490
     },
     plans: {
         monthly: {
             id: 'monthly',
-            isActive: true,
+            isActive: false,
             title: 'Pro Subscription',
+            subtitle: 'Для тех, кто хочет платить помесячно',
             price: 490,
             currency: '₽',
-            features: ['Unlimited Projects', 'Export (XML, CSV)', '4K Support'],
-            phaseLabel: 'Phase 2'
+            features: [
+                { title: 'Полный доступ', desc: 'Все функции платформы включены.', isCore: false },
+                { title: 'Ежемесячная оплата', desc: 'Отмена в любой момент.', isCore: false }
+            ],
+            phaseLabel: 'Фаза 2 (Закрыто)',
+            footerStatus: 'Скоро',
+            footerLimit: 'После 500 пользователей'
         },
         lifetime: {
             id: 'lifetime',
             isActive: true,
             title: "Founder's Club",
-            price: 4900,
+            subtitle: "Платите один раз. Пользуйтесь вечно. Никаких подписок.",
+            price: 2900,
             currency: '₽',
-            features: ['Lifetime License', 'One-time payment', 'Priority Support', 'Early Access Features'],
-            phaseLabel: 'Phase 1'
+            features: [
+                { title: 'Пожизненная лицензия', desc: 'Anotee V1.X навсегда.', isCore: true },
+                { title: 'Протокол Flash-Loom', desc: 'Мгновенная синхронизация комментариев и видео.', isCore: true },
+                { title: 'Безлимитный доступ', desc: 'Нет ограничений на количество проектов для основателей.', isCore: false },
+                { title: 'Экспорт в NLE', desc: 'DaVinci Resolve (XML), Premiere (CSV), EDL.', isCore: false }
+            ],
+            phaseLabel: 'Фаза 1 (Открыто)',
+            footerStatus: 'Открыто',
+            footerLimit: 'Первые 150 пользователей'
         },
         team: {
             id: 'team',
             isActive: false,
             title: 'Team Plan',
+            subtitle: 'Для студий и продакшенов',
             price: 0,
             currency: '₽',
-            features: ['Multiple Seats', 'SSO & Audit Logs', 'Team Drives'],
-            phaseLabel: 'Phase 3'
+            features: [
+                { title: 'Несколько мест', desc: 'Управление доступом сотрудников.', isCore: false },
+                { title: 'Общие диски', desc: 'Централизованное хранилище.', isCore: false }
+            ],
+            phaseLabel: 'Фаза 3 (Закрыто)',
+            footerStatus: 'В разработке',
+            footerLimit: 'Конец 2025'
         }
     },
     yookassa: { shopId: '', secretKey: '' },

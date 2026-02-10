@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Lock, Check, Zap, Infinity as InfinityIcon, Loader2, CreditCard, Calendar } from 'lucide-react';
+import { Lock, Check, Zap, Infinity as InfinityIcon, Loader2, CreditCard, Calendar, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { useAuth } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
@@ -23,11 +23,37 @@ export const RoadmapBlock: React.FC = () => {
               });
               if (res.ok) {
                   const data = await res.json();
-                  // Merge with default to ensure structure exists
+                  // Helper to safely merge legacy string arrays to new structure if needed
+                  const mergedPlans = { ...DEFAULT_PAYMENT_CONFIG.plans };
+                  
+                  if (data.plans) {
+                      Object.keys(data.plans).forEach(key => {
+                          const k = key as keyof typeof mergedPlans;
+                          if (data.plans[k]) {
+                              // If features come as strings (legacy), convert them
+                              const rawFeatures = data.plans[k].features;
+                              let features = rawFeatures;
+                              if (Array.isArray(rawFeatures) && typeof rawFeatures[0] === 'string') {
+                                  features = rawFeatures.map((f: string) => ({
+                                      title: f,
+                                      desc: '',
+                                      isCore: false
+                                  }));
+                              }
+                              
+                              mergedPlans[k] = {
+                                  ...DEFAULT_PAYMENT_CONFIG.plans[k],
+                                  ...data.plans[k],
+                                  features: features || DEFAULT_PAYMENT_CONFIG.plans[k].features
+                              };
+                          }
+                      });
+                  }
+
                   setConfig({ 
                       ...DEFAULT_PAYMENT_CONFIG, 
                       ...data,
-                      plans: { ...DEFAULT_PAYMENT_CONFIG.plans, ...(data.plans || {}) }
+                      plans: mergedPlans
                   });
               }
           } catch(e) {
@@ -73,116 +99,87 @@ export const RoadmapBlock: React.FC = () => {
   const isLifetimeUser = plan === 'lifetime';
   const isMonthlyUser = plan === 'pro' && !isLifetimeUser;
 
-  // Render Helper for a generic Card
   const renderCard = (
       planKey: 'monthly' | 'lifetime' | 'team', 
       planData: PlanConfig, 
       userStatus: { isCurrent: boolean, isOwned: boolean }
   ) => {
-      const { isActive, title, price, currency, features, phaseLabel } = planData;
+      const { isActive, title, subtitle, price, currency, features, footerStatus, footerLimit } = planData;
       
       // Styling logic
-      let borderColor = 'border-zinc-200 dark:border-zinc-800';
-      let accentColor = 'text-zinc-900 dark:text-white';
+      let borderColor = 'border-zinc-800';
       let btnColor = 'bg-zinc-800 hover:bg-zinc-700';
-      let icon = <Check size={12} />;
-
+      let btnText = 'text-white';
+      
       if (planKey === 'lifetime') {
-          borderColor = userStatus.isCurrent ? 'border-green-500 ring-1 ring-green-500' : 'border-green-400 dark:border-green-600/50 hover:border-green-500';
-          btnColor = 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500';
-          icon = <InfinityIcon size={12} />;
+          borderColor = userStatus.isCurrent ? 'border-green-500 ring-1 ring-green-500' : 'border-zinc-800 hover:border-green-500/50';
+          btnColor = 'bg-[#4f46e5] hover:bg-[#4338ca] shadow-[0_0_20px_rgba(79,70,229,0.3)]'; // Indigo glow
       } else if (planKey === 'monthly') {
-          borderColor = userStatus.isCurrent ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50';
-          btnColor = 'bg-indigo-600 hover:bg-indigo-500';
-          icon = <Calendar size={12} />;
+          borderColor = 'border-zinc-800';
+          btnColor = 'bg-zinc-800 hover:bg-zinc-700';
       }
 
-      // Locked State
-      if (!isActive) {
-          return (
-            <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/50 rounded-3xl p-6 relative opacity-80 hover:opacity-100 transition-opacity grayscale hover:grayscale-0 flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                    <span className="bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-zinc-300 dark:border-zinc-700">
-                        {phaseLabel || 'Locked'}
-                    </span>
-                    <Lock size={16} className="text-zinc-400 dark:text-zinc-600" />
-                </div>
-                <h3 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">{title}</h3>
-                <div className="flex items-baseline gap-1 mb-6">
-                    <span className="text-4xl font-bold text-zinc-400">---</span>
-                </div>
-                <div className="space-y-4 mb-8">
-                    {features.map((f, i) => (
-                        <div key={i} className="flex items-start gap-3">
-                            <div className="p-1 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-600 mt-0.5"><Check size={12} /></div>
-                            <p className="text-sm text-zinc-500 dark:text-zinc-400">{f}</p>
-                        </div>
-                    ))}
-                </div>
-                <div className="mt-auto space-y-2 text-xs border-t border-zinc-200 dark:border-zinc-800/50 pt-4">
-                    <div className="flex justify-between">
-                        <span className="text-zinc-500 dark:text-zinc-600">{t('rm.status')}</span>
-                        <span className="text-zinc-400 dark:text-zinc-500 flex items-center gap-1"><Lock size={10} /> {t('rm.locked')}</span>
-                    </div>
-                </div>
-            </div>
-          );
-      }
+      const isLocked = !isActive;
 
-      // Active State
       return (
-        <div className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden group transition-all shadow-xl flex flex-col ${borderColor}`}>
-            {userStatus.isCurrent && (
-                <div className={`absolute top-0 right-0 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20 ${planKey === 'lifetime' ? 'bg-green-600' : 'bg-indigo-600'}`}>
-                    CURRENT PLAN
+        <div className={`relative bg-zinc-950 border rounded-3xl p-6 flex flex-col h-full transition-all duration-300 group ${borderColor} ${isLocked ? 'opacity-60 grayscale-[0.5]' : 'opacity-100'}`}>
+            {/* Header */}
+            <div className="mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                    {userStatus.isCurrent && <div className="bg-green-500/20 text-green-400 p-1 rounded-full"><Check size={12}/></div>}
+                    <h3 className="text-xl font-bold text-white">{title}</h3>
                 </div>
-            )}
-            {planKey === 'lifetime' && (
-                <div className="absolute top-0 right-0 p-4 opacity-50 pointer-events-none">
-                    <div className="w-32 h-32 bg-green-500/10 rounded-full blur-3xl"></div>
-                </div>
-            )}
-            
-            <div className="flex justify-between items-center mb-6">
-                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border flex items-center gap-2 ${planKey === 'lifetime' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/20' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-300 dark:border-zinc-700'}`}>
-                    {planKey === 'lifetime' && <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>}
-                    {phaseLabel || (planKey === 'lifetime' ? 'Limited Offer' : 'Subscription')}
-                </span>
-            </div>
-            
-            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">{title}</h3>
-            <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-bold text-zinc-900 dark:text-white">{price}{currency}</span>
-                {planKey === 'monthly' && <span className="text-xs text-zinc-500 dark:text-zinc-600 ml-2">/ month</span>}
-                {planKey === 'lifetime' && <span className="text-xs text-green-600 dark:text-green-400 font-medium ml-2 uppercase">ONE-TIME</span>}
+                {subtitle && <p className="text-zinc-500 text-xs leading-relaxed min-h-[32px]">{subtitle}</p>}
             </div>
 
-            <div className="space-y-4 mb-8">
+            {/* Features List */}
+            <div className="space-y-5 mb-8 flex-1">
                 {features.map((f, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                        <div className={`p-1 rounded-full mt-0.5 ${planKey === 'lifetime' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'}`}>
-                            {i === 0 ? icon : <Check size={12} />}
+                    <div key={i} className="flex gap-3">
+                        <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${f.isCore ? 'bg-green-900/30 text-green-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                            {f.isCore ? <Zap size={12} fill="currentColor"/> : <Check size={12} />}
                         </div>
-                        <p className="text-sm text-zinc-800 dark:text-zinc-300 font-medium">{f}</p>
+                        <div>
+                            <div className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                                {f.title}
+                                {f.isCore && <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 rounded border border-zinc-700 font-normal">CORE</span>}
+                            </div>
+                            <div className="text-xs text-zinc-500 mt-0.5 leading-snug">{f.desc}</div>
+                        </div>
                     </div>
                 ))}
             </div>
 
-            <div className="mt-auto pt-4 border-t border-zinc-200 dark:border-zinc-800/50">
-                {!userStatus.isOwned ? (
-                    <button 
-                        onClick={() => handleBuy(planKey as any)}
-                        disabled={!!isBuying}
-                        className={`w-full py-3.5 text-white rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] ${btnColor}`}
-                    >
-                        {isBuying === planKey ? <Loader2 size={16} className="animate-spin" /> : (planKey === 'lifetime' ? <CreditCard size={16} /> : <Calendar size={16} />)}
-                        {isBuying === planKey ? 'Processing...' : (planKey === 'lifetime' ? 'Buy Lifetime' : 'Subscribe')}
+            {/* Price & Action */}
+            {!isLocked ? (
+                <div className="mt-auto">
+                    {userStatus.isOwned ? (
+                        <button disabled className="w-full py-3.5 bg-zinc-800 text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default border border-zinc-700">
+                            <CheckCircle2 size={16} /> {planKey === 'lifetime' ? 'Куплено' : 'Активно'}
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => handleBuy(planKey as any)}
+                            disabled={!!isBuying}
+                            className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95 ${btnColor} ${btnText}`}
+                        >
+                            {isBuying === planKey ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
+                            {isBuying === planKey ? 'Обработка...' : `Купить за ${price}${currency}`}
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="mt-auto">
+                    <button disabled className="w-full py-3.5 bg-zinc-900 text-zinc-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed border border-zinc-800">
+                        <Lock size={16} /> Недоступно
                     </button>
-                ) : (
-                    <div className="w-full py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default">
-                        <Check size={16} /> {planKey === 'lifetime' ? 'You own this' : 'Active'}
-                    </div>
-                )}
+                </div>
+            )}
+
+            {/* Footer */}
+            <div className="mt-4 pt-4 border-t border-zinc-900 flex justify-between text-[10px] font-medium">
+                <span className="text-zinc-600">Статус: <span className={isActive ? 'text-green-500' : 'text-zinc-500'}>{footerStatus || (isActive ? 'Открыто' : 'Закрыто')}</span></span>
+                <span className="text-zinc-600">{footerLimit || ''}</span>
             </div>
         </div>
       );
@@ -190,7 +187,6 @@ export const RoadmapBlock: React.FC = () => {
 
   return (
     <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
-        {/* Render Cards Dynamically */}
         {renderCard('monthly', config.plans.monthly, { isCurrent: isMonthlyUser, isOwned: isMonthlyUser || isLifetimeUser })}
         {renderCard('lifetime', config.plans.lifetime, { isCurrent: isLifetimeUser, isOwned: isLifetimeUser })}
         {renderCard('team', config.plans.team, { isCurrent: false, isOwned: false })}

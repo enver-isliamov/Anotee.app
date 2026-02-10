@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle } from 'lucide-react';
-import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig } from '../types';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X } from 'lucide-react';
+import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
 
 interface AdminUser {
     id: string;
@@ -140,12 +140,38 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             });
             if (res.ok) {
                 const data = await res.json();
-                // Ensure defaults are merged
+                
+                // Helper to safely merge legacy string arrays to new structure if needed
+                const mergedPlans = { ...DEFAULT_PAYMENT_CONFIG.plans };
+                if (data.plans) {
+                    Object.keys(data.plans).forEach(key => {
+                        const k = key as keyof typeof mergedPlans;
+                        if (data.plans[k]) {
+                            // If features come as strings (legacy), convert them
+                            const rawFeatures = data.plans[k].features;
+                            let features = rawFeatures;
+                            if (Array.isArray(rawFeatures) && typeof rawFeatures[0] === 'string') {
+                                features = rawFeatures.map((f: string) => ({
+                                    title: f,
+                                    desc: '',
+                                    isCore: false
+                                }));
+                            }
+                            
+                            mergedPlans[k] = {
+                                ...DEFAULT_PAYMENT_CONFIG.plans[k],
+                                ...data.plans[k],
+                                features: features || DEFAULT_PAYMENT_CONFIG.plans[k].features
+                            };
+                        }
+                    });
+                }
+
                 setPaymentConfig({ 
                     ...DEFAULT_PAYMENT_CONFIG, 
                     ...data, 
                     prices: { ...DEFAULT_PAYMENT_CONFIG.prices, ...(data.prices || {}) },
-                    plans: { ...DEFAULT_PAYMENT_CONFIG.plans, ...(data.plans || {}) },
+                    plans: mergedPlans,
                     yookassa: { ...DEFAULT_PAYMENT_CONFIG.yookassa, ...(data.yookassa || {}) },
                     prodamus: { ...DEFAULT_PAYMENT_CONFIG.prodamus, ...(data.prodamus || {}) }
                 });
@@ -267,6 +293,26 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }));
     };
 
+    // Helper to edit a specific feature inside a plan
+    const handleFeatureChange = (planId: keyof typeof paymentConfig.plans, featureIndex: number, field: keyof PlanFeature, value: any) => {
+        const plan = paymentConfig.plans[planId];
+        const newFeatures = [...plan.features];
+        newFeatures[featureIndex] = { ...newFeatures[featureIndex], [field]: value };
+        handlePlanChange(planId, 'features', newFeatures);
+    };
+
+    const addFeature = (planId: keyof typeof paymentConfig.plans) => {
+        const plan = paymentConfig.plans[planId];
+        const newFeatures = [...plan.features, { title: 'New Feature', desc: 'Description', isCore: false }];
+        handlePlanChange(planId, 'features', newFeatures);
+    };
+
+    const removeFeature = (planId: keyof typeof paymentConfig.plans, featureIndex: number) => {
+        const plan = paymentConfig.plans[planId];
+        const newFeatures = plan.features.filter((_, i) => i !== featureIndex);
+        handlePlanChange(planId, 'features', newFeatures);
+    };
+
     // Render Plan Editor Card
     const renderPlanEditor = (planKey: 'monthly' | 'lifetime' | 'team') => {
         const plan = paymentConfig.plans[planKey];
@@ -283,43 +329,77 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </label>
                 </div>
 
-                <div className="space-y-3">
-                    <div>
-                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Title</label>
-                        <input 
-                            type="text" 
-                            value={plan.title} 
-                            onChange={(e) => handlePlanChange(planKey, 'title', e.target.value)}
-                            className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-bold"
-                        />
-                    </div>
-                    <div className="flex gap-2">
-                        <div className="flex-1">
+                <div className="space-y-4">
+                    {/* Basic Info */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Title</label>
+                            <input type="text" value={plan.title} onChange={(e) => handlePlanChange(planKey, 'title', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-bold"/>
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtitle</label>
+                            <input type="text" value={plan.subtitle || ''} onChange={(e) => handlePlanChange(planKey, 'subtitle', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs"/>
+                        </div>
+                        <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Price</label>
-                            <input 
-                                type="number" 
-                                value={plan.price} 
-                                onChange={(e) => handlePlanChange(planKey, 'price', parseInt(e.target.value))}
-                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono"
-                            />
+                            <input type="number" value={plan.price} onChange={(e) => handlePlanChange(planKey, 'price', parseInt(e.target.value))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono"/>
                         </div>
-                        <div className="w-16">
+                        <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sym</label>
-                            <input 
-                                type="text" 
-                                value={plan.currency} 
-                                onChange={(e) => handlePlanChange(planKey, 'currency', e.target.value)}
-                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono text-center"
-                            />
+                            <input type="text" value={plan.currency} onChange={(e) => handlePlanChange(planKey, 'currency', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono text-center"/>
                         </div>
                     </div>
+
+                    {/* Features Editor */}
                     <div>
-                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Features (comma separated)</label>
-                        <textarea 
-                            value={plan.features.join(', ')} 
-                            onChange={(e) => handlePlanChange(planKey, 'features', e.target.value.split(',').map(s => s.trim()))}
-                            className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs h-20 resize-none"
-                        />
+                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-2">Features</label>
+                        <div className="space-y-2">
+                            {plan.features.map((f, i) => (
+                                <div key={i} className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                                    <div className="flex-1 space-y-1">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Title"
+                                            value={f.title}
+                                            onChange={(e) => handleFeatureChange(planKey, i, 'title', e.target.value)}
+                                            className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold px-1 py-0.5 outline-none focus:border-indigo-500"
+                                        />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Description (Optional)"
+                                            value={f.desc}
+                                            onChange={(e) => handleFeatureChange(planKey, i, 'desc', e.target.value)}
+                                            className="w-full bg-transparent text-[10px] text-zinc-500 px-1 py-0.5 outline-none"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1 items-center">
+                                        <button 
+                                            onClick={() => handleFeatureChange(planKey, i, 'isCore', !f.isCore)}
+                                            className={`p-1 rounded ${f.isCore ? 'bg-green-100 text-green-600' : 'text-zinc-300 hover:text-zinc-500'}`}
+                                            title="Toggle Core Feature"
+                                        >
+                                            <Zap size={12} fill={f.isCore ? "currentColor" : "none"}/>
+                                        </button>
+                                        <button onClick={() => removeFeature(planKey, i)} className="text-zinc-300 hover:text-red-500 p-1"><X size={12}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                            <button onClick={() => addFeature(planKey)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
+                                <Plus size={12} /> Add Feature
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Footer Info */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>
+                            <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Limit</label>
+                            <input type="text" placeholder="150 мест" value={plan.footerLimit || ''} onChange={(e) => handlePlanChange(planKey, 'footerLimit', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-500"/>
+                        </div>
                     </div>
                 </div>
             </div>
