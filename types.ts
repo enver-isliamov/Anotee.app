@@ -154,6 +154,8 @@ export interface PaymentConfig {
         lifetime: number;
         monthly: number;
     };
+    // Order of plans on the frontend
+    planOrder: string[]; 
     // Rich plan configuration
     plans: {
         free: PlanConfig; // New Free Plan
@@ -177,6 +179,7 @@ export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
         lifetime: 2900,
         monthly: 490
     },
+    planOrder: ['free', 'monthly', 'lifetime', 'team'],
     plans: {
         free: {
             id: 'free',

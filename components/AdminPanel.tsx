@@ -1,7 +1,7 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
 
 interface AdminUser {
@@ -80,6 +80,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
     const [grantDuration, setGrantDuration] = useState<number>(30); // days
     const [isGranting, setIsGranting] = useState(false);
+
+    // Drag and Drop Refs
+    const dragItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
+    const dragOverItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
 
     const fetchUsers = async () => {
         setUsersLoading(true);
@@ -170,6 +174,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 setPaymentConfig({ 
                     ...DEFAULT_PAYMENT_CONFIG, 
                     ...data, 
+                    planOrder: data.planOrder || DEFAULT_PAYMENT_CONFIG.planOrder,
                     prices: { ...DEFAULT_PAYMENT_CONFIG.prices, ...(data.prices || {}) },
                     plans: mergedPlans,
                     yookassa: { ...DEFAULT_PAYMENT_CONFIG.yookassa, ...(data.yookassa || {}) },
@@ -313,42 +318,103 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         handlePlanChange(planId, 'features', newFeatures);
     };
 
+    // --- DRAG AND DROP HANDLERS ---
+
+    const onDragStart = (e: React.DragEvent, type: 'PLAN' | 'FEATURE', index: number, parentId?: string) => {
+        dragItem.current = { type, index, parentId };
+        e.dataTransfer.effectAllowed = "move";
+        // Ghost image usually handled by browser, but we can set it here if needed
+    };
+
+    const onDragOver = (e: React.DragEvent) => {
+        e.preventDefault(); // Necessary to allow dropping
+    };
+
+    const onDrop = (e: React.DragEvent, type: 'PLAN' | 'FEATURE', targetIndex: number, parentId?: string) => {
+        e.preventDefault();
+        
+        if (!dragItem.current) return;
+        if (dragItem.current.type !== type) return;
+        if (dragItem.current.index === targetIndex && dragItem.current.parentId === parentId) return;
+
+        // --- PLAN REORDERING ---
+        if (type === 'PLAN') {
+            const newOrder = [...paymentConfig.planOrder];
+            const draggedPlanKey = newOrder[dragItem.current.index];
+            
+            // Remove from old position
+            newOrder.splice(dragItem.current.index, 1);
+            // Insert at new position
+            newOrder.splice(targetIndex, 0, draggedPlanKey);
+            
+            setPaymentConfig(prev => ({
+                ...prev,
+                planOrder: newOrder
+            }));
+        } 
+        
+        // --- FEATURE REORDERING ---
+        else if (type === 'FEATURE' && parentId === dragItem.current.parentId) {
+            // Reorder only within the same plan
+            const planKey = parentId as keyof typeof paymentConfig.plans;
+            const features = [...paymentConfig.plans[planKey].features];
+            const draggedFeature = features[dragItem.current.index];
+
+            features.splice(dragItem.current.index, 1);
+            features.splice(targetIndex, 0, draggedFeature);
+
+            handlePlanChange(planKey, 'features', features);
+        }
+
+        dragItem.current = null;
+    };
+
     // Render Plan Editor Card
-    const renderPlanEditor = (planKey: 'free' | 'monthly' | 'lifetime' | 'team') => {
-        const plan = paymentConfig.plans[planKey];
+    const renderPlanEditor = (planKey: string, index: number) => {
+        const plan = paymentConfig.plans[planKey as keyof typeof paymentConfig.plans];
         if (!plan) return null;
         
         return (
-            <div className={`p-4 rounded-xl border transition-all ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}>
+            <div 
+                key={planKey}
+                draggable
+                onDragStart={(e) => onDragStart(e, 'PLAN', index)}
+                onDragOver={onDragOver}
+                onDrop={(e) => onDrop(e, 'PLAN', index)}
+                className={`p-4 rounded-xl border transition-all cursor-default ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}
+            >
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-2">
+                        <div className="cursor-move text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1">
+                            <GripVertical size={16} />
+                        </div>
                         <div className={`w-3 h-3 rounded-full ${plan.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <h4 className="font-bold text-sm uppercase">{planKey}</h4>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={plan.isActive} onChange={(e) => handlePlanChange(planKey, 'isActive', e.target.checked)} className="sr-only peer" />
+                        <input type="checkbox" checked={plan.isActive} onChange={(e) => handlePlanChange(planKey as any, 'isActive', e.target.checked)} className="sr-only peer" />
                         <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
                     </label>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-4 pl-6">
                     {/* Basic Info */}
                     <div className="grid grid-cols-2 gap-2">
                         <div className="col-span-2">
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Title</label>
-                            <input type="text" value={plan.title} onChange={(e) => handlePlanChange(planKey, 'title', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-bold"/>
+                            <input type="text" value={plan.title} onChange={(e) => handlePlanChange(planKey as any, 'title', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-bold"/>
                         </div>
                         <div className="col-span-2">
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtitle</label>
-                            <input type="text" value={plan.subtitle || ''} onChange={(e) => handlePlanChange(planKey, 'subtitle', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs"/>
+                            <input type="text" value={plan.subtitle || ''} onChange={(e) => handlePlanChange(planKey as any, 'subtitle', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs"/>
                         </div>
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Price</label>
-                            <input type="number" value={plan.price} onChange={(e) => handlePlanChange(planKey, 'price', parseInt(e.target.value))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono"/>
+                            <input type="number" value={plan.price} onChange={(e) => handlePlanChange(planKey as any, 'price', parseInt(e.target.value))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono"/>
                         </div>
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sym</label>
-                            <input type="text" value={plan.currency} onChange={(e) => handlePlanChange(planKey, 'currency', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono text-center"/>
+                            <input type="text" value={plan.currency} onChange={(e) => handlePlanChange(planKey as any, 'currency', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono text-center"/>
                         </div>
                     </div>
 
@@ -357,36 +423,46 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-2">Features</label>
                         <div className="space-y-2">
                             {plan.features.map((f, i) => (
-                                <div key={i} className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                                <div 
+                                    key={i} 
+                                    draggable
+                                    onDragStart={(e) => { e.stopPropagation(); onDragStart(e, 'FEATURE', i, planKey); }}
+                                    onDragOver={onDragOver}
+                                    onDrop={(e) => { e.stopPropagation(); onDrop(e, 'FEATURE', i, planKey); }}
+                                    className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 group"
+                                >
+                                    <div className="cursor-move text-zinc-300 hover:text-zinc-500 pt-1">
+                                        <GripVertical size={14} />
+                                    </div>
                                     <div className="flex-1 space-y-1">
                                         <input 
                                             type="text" 
                                             placeholder="Title"
                                             value={f.title}
-                                            onChange={(e) => handleFeatureChange(planKey, i, 'title', e.target.value)}
+                                            onChange={(e) => handleFeatureChange(planKey as any, i, 'title', e.target.value)}
                                             className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold px-1 py-0.5 outline-none focus:border-indigo-500"
                                         />
                                         <input 
                                             type="text" 
                                             placeholder="Description (Optional)"
                                             value={f.desc}
-                                            onChange={(e) => handleFeatureChange(planKey, i, 'desc', e.target.value)}
+                                            onChange={(e) => handleFeatureChange(planKey as any, i, 'desc', e.target.value)}
                                             className="w-full bg-transparent text-[10px] text-zinc-500 px-1 py-0.5 outline-none"
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1 items-center">
                                         <button 
-                                            onClick={() => handleFeatureChange(planKey, i, 'isCore', !f.isCore)}
+                                            onClick={() => handleFeatureChange(planKey as any, i, 'isCore', !f.isCore)}
                                             className={`p-1 rounded ${f.isCore ? 'bg-green-100 text-green-600' : 'text-zinc-300 hover:text-zinc-500'}`}
                                             title="Toggle Core Feature"
                                         >
                                             <Zap size={12} fill={f.isCore ? "currentColor" : "none"}/>
                                         </button>
-                                        <button onClick={() => removeFeature(planKey, i)} className="text-zinc-300 hover:text-red-500 p-1"><X size={12}/></button>
+                                        <button onClick={() => removeFeature(planKey as any, i)} className="text-zinc-300 hover:text-red-500 p-1"><X size={12}/></button>
                                     </div>
                                 </div>
                             ))}
-                            <button onClick={() => addFeature(planKey)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
+                            <button onClick={() => addFeature(planKey as any)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
                                 <Plus size={12} /> Add Feature
                             </button>
                         </div>
@@ -396,11 +472,11 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>
-                            <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
+                            <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
                         </div>
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Limit</label>
-                            <input type="text" placeholder="150 мест" value={plan.footerLimit || ''} onChange={(e) => handlePlanChange(planKey, 'footerLimit', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-500"/>
+                            <input type="text" placeholder="150 мест" value={plan.footerLimit || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerLimit', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-500"/>
                         </div>
                     </div>
                 </div>
@@ -914,10 +990,9 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 </h3>
                                 
                                 <div className="space-y-4">
-                                    {renderPlanEditor('free')}
-                                    {renderPlanEditor('monthly')}
-                                    {renderPlanEditor('lifetime')}
-                                    {renderPlanEditor('team')}
+                                    {paymentConfig.planOrder.map((planKey, index) => 
+                                        renderPlanEditor(planKey, index)
+                                    )}
                                 </div>
                             </div>
 

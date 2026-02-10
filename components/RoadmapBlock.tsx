@@ -63,6 +63,7 @@ export const RoadmapBlock: React.FC = () => {
                   setConfig({ 
                       ...DEFAULT_PAYMENT_CONFIG, 
                       ...data,
+                      planOrder: data.planOrder || DEFAULT_PAYMENT_CONFIG.planOrder,
                       plans: mergedPlans
                   });
               }
@@ -112,10 +113,12 @@ export const RoadmapBlock: React.FC = () => {
   const isMonthlyUser = plan === 'pro' && !isLifetimeUser;
 
   const renderCard = (
-      planKey: 'free' | 'monthly' | 'lifetime' | 'team', 
-      planData: PlanConfig, 
+      planKey: string, 
       userStatus: { isCurrent: boolean, isOwned: boolean }
   ) => {
+      const planData = config.plans[planKey as keyof typeof config.plans];
+      if (!planData) return null;
+
       const { isActive, title, subtitle, price, currency, features, footerStatus, footerLimit } = planData;
       
       // Styling logic
@@ -136,7 +139,7 @@ export const RoadmapBlock: React.FC = () => {
       const isLocked = !isActive;
 
       return (
-        <div className={`relative bg-zinc-950 border rounded-3xl p-6 flex flex-col h-full transition-all duration-300 group ${borderColor} ${isLocked ? 'opacity-60 grayscale-[0.5]' : 'opacity-100'}`}>
+        <div key={planKey} className={`relative bg-zinc-950 border rounded-3xl p-6 flex flex-col h-full transition-all duration-300 group ${borderColor} ${isLocked ? 'opacity-60 grayscale-[0.5]' : 'opacity-100'}`}>
             {/* Header */}
             <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
@@ -219,12 +222,17 @@ export const RoadmapBlock: React.FC = () => {
       );
   }
 
+  // Use config.planOrder to determine render order
   return (
     <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto text-left animate-in fade-in duration-500">
-        {renderCard('free', config.plans.free, { isCurrent: !isPro, isOwned: true })}
-        {renderCard('monthly', config.plans.monthly, { isCurrent: isMonthlyUser, isOwned: isMonthlyUser || isLifetimeUser })}
-        {renderCard('lifetime', config.plans.lifetime, { isCurrent: isLifetimeUser, isOwned: isLifetimeUser })}
-        {renderCard('team', config.plans.team, { isCurrent: false, isOwned: false })}
+        {config.planOrder.map(planKey => {
+            let status = { isCurrent: false, isOwned: false };
+            if (planKey === 'free') status = { isCurrent: !isPro, isOwned: true };
+            if (planKey === 'monthly') status = { isCurrent: isMonthlyUser, isOwned: isMonthlyUser || isLifetimeUser };
+            if (planKey === 'lifetime') status = { isCurrent: isLifetimeUser, isOwned: isLifetimeUser };
+            // Team default false
+            return renderCard(planKey, status);
+        })}
     </div>
   );
 };
