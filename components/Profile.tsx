@@ -125,7 +125,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   ];
 
   return (
-        <div className="max-w-4xl mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
+        <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
             {/* Page Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                  <div>
