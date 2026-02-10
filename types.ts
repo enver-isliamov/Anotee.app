@@ -127,11 +127,29 @@ export const DEFAULT_CONFIG: AppConfig = {
 };
 
 // --- PAYMENT INTEGRATION CONFIG ---
+
+export interface PlanConfig {
+    id: 'monthly' | 'lifetime' | 'team';
+    isActive: boolean; // If false -> Shows as "Phase X / Locked"
+    title: string;
+    price: number;
+    currency: string;
+    features: string[];
+    phaseLabel?: string; // e.g. "Phase 3"
+}
+
 export interface PaymentConfig {
     activeProvider: 'yookassa' | 'prodamus';
+    // Legacy simple prices (kept for backward compat in API)
     prices: {
         lifetime: number;
         monthly: number;
+    };
+    // Rich plan configuration
+    plans: {
+        monthly: PlanConfig;
+        lifetime: PlanConfig;
+        team: PlanConfig;
     };
     yookassa: {
         shopId: string;
@@ -148,6 +166,35 @@ export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
     prices: {
         lifetime: 4900,
         monthly: 490
+    },
+    plans: {
+        monthly: {
+            id: 'monthly',
+            isActive: true,
+            title: 'Pro Subscription',
+            price: 490,
+            currency: '₽',
+            features: ['Unlimited Projects', 'Export (XML, CSV)', '4K Support'],
+            phaseLabel: 'Phase 2'
+        },
+        lifetime: {
+            id: 'lifetime',
+            isActive: true,
+            title: "Founder's Club",
+            price: 4900,
+            currency: '₽',
+            features: ['Lifetime License', 'One-time payment', 'Priority Support', 'Early Access Features'],
+            phaseLabel: 'Phase 1'
+        },
+        team: {
+            id: 'team',
+            isActive: false,
+            title: 'Team Plan',
+            price: 0,
+            currency: '₽',
+            features: ['Multiple Seats', 'SSO & Audit Logs', 'Team Drives'],
+            phaseLabel: 'Phase 3'
+        }
     },
     yookassa: { shopId: '', secretKey: '' },
     prodamus: { url: '', secretKey: '' }

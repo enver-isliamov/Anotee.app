@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign } from 'lucide-react';
-import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG } from '../types';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock } from 'lucide-react';
+import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig } from '../types';
 
 interface AdminUser {
     id: string;
@@ -145,6 +145,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     ...DEFAULT_PAYMENT_CONFIG, 
                     ...data, 
                     prices: { ...DEFAULT_PAYMENT_CONFIG.prices, ...(data.prices || {}) },
+                    plans: { ...DEFAULT_PAYMENT_CONFIG.plans, ...(data.plans || {}) },
                     yookassa: { ...DEFAULT_PAYMENT_CONFIG.yookassa, ...(data.yookassa || {}) },
                     prodamus: { ...DEFAULT_PAYMENT_CONFIG.prodamus, ...(data.prodamus || {}) }
                 });
@@ -250,6 +251,79 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 [field]: value
             }
         }));
+    };
+
+    // Helper for editing plan details
+    const handlePlanChange = (planId: keyof typeof paymentConfig.plans, field: keyof PlanConfig, value: any) => {
+        setPaymentConfig(prev => ({
+            ...prev,
+            plans: {
+                ...prev.plans,
+                [planId]: {
+                    ...prev.plans[planId],
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    // Render Plan Editor Card
+    const renderPlanEditor = (planKey: 'monthly' | 'lifetime' | 'team') => {
+        const plan = paymentConfig.plans[planKey];
+        return (
+            <div className={`p-4 rounded-xl border transition-all ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}>
+                <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${plan.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <h4 className="font-bold text-sm uppercase">{planKey}</h4>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" checked={plan.isActive} onChange={(e) => handlePlanChange(planKey, 'isActive', e.target.checked)} className="sr-only peer" />
+                        <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>
+
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Title</label>
+                        <input 
+                            type="text" 
+                            value={plan.title} 
+                            onChange={(e) => handlePlanChange(planKey, 'title', e.target.value)}
+                            className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-bold"
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Price</label>
+                            <input 
+                                type="number" 
+                                value={plan.price} 
+                                onChange={(e) => handlePlanChange(planKey, 'price', parseInt(e.target.value))}
+                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono"
+                            />
+                        </div>
+                        <div className="w-16">
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sym</label>
+                            <input 
+                                type="text" 
+                                value={plan.currency} 
+                                onChange={(e) => handlePlanChange(planKey, 'currency', e.target.value)}
+                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono text-center"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Features (comma separated)</label>
+                        <textarea 
+                            value={plan.features.join(', ')} 
+                            onChange={(e) => handlePlanChange(planKey, 'features', e.target.value.split(',').map(s => s.trim()))}
+                            className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs h-20 resize-none"
+                        />
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     // Helper to render a config row
@@ -380,7 +454,6 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {/* TAB: STRATEGY (S.M.A.R.T.) */}
             {activeTab === 'strategy' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
-                    {/* ... (Existing Strategy Content - omitted for brevity but preserved in output) ... */}
                     <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                             <Target size={120} />
@@ -391,6 +464,42 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         <p className="text-indigo-200 text-sm max-w-2xl leading-relaxed">
                             Стратегия выхода на монетизацию через модель <strong className="text-white">Founder's Club</strong> (быстрый капитал) с последующим переходом в <strong className="text-white">SaaS</strong> (рекуррентный доход).
                         </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* PHASE 1 */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl relative">
+                            <div className="absolute -top-3 left-4 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded">PHASE 1 (ACTIVE)</div>
+                            <h3 className="text-lg font-bold mt-2 mb-2 text-zinc-900 dark:text-white">Early Access</h3>
+                            <p className="text-xs text-zinc-500 mb-4">Привлечение "Основателей" через Lifetime лицензии. Сбор фидбека и валидация PMF.</p>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> <span>Запуск MVP</span></div>
+                                <div className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> <span>Прием платежей</span></div>
+                                <div className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> <span>Первые 100 пользователей</span></div>
+                            </div>
+                        </div>
+
+                        {/* PHASE 2 */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl relative opacity-80">
+                            <div className="absolute -top-3 left-4 bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded">PHASE 2 (ROLLOUT)</div>
+                            <h3 className="text-lg font-bold mt-2 mb-2 text-zinc-900 dark:text-white">SaaS Transformation</h3>
+                            <p className="text-xs text-zinc-500 mb-4">Включение ежемесячных подписок. Отключение Lifetime тарифа для новых пользователей.</p>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex items-center gap-2"><div className="w-3 h-3 border-2 border-indigo-500 rounded-full"></div> <span>Recurrent Payments</span></div>
+                                <div className="flex items-center gap-2"><div className="w-3 h-3 border-2 border-zinc-500 rounded-full"></div> <span>Marketing Automation</span></div>
+                            </div>
+                        </div>
+
+                        {/* PHASE 3 */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl relative opacity-60">
+                            <div className="absolute -top-3 left-4 bg-zinc-500 text-white text-[10px] font-bold px-2 py-1 rounded">PHASE 3 (SCALE)</div>
+                            <h3 className="text-lg font-bold mt-2 mb-2 text-zinc-900 dark:text-white">Enterprise & Teams</h3>
+                            <p className="text-xs text-zinc-500 mb-4">Фокус на B2B продажах, SSO, командных дисках и расширенной аналитике.</p>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex items-center gap-2"><Lock size={14} className="text-zinc-400"/> <span>Team Roles</span></div>
+                                <div className="flex items-center gap-2"><Lock size={14} className="text-zinc-400"/> <span>Audit Logs</span></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -541,152 +650,137 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             {/* TAB: PAYMENTS */}
             {activeTab === 'payments' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-2xl mx-auto">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-4xl mx-auto">
                     <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-6 rounded-2xl mb-8 text-center">
-                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежных Шлюзов</h2>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400">Выберите активного провайдера и настройте цены.</p>
+                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежей</h2>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">Управление шлюзами и тарифными планами.</p>
                     </div>
 
                     {paymentLoading ? (
                         <div className="flex justify-center p-12"><RefreshCw className="animate-spin text-zinc-400" /></div>
                     ) : (
-                        <div className="space-y-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             
-                            {/* PRICING CONFIG */}
-                            <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                                    <DollarSign size={16} className="text-green-500"/> Настройка Цен (RUB)
+                            {/* LEFT COLUMN: PROVIDERS */}
+                            <div className="space-y-6">
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                                    <CreditCard size={18}/> Шлюз (Gateway)
                                 </h3>
+                                
+                                {/* Provider Selection */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Lifetime (Founder)</label>
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
                                         <input 
-                                            type="number" 
-                                            value={paymentConfig.prices?.lifetime || 4900} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prices: {...prev.prices, lifetime: parseInt(e.target.value)}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                            type="radio" 
+                                            name="provider" 
+                                            value="yookassa" 
+                                            checked={paymentConfig.activeProvider === 'yookassa'}
+                                            onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                            className="sr-only"
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Monthly (Pro)</label>
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-10 h-10 rounded-full bg-[#7B61FF] text-white flex items-center justify-center font-bold text-xs">Yoo</div>
+                                            <span className="font-bold text-zinc-900 dark:text-white">ЮKassa</span>
+                                            {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                        </div>
+                                    </label>
+
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
                                         <input 
-                                            type="number" 
-                                            value={paymentConfig.prices?.monthly || 490} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prices: {...prev.prices, monthly: parseInt(e.target.value)}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                            type="radio" 
+                                            name="provider" 
+                                            value="prodamus" 
+                                            checked={paymentConfig.activeProvider === 'prodamus'}
+                                            onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                            className="sr-only"
                                         />
-                                    </div>
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">Pr</div>
+                                            <span className="font-bold text-zinc-900 dark:text-white">Prodamus</span>
+                                            {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                        </div>
+                                    </label>
                                 </div>
-                            </div>
 
-                            {/* Provider Selection */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
-                                    <input 
-                                        type="radio" 
-                                        name="provider" 
-                                        value="yookassa" 
-                                        checked={paymentConfig.activeProvider === 'yookassa'}
-                                        onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
-                                        className="sr-only"
-                                    />
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="w-10 h-10 rounded-full bg-[#7B61FF] text-white flex items-center justify-center font-bold text-xs">Yoo</div>
-                                        <span className="font-bold text-zinc-900 dark:text-white">ЮKassa</span>
-                                        {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
-                                    </div>
-                                </label>
-
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
-                                    <input 
-                                        type="radio" 
-                                        name="provider" 
-                                        value="prodamus" 
-                                        checked={paymentConfig.activeProvider === 'prodamus'}
-                                        onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
-                                        className="sr-only"
-                                    />
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">Pr</div>
-                                        <span className="font-bold text-zinc-900 dark:text-white">Prodamus</span>
-                                        {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
-                                    </div>
-                                </label>
-                            </div>
-
-                            {/* YooKassa Settings */}
-                            <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-[#7B61FF]"></div>
-                                    Настройки ЮKassa
-                                </h3>
-                                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
-                                        <input 
-                                            type="text" 
-                                            value={paymentConfig.yookassa.shopId} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Enter Shop ID"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.yookassa.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="test_..."
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Prodamus Settings */}
-                            <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                                    Настройки Prodamus
-                                </h3>
-                                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
-                                        <div className="flex gap-2">
+                                {/* YooKassa Settings */}
+                                <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
                                             <input 
                                                 type="text" 
-                                                value={paymentConfig.prodamus.url} 
-                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
-                                                placeholder="https://yourschool.payform.ru"
+                                                value={paymentConfig.yookassa.shopId} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                placeholder="Enter Shop ID"
                                             />
-                                            <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
-                                                <ExternalLink size={16} />
-                                            </a>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
+                                            <input 
+                                                type="password" 
+                                                value={paymentConfig.yookassa.secretKey} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                placeholder="test_..."
+                                            />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.prodamus.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Secret key for signature"
-                                        />
+                                </div>
+
+                                {/* Prodamus Settings */}
+                                <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={paymentConfig.prodamus.url} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
+                                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                                    placeholder="https://yourschool.payform.ru"
+                                                />
+                                                <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
+                                                    <ExternalLink size={16} />
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
+                                            <input 
+                                                type="password" 
+                                                value={paymentConfig.prodamus.secretKey} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                placeholder="Secret key for signature"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex justify-end">
+                            {/* RIGHT COLUMN: PLAN EDITOR */}
+                            <div className="space-y-6">
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                                    <Edit3 size={18}/> Управление Тарифами
+                                </h3>
+                                
+                                <div className="space-y-4">
+                                    {renderPlanEditor('monthly')}
+                                    {renderPlanEditor('lifetime')}
+                                    {renderPlanEditor('team')}
+                                </div>
+                            </div>
+
+                            <div className="col-span-1 lg:col-span-2 pt-4 flex justify-end sticky bottom-6">
                                 <button 
                                     onClick={handleSavePaymentConfig}
                                     disabled={isSavingPayment}
-                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
+                                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-base font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
                                 >
                                     {isSavingPayment ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                                    Сохранить настройки
+                                    Сохранить Все Настройки
                                 </button>
                             </div>
                         </div>
