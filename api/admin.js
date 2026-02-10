@@ -8,17 +8,51 @@ const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
 export default async function handler(req, res) {
     const { action } = req.query;
 
-    // --- PUBLIC/AUTH ALLOWED ACTIONS (Before Admin Check) ---
-    
-    // 1. Get Config (Available to any logged in user to know their limits)
-    if (action === 'get_config') {
+    // --- PUBLIC / HYBRID ENDPOINTS (Accessible to all, but restricted data for guests) ---
+
+    // 1. Get Payment Config (Public for Pricing Page, Full for Admin)
+    if (action === 'get_payment_config') {
         try {
+            // Try to identify user, but don't crash if guest
             const user = await verifyUser(req); 
-            // Optional: if (!user) return defaults... but frontend handles auth
-            
+            const isAdmin = user && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+
             // Create table if not exists just in case
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
             
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'payment_config'`;
+            const rawConfig = rows.length > 0 ? rows[0].value : {};
+
+            if (isAdmin) {
+                // Return FULL config for Admin (including secrets for editing)
+                return res.status(200).json(rawConfig);
+            } else {
+                // Return SANITIZED config for Guests/Users (Prices & Features only)
+                // Strip sensitive keys to prevent leak
+                const safeConfig = {
+                    ...rawConfig,
+                    yookassa: { 
+                        shopId: rawConfig.yookassa?.shopId,
+                        // secretKey intentionally removed
+                    },
+                    prodamus: { 
+                        url: rawConfig.prodamus?.url,
+                        // secretKey intentionally removed
+                    }
+                };
+                return res.status(200).json(safeConfig);
+            }
+        } catch (e) {
+            console.error("Payment Config Error:", e);
+            return res.status(200).json({}); // Fallback to defaults on error
+        }
+    }
+
+    // 2. Get App Config (Feature Flags)
+    if (action === 'get_config') {
+        try {
+            // Allow anyone to read feature flags (needed for limits check)
+            await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
             const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'feature_flags'`;
             return res.status(200).json(rows.length > 0 ? rows[0].value : {});
         } catch (e) {
@@ -27,41 +61,43 @@ export default async function handler(req, res) {
         }
     }
 
-    // --- 1. SETUP DATABASE ---
-    if (action === 'setup') {
-        const providedSecret = req.query.secret;
-        const expectedSecret = process.env.CLERK_SECRET_KEY;
-
-        if (!expectedSecret || providedSecret !== expectedSecret) {
-            return res.status(403).json({ error: "Forbidden" });
+    // --- STRICT ADMIN ACTIONS (Middleware Check) ---
+    // Everything below this line REQUIRES admin access
+    try {
+        const user = await verifyUser(req, true); // Force email fetch
+        if (!user || !user.email || !ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) {
+            return res.status(403).json({ error: "Forbidden: Admins only" });
         }
 
-        try {
-            await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
-            await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_owner_id ON projects (owner_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
-            
-            // NEW: System Settings Table for Feature Flags
-            await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
-            
-            return res.status(200).json({ success: true, message: "DB Setup Complete" });
-        } catch (e) {
-            return res.status(500).json({ error: e.message });
+        const clerk = getClerkClient();
+
+        // --- SETUP DATABASE ---
+        if (action === 'setup') {
+            const providedSecret = req.query.secret;
+            const expectedSecret = process.env.CLERK_SECRET_KEY;
+
+            if (!expectedSecret || providedSecret !== expectedSecret) {
+                return res.status(403).json({ error: "Forbidden" });
+            }
+
+            try {
+                await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
+                await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
+                await sql`CREATE INDEX IF NOT EXISTS idx_owner_id ON projects (owner_id);`;
+                await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
+                
+                // NEW: System Settings Table
+                await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
+                
+                return res.status(200).json({ success: true, message: "DB Setup Complete" });
+            } catch (e) {
+                return res.status(500).json({ error: e.message });
+            }
         }
-    }
 
-    // --- 2. MIGRATE DATA ---
-    if (action === 'migrate') {
-        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-        try {
-            const user = await verifyUser(req);
-            if (!user) return res.status(401).json({ error: "Unauthorized" });
-
-            // Ensure Schema
-            await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
-            await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
+        // --- MIGRATE DATA ---
+        if (action === 'migrate') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
             const BATCH_SIZE = 50;
             let offset = 0;
@@ -77,19 +113,11 @@ export default async function handler(req, res) {
                     let project = row.data;
                     let currentOwnerId = row.owner_id;
                     
+                    // Logic to migrate ownership based on email match
                     if (currentOwnerId === user.email && user.email) {
                         currentOwnerId = user.id;
                         project.ownerId = user.id;
                         claimedCount++;
-                    }
-
-                    if (project.team && Array.isArray(project.team)) {
-                        project.team = project.team.map(member => {
-                            if ((member.id === user.email) || (member.email === user.email)) {
-                                return { ...member, id: user.id, avatar: user.avatar || member.avatar };
-                            }
-                            return member;
-                        });
                     }
 
                     try {
@@ -102,19 +130,7 @@ export default async function handler(req, res) {
             }
 
             return res.status(200).json({ success: true, updatedProjects: updatedCount, claimedOwnerships: claimedCount });
-        } catch (error) {
-            return res.status(500).json({ error: "Internal Server Error", details: error.message });
         }
-    }
-
-    // --- 3. STRICT ADMIN ACTIONS (Middleware Check) ---
-    try {
-        const user = await verifyUser(req, true); // Force email fetch
-        if (!user || !user.email || !ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) {
-            return res.status(403).json({ error: "Forbidden: Admins only" });
-        }
-
-        const clerk = getClerkClient();
 
         // --- LIST USERS ---
         if (action === 'users') {
@@ -147,7 +163,6 @@ export default async function handler(req, res) {
 
             let expiresAt = null;
             if (days && typeof days === 'number') {
-                // If days > 0, calculate date. If 0, assumes lifetime (handled by frontend logic usually, but here just in case)
                 expiresAt = days === 0 ? new Date('2099-12-31').getTime() : Date.now() + (days * 24 * 60 * 60 * 1000);
             } else {
                 expiresAt = new Date('2099-12-31').getTime();
@@ -158,7 +173,7 @@ export default async function handler(req, res) {
                     plan: 'pro',
                     status: 'active',
                     expiresAt: expiresAt,
-                    yookassaPaymentMethodId: null // Manual grant usually doesn't have a card attached
+                    yookassaPaymentMethodId: null
                 }
             });
 
@@ -194,21 +209,11 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- GET PAYMENT CONFIG ---
-        if (action === 'get_payment_config') {
-            if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-            
-            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'payment_config'`;
-            // Return empty object if not set, UI handles defaults
-            return res.status(200).json(rows.length > 0 ? rows[0].value : {});
-        }
-
         // --- UPDATE PAYMENT CONFIG ---
         if (action === 'update_payment_config') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const config = req.body;
             
-            // Validate minimal structure
             if (!config || !['yookassa', 'prodamus'].includes(config.activeProvider)) {
                 return res.status(400).json({ error: "Invalid payment config" });
             }

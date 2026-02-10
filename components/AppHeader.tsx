@@ -104,9 +104,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right Side */}
             <div className="flex items-center gap-3 md:gap-5">
                 
-                {/* Unified User Controls */}
+                {/* Unified User Controls (Desktop Only) */}
                 {currentUser && (
-                    <div className="flex items-center gap-2 pl-2">
+                    <div className="hidden md:flex items-center gap-2 pl-2">
                         {/* Settings Link */}
                         <a 
                             href="/profile"
@@ -150,7 +150,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </div>
                 )}
 
-                {/* Login Button (If Logged Out) */}
+                {/* Login Button (Desktop Only) */}
                 {!currentUser && (
                     <button 
                         onClick={onLoginClick || (() => onBack())} 
@@ -160,9 +160,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </button>
                 )}
 
-                <LanguageSelector />
+                {/* Language Selector (Desktop Only) */}
+                <div className="hidden md:block">
+                    <LanguageSelector />
+                </div>
                 
-                {/* TOUR TRIGGER BUTTON */}
+                {/* TOUR TRIGGER BUTTON (Desktop Only) */}
                 {currentUser && onStartTour && (
                     <button 
                         onClick={onStartTour}
@@ -177,7 +180,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {!hideNav && (
                     <button 
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        className="md:hidden text-zinc-400 hover:text-white p-1"
+                        className="md:hidden text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
                     >
                         {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                     </button>
@@ -185,9 +188,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
         </header>
 
-        {/* Mobile Menu Dropdown */}
+        {/* Mobile Menu Dropdown (Fullscreen on small screens) */}
         {isMobileMenuOpen && !hideNav && (
-            <div className="md:hidden fixed top-16 left-0 right-0 bg-zinc-900 border-b border-zinc-800 z-40 p-4 flex flex-col gap-2 shadow-2xl animate-in slide-in-from-top-2">
+            <div className="md:hidden fixed top-16 left-0 right-0 bottom-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 z-40 p-4 flex flex-col gap-2 animate-in slide-in-from-top-2 overflow-y-auto">
+                {/* Navigation Links */}
                 {navItems.map(page => {
                     const pageKey = page === 'ai' ? 'AI_FEATURES' : page.toUpperCase();
                     const isActive = currentView === pageKey;
@@ -198,8 +202,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                 setIsMobileMenuOpen(false);
                                 onNavigate(pageKey);
                             }}
-                            className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors
-                                ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'}
+                            className={`w-full text-left px-4 py-3 rounded-xl text-base font-bold transition-colors
+                                ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}
                             `}
                         >
                             {t(`nav.${page}`)}
@@ -207,68 +211,91 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     );
                 })}
                 
+                {/* Mobile Tour Button */}
                 {currentUser && onStartTour && (
                     <button 
                         onClick={() => { setIsMobileMenuOpen(false); onStartTour(); }}
-                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-medium text-indigo-400 hover:bg-zinc-800 flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 rounded-xl text-base font-bold text-indigo-400 hover:bg-zinc-800 flex items-center gap-2"
                     >
-                        <CircleHelp size={16} /> Показать обучение
+                        <CircleHelp size={20} /> Показать обучение
                     </button>
                 )}
 
                 {isAdmin && (
                     <button 
                         onClick={() => { setIsMobileMenuOpen(false); onNavigate('ADMIN'); }}
-                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-white text-black flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 rounded-xl text-base font-bold bg-white text-black flex items-center gap-2 shadow-lg"
                     >
-                        <Shield size={16} /> Admin Panel
+                        <Shield size={20} /> Admin Panel
                     </button>
                 )}
 
+                <div className="h-px bg-zinc-800 my-2"></div>
+
+                {/* USER CONTROL CENTER (Mobile) */}
                 {currentUser && (
-                    <div className="space-y-2 pt-2 border-t border-zinc-800 mt-2">
+                    <div className="space-y-3">
+                        {/* Profile Link */}
                         <button 
                             onClick={() => { setIsMobileMenuOpen(false); onNavigate('PROFILE'); }}
-                            className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold bg-zinc-800 text-white flex items-center gap-2"
+                            className="w-full text-left px-4 py-3 rounded-xl text-sm font-bold bg-zinc-800 text-white flex items-center gap-3 hover:bg-zinc-700 transition-colors"
                         >
-                            <Settings size={16} /> Профиль и Подписка
+                            <Settings size={18} className="text-zinc-400" />
+                            Профиль и Подписка
                         </button>
 
-                        <div className="px-4 py-3 bg-zinc-950 rounded-xl">
-                            <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Organization</div>
+                        {/* Org Switcher Card */}
+                        <div className="px-4 py-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                            <div className="text-[10px] font-bold text-zinc-500 uppercase mb-2 tracking-wider">Организация</div>
                             <OrganizationSwitcher 
                                 hidePersonal={false}
                                 afterCreateOrganizationUrl="#"
                                 appearance={{
                                     elements: {
                                         rootBox: "w-full",
-                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-900 text-white",
+                                        organizationSwitcherTrigger: "w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-white hover:bg-zinc-800 transition-colors",
+                                        organizationPreviewTextContainer: "flex-1 text-left",
+                                        organizationPreviewMainIdentifier: "text-sm font-bold",
+                                        organizationPreviewSecondaryIdentifier: "text-xs text-zinc-500"
                                     }
                                 }}
                             />
                         </div>
+
+                        {/* User Identity Row */}
+                        <div className="flex items-center gap-3 px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700/50">
+                            <div className="scale-110">
+                                <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-10 h-10" } }} />
+                            </div>
+                            <div className="flex flex-col overflow-hidden">
+                                <span className="text-sm font-bold text-white truncate">{currentUser.name}</span>
+                                <span className="text-xs text-zinc-400 truncate">{currentUser.email}</span>
+                            </div>
+                        </div>
                     </div>
                 )}
 
-                <div className="h-px bg-zinc-800 my-1"></div>
-                
-                {currentUser ? (
-                    <div className="flex items-center gap-2 px-4 py-3 bg-zinc-800 rounded-lg">
-                        <UserButton afterSignOutUrl="/" />
-                        <span className="text-sm font-bold text-white">{currentUser.name}</span>
-                    </div>
-                ) : (
+                {/* Login Action (Mobile) */}
+                {!currentUser && (
                     <button 
                         onClick={() => {
                             setIsMobileMenuOpen(false);
                             if (onLoginClick) onLoginClick();
                             else onBack();
                         }}
-                        className="w-full text-left px-4 py-3 rounded-lg text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors"
+                        className="w-full text-center px-4 py-4 rounded-xl text-base font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-900/30"
                     >
                         {t('nav.login')}
                     </button>
                 )}
+
+                {/* Mobile Language Selector (Bottom) */}
+                <div className="mt-auto pt-4 border-t border-zinc-800 flex items-center justify-between px-2 pb-6">
+                     <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Язык интерфейса</span>
+                     <div className="scale-110 origin-right">
+                        <LanguageSelector />
+                     </div>
+                </div>
             </div>
         )}
     </>

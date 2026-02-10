@@ -16,21 +16,23 @@ export const RoadmapBlock: React.FC = () => {
 
   useEffect(() => {
       const loadConfig = async () => {
-          // If auth is not ready yet, wait
+          // If auth is not fully loaded yet, we can still fetch public config, 
+          // but let's wait a tick to ensure we know if user is signed in or not for the token
           if (!isLoaded) return;
 
-          // If not signed in, we can't fetch admin config (it is protected), 
-          // so we fallback to defaults immediately.
-          if (!isSignedIn) {
-              setIsLoading(false);
-              return;
-          }
-
           try {
-              const token = await getToken();
+              // Try to get token if signed in, otherwise proceed without it
+              const token = isSignedIn ? await getToken() : null;
+              
+              const headers: Record<string, string> = {};
+              if (token) {
+                  headers['Authorization'] = `Bearer ${token}`;
+              }
+
               const res = await fetch('/api/admin?action=get_payment_config', {
-                  headers: { 'Authorization': `Bearer ${token}` }
+                  headers: headers
               });
+
               if (res.ok) {
                   const data = await res.json();
                   // Helper to safely merge legacy string arrays to new structure if needed
@@ -69,6 +71,7 @@ export const RoadmapBlock: React.FC = () => {
               }
           } catch(e) {
               // ignore, keep defaults
+              console.warn("Failed to load payment config", e);
           } finally {
               setIsLoading(false);
           }

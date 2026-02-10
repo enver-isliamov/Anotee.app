@@ -381,7 +381,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 onDragStart={(e) => onDragStart(e, 'PLAN', index)}
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, 'PLAN', index)}
-                className={`p-4 rounded-xl border transition-all cursor-default ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}
+                className={`p-4 rounded-2xl border transition-all cursor-default flex flex-col h-full ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}
             >
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-2">
@@ -397,7 +397,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </label>
                 </div>
 
-                <div className="space-y-4 pl-6">
+                <div className="space-y-4 pl-0 md:pl-2 flex-1 flex flex-col">
                     {/* Basic Info */}
                     <div className="grid grid-cols-2 gap-2">
                         <div className="col-span-2">
@@ -419,7 +419,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     {/* Features Editor */}
-                    <div>
+                    <div className="flex-1">
                         <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-2">Features</label>
                         <div className="space-y-2">
                             {plan.features.map((f, i) => (
@@ -469,7 +469,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     {/* Footer Info */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-auto">
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>
                             <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
@@ -563,7 +563,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const activeConfigKeys = CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS] || [];
 
     return (
-        <div className="max-w-6xl mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
+        <div className="w-full mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
             {/* Header */}
             <div className="flex flex-col gap-6 mb-8">
                 <div className="flex items-center justify-between">
@@ -611,7 +611,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             {/* TAB: STRATEGY (S.M.A.R.T.) */}
             {activeTab === 'strategy' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8 w-full">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
@@ -873,7 +873,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             {/* TAB: PAYMENTS */}
             {activeTab === 'payments' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-4xl mx-auto">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 w-full mx-auto pb-24">
                     <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-6 rounded-2xl mb-8 text-center">
                         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежей</h2>
                         <p className="text-sm text-zinc-500 dark:text-zinc-400">Управление шлюзами и тарифными планами.</p>
@@ -882,128 +882,120 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     {paymentLoading ? (
                         <div className="flex justify-center p-12"><RefreshCw className="animate-spin text-zinc-400" /></div>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="flex flex-col gap-8">
                             
-                            {/* LEFT COLUMN: PROVIDERS */}
-                            <div className="space-y-6">
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                                    <CreditCard size={18}/> Шлюз (Gateway)
+                            {/* BLOCK 1: GATEWAY SELECTION */}
+                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-6">
+                                    <CreditCard size={18}/> Выбор Шлюза (Gateway)
                                 </h3>
                                 
-                                {/* Provider Selection */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
-                                        <input 
-                                            type="radio" 
-                                            name="provider" 
-                                            value="yookassa" 
-                                            checked={paymentConfig.activeProvider === 'yookassa'}
-                                            onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
-                                            className="sr-only"
-                                        />
-                                        <div className="flex flex-col items-center gap-2">
-                                            <div className="w-10 h-10 rounded-full bg-[#7B61FF] text-white flex items-center justify-center font-bold text-xs">Yoo</div>
-                                            <span className="font-bold text-zinc-900 dark:text-white">ЮKassa</span>
-                                            {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <button 
+                                        onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                        className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                    >
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'yookassa' ? 'bg-[#7B61FF]' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Yoo</div>
+                                        <div>
+                                            <div className="font-bold text-zinc-900 dark:text-white">ЮKassa</div>
+                                            <div className="text-xs text-zinc-500">Автоплатежи (Recurrent)</div>
                                         </div>
-                                    </label>
+                                        {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                    </button>
 
-                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
-                                        <input 
-                                            type="radio" 
-                                            name="provider" 
-                                            value="prodamus" 
-                                            checked={paymentConfig.activeProvider === 'prodamus'}
-                                            onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
-                                            className="sr-only"
-                                        />
-                                        <div className="flex flex-col items-center gap-2">
-                                            <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">Pr</div>
-                                            <span className="font-bold text-zinc-900 dark:text-white">Prodamus</span>
-                                            {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                    <button 
+                                        onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                        className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                    >
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'prodamus' ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Pr</div>
+                                        <div>
+                                            <div className="font-bold text-zinc-900 dark:text-white">Prodamus</div>
+                                            <div className="text-xs text-zinc-500">Международные карты</div>
                                         </div>
-                                    </label>
+                                        {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                    </button>
                                 </div>
 
-                                {/* YooKassa Settings */}
-                                <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
-                                            <input 
-                                                type="text" 
-                                                value={paymentConfig.yookassa.shopId} 
-                                                onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                                placeholder="Enter Shop ID"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
-                                            <input 
-                                                type="password" 
-                                                value={paymentConfig.yookassa.secretKey} 
-                                                onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                                placeholder="test_..."
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Prodamus Settings */}
-                                <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
-                                            <div className="flex gap-2">
+                                {/* Settings Fields */}
+                                <div className="bg-zinc-50 dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
+                                    {paymentConfig.activeProvider === 'yookassa' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
                                                 <input 
                                                     type="text" 
-                                                    value={paymentConfig.prodamus.url} 
-                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
-                                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
-                                                    placeholder="https://yourschool.payform.ru"
+                                                    value={paymentConfig.yookassa.shopId} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="Enter Shop ID"
                                                 />
-                                                <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
-                                                    <ExternalLink size={16} />
-                                                </a>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
+                                                <input 
+                                                    type="password" 
+                                                    value={paymentConfig.yookassa.secretKey} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="test_..."
+                                                />
                                             </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
-                                            <input 
-                                                type="password" 
-                                                value={paymentConfig.prodamus.secretKey} 
-                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                                placeholder="Secret key for signature"
-                                            />
+                                    )}
+
+                                    {paymentConfig.activeProvider === 'prodamus' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={paymentConfig.prodamus.url} 
+                                                        onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
+                                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                                        placeholder="https://yourschool.payform.ru"
+                                                    />
+                                                    <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
+                                                        <ExternalLink size={16} />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
+                                                <input 
+                                                    type="password" 
+                                                    value={paymentConfig.prodamus.secretKey} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="Secret key for signature"
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* RIGHT COLUMN: PLAN EDITOR */}
-                            <div className="space-y-6">
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                                    <Edit3 size={18}/> Управление Тарифами
+                            {/* BLOCK 2: PLAN EDITOR (HORIZONTAL GRID) */}
+                            <div>
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-6">
+                                    <Edit3 size={18}/> Редактор Тарифов
                                 </h3>
                                 
-                                <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                                     {paymentConfig.planOrder.map((planKey, index) => 
                                         renderPlanEditor(planKey, index)
                                     )}
                                 </div>
                             </div>
 
-                            <div className="col-span-1 lg:col-span-2 pt-4 flex justify-end sticky bottom-6">
+                            <div className="fixed bottom-6 right-6 z-50">
                                 <button 
                                     onClick={handleSavePaymentConfig}
                                     disabled={isSavingPayment}
-                                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-base font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
+                                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full text-base font-bold shadow-2xl shadow-indigo-500/40 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
                                 >
-                                    {isSavingPayment ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                                    Сохранить Все Настройки
+                                    {isSavingPayment ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
+                                    Сохранить Настройки
                                 </button>
                             </div>
                         </div>
