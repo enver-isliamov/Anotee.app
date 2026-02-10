@@ -168,9 +168,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined);
   };
 
+  // --- SMART POLLING OPTIMIZATION ---
+  // Only poll frequently (15s) when in Player View to get new comments.
+  // In Dashboard, disable polling (save requests) and rely on Focus Revalidation.
+  const pollingInterval = view.type === 'PLAYER' ? 15000 : 0;
+
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
-      refreshInterval: 20000, 
-      revalidateOnFocus: true, 
+      refreshInterval: pollingInterval, 
+      revalidateOnFocus: true, // Keep this ON to update when user comes back to tab
+      revalidateOnReconnect: true,
       dedupingInterval: 5000,
       keepPreviousData: true
   });
