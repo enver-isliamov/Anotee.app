@@ -1,15 +1,15 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink } from 'lucide-react';
-import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG } from '../types';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X } from 'lucide-react';
+import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
 
 interface AdminUser {
     id: string;
     name: string;
     email: string;
     avatar: string;
-    plan: 'free' | 'pro';
+    plan: 'free' | 'pro' | 'lifetime';
     expiresAt: number | null;
     isAutoRenew: boolean;
     lastActive: number;
@@ -140,10 +140,38 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             });
             if (res.ok) {
                 const data = await res.json();
-                // Ensure defaults are merged
+                
+                // Helper to safely merge legacy string arrays to new structure if needed
+                const mergedPlans = { ...DEFAULT_PAYMENT_CONFIG.plans };
+                if (data.plans) {
+                    Object.keys(data.plans).forEach(key => {
+                        const k = key as keyof typeof mergedPlans;
+                        if (data.plans[k]) {
+                            // If features come as strings (legacy), convert them
+                            const rawFeatures = data.plans[k].features;
+                            let features = rawFeatures;
+                            if (Array.isArray(rawFeatures) && typeof rawFeatures[0] === 'string') {
+                                features = rawFeatures.map((f: string) => ({
+                                    title: f,
+                                    desc: '',
+                                    isCore: false
+                                }));
+                            }
+                            
+                            mergedPlans[k] = {
+                                ...DEFAULT_PAYMENT_CONFIG.plans[k],
+                                ...data.plans[k],
+                                features: features || DEFAULT_PAYMENT_CONFIG.plans[k].features
+                            };
+                        }
+                    });
+                }
+
                 setPaymentConfig({ 
                     ...DEFAULT_PAYMENT_CONFIG, 
                     ...data, 
+                    prices: { ...DEFAULT_PAYMENT_CONFIG.prices, ...(data.prices || {}) },
+                    plans: mergedPlans,
                     yookassa: { ...DEFAULT_PAYMENT_CONFIG.yookassa, ...(data.yookassa || {}) },
                     prodamus: { ...DEFAULT_PAYMENT_CONFIG.prodamus, ...(data.prodamus || {}) }
                 });
@@ -249,6 +277,133 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 [field]: value
             }
         }));
+    };
+
+    // Helper for editing plan details
+    const handlePlanChange = (planId: keyof typeof paymentConfig.plans, field: keyof PlanConfig, value: any) => {
+        setPaymentConfig(prev => ({
+            ...prev,
+            plans: {
+                ...prev.plans,
+                [planId]: {
+                    ...prev.plans[planId],
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    // Helper to edit a specific feature inside a plan
+    const handleFeatureChange = (planId: keyof typeof paymentConfig.plans, featureIndex: number, field: keyof PlanFeature, value: any) => {
+        const plan = paymentConfig.plans[planId];
+        const newFeatures = [...plan.features];
+        newFeatures[featureIndex] = { ...newFeatures[featureIndex], [field]: value };
+        handlePlanChange(planId, 'features', newFeatures);
+    };
+
+    const addFeature = (planId: keyof typeof paymentConfig.plans) => {
+        const plan = paymentConfig.plans[planId];
+        const newFeatures = [...plan.features, { title: 'New Feature', desc: 'Description', isCore: false }];
+        handlePlanChange(planId, 'features', newFeatures);
+    };
+
+    const removeFeature = (planId: keyof typeof paymentConfig.plans, featureIndex: number) => {
+        const plan = paymentConfig.plans[planId];
+        const newFeatures = plan.features.filter((_, i) => i !== featureIndex);
+        handlePlanChange(planId, 'features', newFeatures);
+    };
+
+    // Render Plan Editor Card
+    const renderPlanEditor = (planKey: 'monthly' | 'lifetime' | 'team') => {
+        const plan = paymentConfig.plans[planKey];
+        return (
+            <div className={`p-4 rounded-xl border transition-all ${plan.isActive ? 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-70 grayscale-[0.5]'}`}>
+                <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${plan.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <h4 className="font-bold text-sm uppercase">{planKey}</h4>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" checked={plan.isActive} onChange={(e) => handlePlanChange(planKey, 'isActive', e.target.checked)} className="sr-only peer" />
+                        <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>
+
+                <div className="space-y-4">
+                    {/* Basic Info */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Title</label>
+                            <input type="text" value={plan.title} onChange={(e) => handlePlanChange(planKey, 'title', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-bold"/>
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtitle</label>
+                            <input type="text" value={plan.subtitle || ''} onChange={(e) => handlePlanChange(planKey, 'subtitle', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs"/>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Price</label>
+                            <input type="number" value={plan.price} onChange={(e) => handlePlanChange(planKey, 'price', parseInt(e.target.value))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono"/>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sym</label>
+                            <input type="text" value={plan.currency} onChange={(e) => handlePlanChange(planKey, 'currency', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs font-mono text-center"/>
+                        </div>
+                    </div>
+
+                    {/* Features Editor */}
+                    <div>
+                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-2">Features</label>
+                        <div className="space-y-2">
+                            {plan.features.map((f, i) => (
+                                <div key={i} className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                                    <div className="flex-1 space-y-1">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Title"
+                                            value={f.title}
+                                            onChange={(e) => handleFeatureChange(planKey, i, 'title', e.target.value)}
+                                            className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold px-1 py-0.5 outline-none focus:border-indigo-500"
+                                        />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Description (Optional)"
+                                            value={f.desc}
+                                            onChange={(e) => handleFeatureChange(planKey, i, 'desc', e.target.value)}
+                                            className="w-full bg-transparent text-[10px] text-zinc-500 px-1 py-0.5 outline-none"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1 items-center">
+                                        <button 
+                                            onClick={() => handleFeatureChange(planKey, i, 'isCore', !f.isCore)}
+                                            className={`p-1 rounded ${f.isCore ? 'bg-green-100 text-green-600' : 'text-zinc-300 hover:text-zinc-500'}`}
+                                            title="Toggle Core Feature"
+                                        >
+                                            <Zap size={12} fill={f.isCore ? "currentColor" : "none"}/>
+                                        </button>
+                                        <button onClick={() => removeFeature(planKey, i)} className="text-zinc-300 hover:text-red-500 p-1"><X size={12}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                            <button onClick={() => addFeature(planKey)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
+                                <Plus size={12} /> Add Feature
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Footer Info */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>
+                            <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Limit</label>
+                            <input type="text" placeholder="150 мест" value={plan.footerLimit || ''} onChange={(e) => handlePlanChange(planKey, 'footerLimit', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-500"/>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     // Helper to render a config row
@@ -379,7 +534,6 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {/* TAB: STRATEGY (S.M.A.R.T.) */}
             {activeTab === 'strategy' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
-                    
                     {/* Header */}
                     <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
@@ -393,101 +547,105 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </p>
                     </div>
 
-                    {/* S.M.A.R.T. GRID */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {/* Specific */}
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl shadow-sm">
-                            <div className="flex items-center gap-3 mb-3 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-xs tracking-wider">
-                                <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/30 rounded"><Target size={14}/></div> Specific (Конкретика)
+                    {/* SMART GRID */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* SPECIFIC */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-500"><Target size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-indigo-500 tracking-wider">Specific (Конкретика)</h3>
                             </div>
                             <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
                                 Продать 150 пожизненных лицензий (Founder's Club) для финансирования маркетинга, затем конвертировать 5% бесплатных пользователей в ежемесячную подписку Pro.
                             </p>
                         </div>
 
-                        {/* Measurable */}
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl shadow-sm">
-                            <div className="flex items-center gap-3 mb-3 text-green-600 dark:text-green-400 font-bold uppercase text-xs tracking-wider">
-                                <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded"><BarChart3 size={14}/></div> Measurable (Измеримость)
+                        {/* MEASURABLE */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-green-500/10 rounded-lg text-green-500"><BarChart3 size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-green-500 tracking-wider">Measurable (Измеримость)</h3>
                             </div>
-                            <ul className="text-sm text-zinc-600 dark:text-zinc-300 space-y-2">
-                                <li className="flex justify-between"><span>Выручка (фаза 1):</span> <strong>435,000 ₽</strong></li>
-                                <li className="flex justify-between"><span>MRR (фаза 2):</span> <strong>100,000 ₽/мес</strong></li>
-                                <li className="flex justify-between"><span>Пользователей:</span> <strong>1,000+</strong></li>
-                            </ul>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-1"><span>Выручка (фаза 1):</span><span className="font-mono font-bold text-white">435,000 ₽</span></div>
+                                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-1"><span>MRR (фаза 2):</span><span className="font-mono font-bold text-white">100,000 ₽/мес</span></div>
+                                <div className="flex justify-between"><span>Пользователей:</span><span className="font-mono font-bold text-white">1,000+</span></div>
+                            </div>
                         </div>
 
-                        {/* Achievable */}
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl shadow-sm">
-                            <div className="flex items-center gap-3 mb-3 text-blue-600 dark:text-blue-400 font-bold uppercase text-xs tracking-wider">
-                                <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded"><Lightbulb size={14}/></div> Achievable (Достижимость)
+                        {/* ACHIEVABLE */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-500"><Lightbulb size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-blue-500 tracking-wider">Achievable (Достижимость)</h3>
                             </div>
                             <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
                                 Рынок фрилансеров-монтажеров в РФ огромен. Anotee предлагает уникальный функционал (экспорт в Resolve) за 2900₽ разово, что дешевле 1 месяца Frame.io.
                             </p>
                         </div>
 
-                        {/* Relevant */}
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl shadow-sm">
-                            <div className="flex items-center gap-3 mb-3 text-amber-600 dark:text-amber-400 font-bold uppercase text-xs tracking-wider">
-                                <div className="p-1.5 bg-amber-100 dark:bg-amber-900/30 rounded"><Zap size={14}/></div> Relevant (Актуальность)
+                        {/* RELEVANT */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-yellow-500/10 rounded-lg text-yellow-500"><Zap size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-yellow-500 tracking-wider">Relevant (Актуальность)</h3>
                             </div>
                             <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
                                 Санкции усложнили оплату зарубежных сервисов. Anotee — локальное решение с серверами Vercel (быстрый доступ) и оплатой через ЮKassa.
                             </p>
                         </div>
+                    </div>
 
-                        {/* Time-bound */}
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl shadow-sm lg:col-span-2">
-                            <div className="flex items-center gap-3 mb-3 text-red-600 dark:text-red-400 font-bold uppercase text-xs tracking-wider">
-                                <div className="p-1.5 bg-red-100 dark:bg-red-900/30 rounded"><ListTodo size={14}/></div> Time-bound (Сроки)
+                    {/* TIME-BOUND */}
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6">
+                        <div className="flex items-center gap-2 mb-6">
+                            <div className="p-1.5 bg-red-500/10 rounded-lg text-red-500"><ListTodo size={16} /></div>
+                            <h3 className="text-xs font-bold uppercase text-red-500 tracking-wider">Time-Bound (Сроки)</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-xl">
+                                <div className="text-[10px] text-zinc-500 mb-1">Месяц 1-3</div>
+                                <div className="text-sm font-bold text-white mb-2">Продажа Founders</div>
+                                <div className="text-xs text-zinc-500">Сбор фидбека, фикс багов.</div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                                    <div className="text-xs font-bold text-zinc-500 mb-1">Месяц 1-3</div>
-                                    <div className="font-bold text-zinc-900 dark:text-white">Продажа Founders</div>
-                                    <div className="text-[10px] text-zinc-500">Сбор фидбека, фикс багов.</div>
-                                </div>
-                                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                                    <div className="text-xs font-bold text-zinc-500 mb-1">Месяц 4-6</div>
-                                    <div className="font-bold text-zinc-900 dark:text-white">Запуск Подписки</div>
-                                    <div className="text-[10px] text-zinc-500">Закрытие Lifetime продаж.</div>
-                                </div>
-                                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                                    <div className="text-xs font-bold text-zinc-500 mb-1">Месяц 7+</div>
-                                    <div className="font-bold text-zinc-900 dark:text-white">B2B Продажи</div>
-                                    <div className="text-[10px] text-zinc-500">Продажа студиям (Team Plan).</div>
-                                </div>
+                            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-xl opacity-60">
+                                <div className="text-[10px] text-zinc-500 mb-1">Месяц 4-6</div>
+                                <div className="text-sm font-bold text-white mb-2">Запуск Подписки</div>
+                                <div className="text-xs text-zinc-500">Закрытие Lifetime продаж.</div>
+                            </div>
+                            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-xl opacity-40">
+                                <div className="text-[10px] text-zinc-500 mb-1">Месяц 7+</div>
+                                <div className="text-sm font-bold text-white mb-2">B2B Продажи</div>
+                                <div className="text-xs text-zinc-500">Продажа студиям (Team Plan).</div>
                             </div>
                         </div>
                     </div>
 
-                    {/* TACTICAL CHECKLIST */}
-                    <div>
-                        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
-                            <ListTodo className="text-green-500" /> Тактический план (Growth Hacking)
+                    {/* TACTICAL PLAN */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                            <ListTodo className="text-green-500" size={20} /> Тактический план (Growth Hacking)
                         </h3>
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+                        <div className="space-y-1">
                             {[
                                 { done: true, text: "Запуск MVP с функцией экспорта XML (УТП)" },
                                 { done: true, text: "Настройка ЮKassa и рекуррентных платежей" },
                                 { done: false, text: "Холодная рассылка по студиям (Telegram/Email) с предложением демо" },
                                 { done: false, text: "Публикация кейса на VC.ru: 'Как я заменил Frame.io за 2900р'" },
                                 { done: false, text: "SEO оптимизация лендинга под запросы 'frame.io аналог', 'видео ревью'" },
-                                { done: false, text: "Партнерство с киношколами (бесплатный доступ студентам -> лояльность)" }
+                                { done: false, text: "Партнерство с киношколами (бесплатный доступ студентам -> лояльность)" },
                             ].map((item, i) => (
-                                <div key={i} className="p-4 flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${item.done ? 'bg-green-500 border-green-500' : 'border-zinc-300 dark:border-zinc-600'}`}>
-                                        {item.done && <CheckCircle size={12} className="text-white" />}
-                                    </div>
-                                    <span className={`text-sm ${item.done ? 'text-zinc-400 line-through' : 'text-zinc-800 dark:text-zinc-200'}`}>
-                                        {item.text}
-                                    </span>
+                                <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border border-transparent transition-colors ${item.done ? 'bg-green-900/10' : 'hover:bg-zinc-800'}`}>
+                                    {item.done ? (
+                                        <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                                    ) : (
+                                        <Circle size={18} className="text-zinc-600 shrink-0" />
+                                    )}
+                                    <span className={`text-sm ${item.done ? 'text-green-200 line-through decoration-green-800' : 'text-zinc-300'}`}>{item.text}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
-
                 </div>
             )}
 
@@ -543,9 +701,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                                     {filteredUsers.map((user) => {
-                                        const isPro = user.plan === 'pro';
+                                        const isPro = user.plan === 'pro' || user.plan === 'lifetime';
+                                        const isLifetime = user.plan === 'lifetime';
                                         const expiry = user.expiresAt ? new Date(user.expiresAt) : null;
-                                        const isLifetime = isPro && expiry && expiry.getFullYear() > 2050;
+                                        
                                         return (
                                             <tr key={user.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                                                 <td className="px-6 py-3">
@@ -560,18 +719,18 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                                 <td className="px-6 py-3">
                                                     {isPro ? (
                                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-500/20">
-                                                            <Zap size={10} fill="currentColor" /> PRO
+                                                            <Zap size={10} fill="currentColor" /> {isLifetime ? 'LIFETIME' : 'PRO'}
                                                         </span>
                                                     ) : (
                                                         <span className="text-zinc-500 text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">FREE</span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
-                                                    {isLifetime ? <span className="text-green-500 font-bold">∞ Lifetime</span> : (expiry ? expiry.toLocaleDateString() : '-')}
+                                                    {isLifetime ? <span className="text-green-500 font-bold">∞</span> : (expiry ? expiry.toLocaleDateString() : '-')}
                                                 </td>
                                                 <td className="px-6 py-3 text-right">
                                                     {isPro ? (
-                                                        <button onClick={() => handleRevokePro(user.id)} className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors">Снять Pro</button>
+                                                        <button onClick={() => handleRevokePro(user.id)} className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors">Снять</button>
                                                     ) : (
                                                         <button onClick={() => setSelectedUser(user)} className="px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold hover:opacity-80 transition-opacity">
                                                             Выдать
@@ -585,52 +744,6 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             </table>
                         </div>
                     </div>
-
-                    {/* MOBILE CARD VIEW */}
-                    <div className="md:hidden space-y-3">
-                        {filteredUsers.map((user) => {
-                            const isPro = user.plan === 'pro';
-                            const expiry = user.expiresAt ? new Date(user.expiresAt) : null;
-                            const isLifetime = isPro && expiry && expiry.getFullYear() > 2050;
-                            return (
-                                <div key={user.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between shadow-sm">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        <img src={user.avatar} className="w-10 h-10 rounded-full bg-zinc-200 shrink-0 object-cover" alt="" />
-                                        <div className="min-w-0 flex-1">
-                                            <div className="font-bold text-zinc-900 dark:text-white text-sm truncate">{user.name}</div>
-                                            <div className="text-[10px] text-zinc-500 truncate mb-1">{user.email}</div>
-                                            <div className="flex items-center gap-2">
-                                                {isPro ? (
-                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[9px] font-bold border border-indigo-200 dark:border-indigo-500/20">
-                                                        <Zap size={8} fill="currentColor"/> PRO
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-zinc-500 text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">FREE</span>
-                                                )}
-                                                {isPro && (
-                                                    <span className="text-[9px] text-zinc-400 font-mono flex items-center gap-1">
-                                                        <RefreshCw size={8}/>
-                                                        {isLifetime ? '∞' : (expiry ? expiry.toLocaleDateString() : '')}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="shrink-0 ml-2">
-                                        {isPro ? (
-                                            <button onClick={() => handleRevokePro(user.id)} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
-                                                <AlertTriangle size={16} />
-                                            </button>
-                                        ) : (
-                                            <button onClick={() => setSelectedUser(user)} className="px-3 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-transform">
-                                                + Pro
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
                 </div>
             )}
 
@@ -640,14 +753,13 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-500/20 p-3 rounded-xl mb-6 flex items-start gap-3">
                         <AlertTriangle className="text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" size={16} />
                         <div>
-                            <h3 className="text-xs font-bold text-yellow-800 dark:text-yellow-400">Глобальные флаги (Feature Flags)</h3>
+                            <h3 className="text-xs font-bold text-yellow-800 dark:text-yellow-400">Глобальные флаги</h3>
                             <p className="text-[10px] text-yellow-700/80 dark:text-yellow-500/80 leading-relaxed">
-                                Влияет на доступность функций и видимость UI для всех пользователей мгновенно. Изменения применяются без перезагрузки сервера.
+                                Влияет на доступность функций и видимость UI для всех пользователей мгновенно.
                             </p>
                         </div>
                     </div>
 
-                    {/* Sub-Tabs for Settings */}
                     <div className="flex flex-wrap gap-2 mb-6">
                         {SUB_TABS.map(tab => (
                             <button
@@ -683,124 +795,137 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
             {/* TAB: PAYMENTS */}
             {activeTab === 'payments' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-2xl mx-auto">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-4xl mx-auto">
                     <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-6 rounded-2xl mb-8 text-center">
-                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежных Шлюзов</h2>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400">Выберите активного провайдера для обработки новых платежей.</p>
+                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежей</h2>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">Управление шлюзами и тарифными планами.</p>
                     </div>
 
                     {paymentLoading ? (
                         <div className="flex justify-center p-12"><RefreshCw className="animate-spin text-zinc-400" /></div>
                     ) : (
-                        <div className="space-y-6">
-                            {/* Provider Selection */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
-                                    <input 
-                                        type="radio" 
-                                        name="provider" 
-                                        value="yookassa" 
-                                        checked={paymentConfig.activeProvider === 'yookassa'}
-                                        onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
-                                        className="sr-only"
-                                    />
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="w-10 h-10 rounded-full bg-[#7B61FF] text-white flex items-center justify-center font-bold text-xs">Yoo</div>
-                                        <span className="font-bold text-zinc-900 dark:text-white">ЮKassa</span>
-                                        {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
-                                    </div>
-                                </label>
-
-                                <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
-                                    <input 
-                                        type="radio" 
-                                        name="provider" 
-                                        value="prodamus" 
-                                        checked={paymentConfig.activeProvider === 'prodamus'}
-                                        onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
-                                        className="sr-only"
-                                    />
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">Pr</div>
-                                        <span className="font-bold text-zinc-900 dark:text-white">Prodamus</span>
-                                        {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
-                                    </div>
-                                </label>
-                            </div>
-
-                            {/* YooKassa Settings */}
-                            <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-[#7B61FF]"></div>
-                                    Настройки ЮKassa
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            
+                            {/* LEFT COLUMN: PROVIDERS */}
+                            <div className="space-y-6">
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                                    <CreditCard size={18}/> Шлюз (Gateway)
                                 </h3>
-                                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
+                                
+                                {/* Provider Selection */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
                                         <input 
-                                            type="text" 
-                                            value={paymentConfig.yookassa.shopId} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Enter Shop ID"
+                                            type="radio" 
+                                            name="provider" 
+                                            value="yookassa" 
+                                            checked={paymentConfig.activeProvider === 'yookassa'}
+                                            onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                            className="sr-only"
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-10 h-10 rounded-full bg-[#7B61FF] text-white flex items-center justify-center font-bold text-xs">Yoo</div>
+                                            <span className="font-bold text-zinc-900 dark:text-white">ЮKassa</span>
+                                            {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                        </div>
+                                    </label>
+
+                                    <label className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'}`}>
                                         <input 
-                                            type="password" 
-                                            value={paymentConfig.yookassa.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="test_..."
+                                            type="radio" 
+                                            name="provider" 
+                                            value="prodamus" 
+                                            checked={paymentConfig.activeProvider === 'prodamus'}
+                                            onChange={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                            className="sr-only"
                                         />
-                                    </div>
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">Pr</div>
+                                            <span className="font-bold text-zinc-900 dark:text-white">Prodamus</span>
+                                            {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-2 right-2 text-indigo-500"><CheckCircle size={16} /></div>}
+                                        </div>
+                                    </label>
                                 </div>
-                            </div>
 
-                            {/* Prodamus Settings */}
-                            <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                                    Настройки Prodamus
-                                </h3>
-                                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
-                                        <div className="flex gap-2">
+                                {/* YooKassa Settings */}
+                                <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
                                             <input 
                                                 type="text" 
-                                                value={paymentConfig.prodamus.url} 
-                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
-                                                placeholder="https://yourschool.payform.ru"
+                                                value={paymentConfig.yookassa.shopId} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                placeholder="Enter Shop ID"
                                             />
-                                            <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
-                                                <ExternalLink size={16} />
-                                            </a>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
+                                            <input 
+                                                type="password" 
+                                                value={paymentConfig.yookassa.secretKey} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                placeholder="test_..."
+                                            />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.prodamus.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Secret key for signature"
-                                        />
+                                </div>
+
+                                {/* Prodamus Settings */}
+                                <div className={`space-y-4 transition-opacity ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={paymentConfig.prodamus.url} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
+                                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                                    placeholder="https://yourschool.payform.ru"
+                                                />
+                                                <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
+                                                    <ExternalLink size={16} />
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
+                                            <input 
+                                                type="password" 
+                                                value={paymentConfig.prodamus.secretKey} 
+                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                placeholder="Secret key for signature"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex justify-end">
+                            {/* RIGHT COLUMN: PLAN EDITOR */}
+                            <div className="space-y-6">
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                                    <Edit3 size={18}/> Управление Тарифами
+                                </h3>
+                                
+                                <div className="space-y-4">
+                                    {renderPlanEditor('monthly')}
+                                    {renderPlanEditor('lifetime')}
+                                    {renderPlanEditor('team')}
+                                </div>
+                            </div>
+
+                            <div className="col-span-1 lg:col-span-2 pt-4 flex justify-end sticky bottom-6">
                                 <button 
                                     onClick={handleSavePaymentConfig}
                                     disabled={isSavingPayment}
-                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
+                                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-base font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
                                 >
                                     {isSavingPayment ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                                    Сохранить настройки
+                                    Сохранить Все Настройки
                                 </button>
                             </div>
                         </div>

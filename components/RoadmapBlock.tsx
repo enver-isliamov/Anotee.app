@@ -1,31 +1,96 @@
 
-import React, { useState } from 'react';
-import { Lock, Check, Zap, Infinity as InfinityIcon, Loader2, CreditCard } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Lock, Check, Zap, Infinity as InfinityIcon, Loader2, CreditCard, Calendar, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { useAuth } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
+import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig } from '../types';
 
 export const RoadmapBlock: React.FC = () => {
   const { t } = useLanguage();
-  const { getToken, isSignedIn } = useAuth();
-  const { isPro } = useSubscription();
-  const [isBuying, setIsBuying] = useState(false);
+  const { getToken, isSignedIn, isLoaded } = useAuth();
+  const { isPro, plan } = useSubscription();
+  const [isBuying, setIsBuying] = useState<string | null>(null);
+  const [config, setConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleBuy = async () => {
+  useEffect(() => {
+      const loadConfig = async () => {
+          // If auth is not ready yet, wait
+          if (!isLoaded) return;
+
+          // If not signed in, we can't fetch admin config (it is protected), 
+          // so we fallback to defaults immediately.
+          if (!isSignedIn) {
+              setIsLoading(false);
+              return;
+          }
+
+          try {
+              const token = await getToken();
+              const res = await fetch('/api/admin?action=get_payment_config', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                  const data = await res.json();
+                  // Helper to safely merge legacy string arrays to new structure if needed
+                  const mergedPlans = { ...DEFAULT_PAYMENT_CONFIG.plans };
+                  
+                  if (data.plans) {
+                      Object.keys(data.plans).forEach(key => {
+                          const k = key as keyof typeof mergedPlans;
+                          if (data.plans[k]) {
+                              // If features come as strings (legacy), convert them
+                              const rawFeatures = data.plans[k].features;
+                              let features = rawFeatures;
+                              if (Array.isArray(rawFeatures) && typeof rawFeatures[0] === 'string') {
+                                  features = rawFeatures.map((f: string) => ({
+                                      title: f,
+                                      desc: '',
+                                      isCore: false
+                                  }));
+                              }
+                              
+                              mergedPlans[k] = {
+                                  ...DEFAULT_PAYMENT_CONFIG.plans[k],
+                                  ...data.plans[k],
+                                  features: features || DEFAULT_PAYMENT_CONFIG.plans[k].features
+                              };
+                          }
+                      });
+                  }
+
+                  setConfig({ 
+                      ...DEFAULT_PAYMENT_CONFIG, 
+                      ...data,
+                      plans: mergedPlans
+                  });
+              }
+          } catch(e) {
+              // ignore, keep defaults
+          } finally {
+              setIsLoading(false);
+          }
+      };
+      loadConfig();
+  }, [isSignedIn, getToken, isLoaded]);
+
+  const handleBuy = async (planType: 'lifetime' | 'monthly') => {
       if (!isSignedIn) {
           alert("Please sign in to purchase.");
           return;
       }
       
-      setIsBuying(true);
+      setIsBuying(planType);
       try {
           const token = await getToken();
-          // CHANGED: Using consolidated endpoint
           const res = await fetch('/api/payment?action=init', {
               method: 'POST',
               headers: {
-                  'Authorization': `Bearer ${token}`
-              }
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ planType })
           });
           
           const data = await res.json();
@@ -34,152 +99,128 @@ export const RoadmapBlock: React.FC = () => {
               window.location.href = data.confirmationUrl;
           } else {
               alert("Payment initialization failed: " + (data.error || "Unknown error"));
-              setIsBuying(false);
+              setIsBuying(null);
           }
       } catch (e) {
           console.error(e);
           alert("Network error");
-          setIsBuying(false);
+          setIsBuying(null);
       }
   };
 
-  return (
-    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
-        {/* Active Card - Founder's Club */}
-        <div className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden group transition-all shadow-xl dark:shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-green-400 dark:border-green-600/50 hover:border-green-500 dark:hover:border-green-500 shadow-green-500/10'}`}>
-            {isPro && (
-                <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20">
-                    CURRENT PLAN
+  const isLifetimeUser = plan === 'lifetime';
+  const isMonthlyUser = plan === 'pro' && !isLifetimeUser;
+
+  const renderCard = (
+      planKey: 'monthly' | 'lifetime' | 'team', 
+      planData: PlanConfig, 
+      userStatus: { isCurrent: boolean, isOwned: boolean }
+  ) => {
+      const { isActive, title, subtitle, price, currency, features, footerStatus, footerLimit } = planData;
+      
+      // Styling logic
+      let borderColor = 'border-zinc-800';
+      let btnColor = 'bg-zinc-800 hover:bg-zinc-700';
+      let btnText = 'text-white';
+      
+      if (planKey === 'lifetime') {
+          borderColor = userStatus.isCurrent ? 'border-green-500 ring-1 ring-green-500' : 'border-zinc-800 hover:border-green-500/50';
+          btnColor = 'bg-[#4f46e5] hover:bg-[#4338ca] shadow-[0_0_20px_rgba(79,70,229,0.3)]'; // Indigo glow
+      } else if (planKey === 'monthly') {
+          borderColor = 'border-zinc-800';
+          btnColor = 'bg-zinc-800 hover:bg-zinc-700';
+      }
+
+      const isLocked = !isActive;
+
+      return (
+        <div className={`relative bg-zinc-950 border rounded-3xl p-6 flex flex-col h-full transition-all duration-300 group ${borderColor} ${isLocked ? 'opacity-60 grayscale-[0.5]' : 'opacity-100'}`}>
+            {/* Header */}
+            <div className="mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                    {userStatus.isCurrent && <div className="bg-green-500/20 text-green-400 p-1 rounded-full"><Check size={12}/></div>}
+                    <h3 className="text-xl font-bold text-white">{title}</h3>
+                </div>
+                {subtitle && <p className="text-zinc-500 text-xs leading-relaxed min-h-[32px]">{subtitle}</p>}
+            </div>
+
+            {/* Features List */}
+            <div className="space-y-5 mb-8 flex-1">
+                {features.map((f, i) => (
+                    <div key={i} className="flex gap-3">
+                        <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${f.isCore ? 'bg-green-900/30 text-green-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                            {f.isCore ? <Zap size={12} fill="currentColor"/> : <Check size={12} />}
+                        </div>
+                        <div>
+                            <div className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                                {f.title}
+                                {f.isCore && <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 rounded border border-zinc-700 font-normal">CORE</span>}
+                            </div>
+                            <div className="text-xs text-zinc-500 mt-0.5 leading-snug">{f.desc}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Price & Action */}
+            {!isLocked ? (
+                <div className="mt-auto">
+                    {userStatus.isOwned ? (
+                        <button disabled className="w-full py-3.5 bg-zinc-800 text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default border border-zinc-700">
+                            <CheckCircle2 size={16} /> {planKey === 'lifetime' ? 'Куплено' : 'Активно'}
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => handleBuy(planKey as any)}
+                            disabled={!!isBuying}
+                            className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95 ${btnColor} ${btnText}`}
+                        >
+                            {isBuying === planKey ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
+                            {isBuying === planKey ? 'Обработка...' : `Купить за ${price}${currency}`}
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="mt-auto">
+                    <button disabled className="w-full py-3.5 bg-zinc-900 text-zinc-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed border border-zinc-800">
+                        <Lock size={16} /> Недоступно
+                    </button>
                 </div>
             )}
-            <div className="absolute top-0 right-0 p-4 opacity-50 pointer-events-none">
-                <div className="w-32 h-32 bg-green-500/10 rounded-full blur-3xl"></div>
-            </div>
-            
-            <div className="flex justify-between items-center mb-6">
-                <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-green-200 dark:border-green-500/20 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                    {t('rm.phase_1')}
-                </span>
-            </div>
 
-            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">{t('rm.founders_club')}</h3>
-            <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-bold text-zinc-900 dark:text-white">2900₽</span>
-                <span className="text-sm text-zinc-400 dark:text-zinc-500 line-through ml-2">4900₽</span>
-                <span className="text-xs text-green-600 dark:text-green-400 font-medium ml-2 uppercase">{t('rm.founder_sale')}</span>
-            </div>
-
-            <div className="space-y-4 mb-8">
-                <div className="flex items-start gap-3">
-                    <div className="p-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mt-0.5"><Check size={12} /></div>
-                    <div>
-                        <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{t('rm.lifetime_license')}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">{t('rm.lifetime_desc')}</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-3">
-                    <div className="p-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mt-0.5"><Zap size={12} /></div>
-                    <div>
-                        <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{t('rm.flash_loom')} <span className="text-[9px] bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">CORE</span></p>
-                        <p className="text-xs text-zinc-500 mt-0.5">{t('rm.sync_desc')}</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-3">
-                    <div className="p-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mt-0.5"><InfinityIcon size={12} /></div>
-                    <div>
-                        <p className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{t('rm.unlimited')}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">{t('rm.unlimited_desc')}</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="mt-auto pt-4 border-t border-zinc-200 dark:border-zinc-800/50">
-                {!isPro ? (
-                    <button 
-                        onClick={handleBuy}
-                        disabled={isBuying}
-                        className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] ring-4 ring-indigo-500/10 animate-in fade-in zoom-in duration-300"
-                    >
-                        {isBuying ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                        {isBuying ? 'Обработка...' : 'Купить за 2900₽'}
-                    </button>
-                ) : (
-                    <div className="w-full py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-default">
-                        <Check size={16} /> Уже активировано
-                    </div>
-                )}
-                
-                <div className="mt-3 flex justify-between text-[10px] text-zinc-500 dark:text-zinc-600">
-                    <span>{t('rm.status')} <span className="text-green-600 dark:text-green-400 font-bold">{t('rm.open')}</span></span>
-                    <span>{t('rm.users_150')}</span>
-                </div>
+            {/* Footer */}
+            <div className="mt-4 pt-4 border-t border-zinc-900 flex justify-between text-[10px] font-medium">
+                <span className="text-zinc-600">Статус: <span className={isActive ? 'text-green-500' : 'text-zinc-500'}>{footerStatus || (isActive ? 'Открыто' : 'Закрыто')}</span></span>
+                <span className="text-zinc-600">{footerLimit || ''}</span>
             </div>
         </div>
+      );
+  };
 
-        {/* Locked Card 1 - Early Adopter */}
-        <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/50 rounded-3xl p-6 relative opacity-80 hover:opacity-100 transition-opacity grayscale hover:grayscale-0 flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-                <span className="bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-zinc-300 dark:border-zinc-700">
-                    {t('rm.phase_2')}
-                </span>
-                <Lock size={16} className="text-zinc-400 dark:text-zinc-600" />
-            </div>
-            
-            <h3 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">{t('rm.early_adopter')}</h3>
-            <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-bold text-zinc-400">4900₽</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-600 ml-2">{t('rm.one_time')}</span>
-            </div>
-
-            <div className="space-y-4 mb-8">
-                <div className="flex items-start gap-3">
-                    <div className="p-1 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-600 mt-0.5"><Check size={12} /></div>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('rm.access_v1')}</p>
+  if (isLoading) {
+      return (
+        <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
+            {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 h-[500px] flex flex-col animate-pulse">
+                    <div className="h-8 w-1/2 bg-zinc-800 rounded mb-4"></div>
+                    <div className="h-4 w-3/4 bg-zinc-800/50 rounded mb-8"></div>
+                    <div className="space-y-4 flex-1">
+                        <div className="h-4 w-full bg-zinc-800/30 rounded"></div>
+                        <div className="h-4 w-5/6 bg-zinc-800/30 rounded"></div>
+                        <div className="h-4 w-4/6 bg-zinc-800/30 rounded"></div>
+                    </div>
+                    <div className="h-12 w-full bg-zinc-800 rounded-xl mt-8"></div>
                 </div>
-                <div className="flex items-start gap-3">
-                    <div className="p-1 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-600 mt-0.5"><Check size={12} /></div>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('rm.std_support')}</p>
-                </div>
-            </div>
-
-            <div className="mt-auto space-y-2 text-xs border-t border-zinc-200 dark:border-zinc-800/50 pt-4">
-                <div className="flex justify-between">
-                    <span className="text-zinc-500 dark:text-zinc-600">{t('rm.status')}</span>
-                    <span className="text-zinc-400 dark:text-zinc-500 flex items-center gap-1"><Lock size={10} /> {t('rm.locked')}</span>
-                </div>
-            </div>
+            ))}
         </div>
+      );
+  }
 
-        {/* Locked Card 2 - SaaS */}
-        <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/50 rounded-3xl p-6 relative opacity-80 hover:opacity-100 transition-opacity grayscale hover:grayscale-0 flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-                <span className="bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-zinc-300 dark:border-zinc-700">
-                    {t('rm.phase_3')}
-                </span>
-                <Lock size={16} className="text-zinc-400 dark:text-zinc-600" />
-            </div>
-            
-            <h3 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">{t('rm.saas_launch')}</h3>
-            <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-bold text-zinc-400">4800₽</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-600 ml-2">{t('rm.per_year')}</span>
-            </div>
-
-            <div className="space-y-4 mb-8">
-                <div className="flex items-start gap-3">
-                    <div className="p-1 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-600 mt-0.5"><Check size={12} /></div>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('rm.monthly_pay')}</p>
-                </div>
-            </div>
-
-            <div className="mt-auto space-y-2 text-xs border-t border-zinc-200 dark:border-zinc-800/50 pt-4">
-                <div className="flex justify-between">
-                    <span className="text-zinc-500 dark:text-zinc-600">{t('rm.status')}</span>
-                    <span className="text-zinc-400 dark:text-zinc-500">{t('rm.end_2026')}</span>
-                </div>
-            </div>
-        </div>
+  return (
+    <div id="roadmap-block" className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left animate-in fade-in duration-500">
+        {renderCard('monthly', config.plans.monthly, { isCurrent: isMonthlyUser, isOwned: isMonthlyUser || isLifetimeUser })}
+        {renderCard('lifetime', config.plans.lifetime, { isCurrent: isLifetimeUser, isOwned: isLifetimeUser })}
+        {renderCard('team', config.plans.team, { isCurrent: false, isOwned: false })}
     </div>
   );
 };
