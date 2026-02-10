@@ -563,7 +563,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const activeConfigKeys = CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS] || [];
 
     return (
-        <div className="max-w-6xl mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
+        <div className="w-full mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
             {/* Header */}
             <div className="flex flex-col gap-6 mb-8">
                 <div className="flex items-center justify-between">
