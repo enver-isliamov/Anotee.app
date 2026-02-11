@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
 import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2 } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
@@ -58,6 +58,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   });
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
+  const [isS3Loading, setIsS3Loading] = useState(true);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -73,6 +74,38 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const primaryEmail = user?.primaryEmailAddress?.emailAddress;
   const isAdmin = primaryEmail && ADMIN_EMAILS.includes(primaryEmail);
 
+  // Load S3 Config on Mount
+  useEffect(() => {
+      const loadS3Config = async () => {
+          try {
+              const token = await getToken();
+              const res = await fetch('/api/storage/config', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                  const data = await res.json();
+                  if (data) {
+                      setS3Config({
+                          provider: data.provider,
+                          bucket: data.bucket,
+                          endpoint: data.endpoint,
+                          region: data.region,
+                          accessKeyId: data.accessKeyId,
+                          secretAccessKey: data.secretAccessKey, // Will be masked
+                          publicUrl: data.publicUrl
+                      });
+                      setActiveStorageTab('s3'); // Auto switch if configured
+                  }
+              }
+          } catch (e) {
+              console.error("Failed to load S3 config", e);
+          } finally {
+              setIsS3Loading(false);
+          }
+      };
+      loadS3Config();
+  }, [getToken]);
+
   const handleS3PresetChange = (provider: string) => {
       const preset = S3_PRESETS[provider] || { provider: 'custom', endpoint: '', region: '' };
       setS3Config(prev => ({
@@ -83,14 +116,27 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   };
 
   const handleSaveS3 = async () => {
-      // Stub for future backend integration
       setIsSavingS3(true);
-      setTimeout(() => {
-          setIsSavingS3(false);
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/storage/config', {
+              method: 'POST',
+              headers: { 
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(s3Config)
+          });
+
+          if (!res.ok) throw new Error("Failed to save");
+          
           setS3Saved(true);
-          // TODO: Implement actual API call to /api/storage/config
-          alert("S3 конфигурация сохранена (симуляция). Бэкенд в процессе реализации.");
-      }, 1000);
+          setTimeout(() => setS3Saved(false), 3000);
+      } catch (e) {
+          alert("Ошибка сохранения настроек. Проверьте соединение.");
+      } finally {
+          setIsSavingS3(false);
+      }
   };
 
   const handleMigrate = async () => {
@@ -292,124 +338,130 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                             </button>
                         </div>
 
-                        {activeStorageTab === 'google' ? (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div className={`p-4 rounded-xl border flex items-start gap-3 ${isDriveReady ? 'bg-green-900/10 border-green-900/30' : 'bg-red-900/10 border-red-900/30'}`}>
-                                    {isDriveReady ? <CheckCircle2 className="text-green-500 mt-0.5" /> : <AlertCircle className="text-red-500 mt-0.5" />}
-                                    <div>
-                                        <h4 className={`text-sm font-bold ${isDriveReady ? 'text-green-400' : 'text-red-400'}`}>
-                                            {isDriveReady ? 'Подключено и работает' : 'Требуется переподключение'}
-                                        </h4>
-                                        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                                            Файлы хранятся на вашем личном Google Диске в папке <code>Anotee.App</code>. Это бесплатно и не занимает место на наших серверах.
-                                        </p>
-                                    </div>
-                                </div>
-                                <button onClick={checkDriveConnection} className="text-xs text-zinc-500 hover:text-white underline decoration-dashed">
-                                    Проверить статус подключения
-                                </button>
-                            </div>
+                        {isS3Loading && activeStorageTab === 's3' ? (
+                            <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
                         ) : (
-                            <div className="space-y-6 animate-in fade-in">
-                                <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 flex gap-2">
-                                    <Info size={16} className="shrink-0 mt-0.5" />
-                                    <p>Вы можете подключить своё объектное хранилище (S3). Это обеспечит максимальную скорость воспроизведения и полный контроль над файлами.</p>
-                                </div>
+                            <>
+                                {activeStorageTab === 'google' ? (
+                                    <div className="space-y-4 animate-in fade-in">
+                                        <div className={`p-4 rounded-xl border flex items-start gap-3 ${isDriveReady ? 'bg-green-900/10 border-green-900/30' : 'bg-red-900/10 border-red-900/30'}`}>
+                                            {isDriveReady ? <CheckCircle2 className="text-green-500 mt-0.5" /> : <AlertCircle className="text-red-500 mt-0.5" />}
+                                            <div>
+                                                <h4 className={`text-sm font-bold ${isDriveReady ? 'text-green-400' : 'text-red-400'}`}>
+                                                    {isDriveReady ? 'Подключено и работает' : 'Требуется переподключение'}
+                                                </h4>
+                                                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                                    Файлы хранятся на вашем личном Google Диске в папке <code>Anotee.App</code>. Это бесплатно и не занимает место на наших серверах.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button onClick={checkDriveConnection} className="text-xs text-zinc-500 hover:text-white underline decoration-dashed">
+                                            Проверить статус подключения
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6 animate-in fade-in">
+                                        <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 flex gap-2">
+                                            <Info size={16} className="shrink-0 mt-0.5" />
+                                            <p>Вы можете подключить своё объектное хранилище (S3). Это обеспечит максимальную скорость воспроизведения и полный контроль над файлами.</p>
+                                        </div>
 
-                                {/* Presets */}
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Провайдер</label>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {['yandex', 'selectel', 'cloudflare', 'custom'].map(p => (
+                                        {/* Presets */}
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Провайдер</label>
+                                            <div className="flex gap-2 flex-wrap">
+                                                {['yandex', 'selectel', 'cloudflare', 'custom'].map(p => (
+                                                    <button 
+                                                        key={p}
+                                                        onClick={() => handleS3PresetChange(p)}
+                                                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold capitalize transition-all ${s3Config.provider === p ? 'bg-white text-black border-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="col-span-2">
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Endpoint URL</label>
+                                                <div className="relative">
+                                                    <Globe size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    <input 
+                                                        value={s3Config.endpoint} 
+                                                        onChange={(e) => setS3Config(p => ({...p, endpoint: e.target.value}))}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                        placeholder="https://storage.yandexcloud.net"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Bucket Name</label>
+                                                <div className="relative">
+                                                    <Database size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    <input 
+                                                        value={s3Config.bucket} 
+                                                        onChange={(e) => setS3Config(p => ({...p, bucket: e.target.value}))}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
+                                                        placeholder="my-videos"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Region</label>
+                                                <div className="relative">
+                                                    <Cloud size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    <input 
+                                                        value={s3Config.region} 
+                                                        onChange={(e) => setS3Config(p => ({...p, region: e.target.value}))}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
+                                                        placeholder="ru-central1"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
+                                                <div className="relative">
+                                                    <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    <input 
+                                                        value={s3Config.accessKeyId} 
+                                                        onChange={(e) => setS3Config(p => ({...p, accessKeyId: e.target.value}))}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                        placeholder="YCAJE..."
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
+                                                <div className="relative">
+                                                    <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    <input 
+                                                        type="password"
+                                                        value={s3Config.secretAccessKey} 
+                                                        onChange={(e) => setS3Config(p => ({...p, secretAccessKey: e.target.value}))}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                        placeholder="YCMA..."
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] text-zinc-500 mt-2">
+                                                    Ваши ключи шифруются перед сохранением в базе данных. <a href="#" className="underline hover:text-white">Инструкция по настройке CORS</a>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-4 border-t border-zinc-800 flex justify-end">
                                             <button 
-                                                key={p}
-                                                onClick={() => handleS3PresetChange(p)}
-                                                className={`px-3 py-1.5 rounded-lg border text-xs font-bold capitalize transition-all ${s3Config.provider === p ? 'bg-white text-black border-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}
+                                                onClick={handleSaveS3}
+                                                disabled={isSavingS3}
+                                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50"
                                             >
-                                                {p}
+                                                {isSavingS3 ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                                {s3Saved ? 'Сохранено' : 'Сохранить настройки'}
                                             </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="col-span-2">
-                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Endpoint URL</label>
-                                        <div className="relative">
-                                            <Globe size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                            <input 
-                                                value={s3Config.endpoint} 
-                                                onChange={(e) => setS3Config(p => ({...p, endpoint: e.target.value}))}
-                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
-                                                placeholder="https://storage.yandexcloud.net"
-                                            />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Bucket Name</label>
-                                        <div className="relative">
-                                            <Database size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                            <input 
-                                                value={s3Config.bucket} 
-                                                onChange={(e) => setS3Config(p => ({...p, bucket: e.target.value}))}
-                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
-                                                placeholder="my-videos"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Region</label>
-                                        <div className="relative">
-                                            <Cloud size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                            <input 
-                                                value={s3Config.region} 
-                                                onChange={(e) => setS3Config(p => ({...p, region: e.target.value}))}
-                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
-                                                placeholder="ru-central1"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
-                                        <div className="relative">
-                                            <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                            <input 
-                                                value={s3Config.accessKeyId} 
-                                                onChange={(e) => setS3Config(p => ({...p, accessKeyId: e.target.value}))}
-                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
-                                                placeholder="YCAJE..."
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
-                                        <div className="relative">
-                                            <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                            <input 
-                                                type="password"
-                                                value={s3Config.secretAccessKey} 
-                                                onChange={(e) => setS3Config(p => ({...p, secretAccessKey: e.target.value}))}
-                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
-                                                placeholder="YCMA..."
-                                            />
-                                        </div>
-                                        <p className="text-[10px] text-zinc-500 mt-2">
-                                            Ваши ключи шифруются перед сохранением в базе данных. <a href="#" className="underline hover:text-white">Инструкция по настройке CORS</a>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="pt-4 border-t border-zinc-800 flex justify-end">
-                                    <button 
-                                        onClick={handleSaveS3}
-                                        disabled={isSavingS3}
-                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                        {isSavingS3 ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                                        {s3Saved ? 'Сохранено' : 'Сохранить настройки'}
-                                    </button>
-                                </div>
-                            </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
