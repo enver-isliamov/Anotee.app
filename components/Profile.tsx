@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -39,6 +39,15 @@ const S3_PRESETS: Record<string, Partial<S3Config>> = {
     }
 };
 
+const CORS_CONFIG_JSON = `[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["GET", "PUT", "HEAD", "POST", "DELETE"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": ["ETag", "x-amz-meta-custom-header"]
+  }
+]`;
+
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => {
   const { t } = useLanguage();
   const { getToken } = useAuth();
@@ -63,6 +72,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   // Test Connection State
   const [isTestingS3, setIsTestingS3] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showCorsHelp, setShowCorsHelp] = useState(false);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -245,21 +255,13 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
       }
   };
 
+  const copyToClipboard = (text: string) => {
+      navigator.clipboard.writeText(text);
+      alert("Скопировано!");
+  };
+
   // Check if migration has already run (via metadata)
   const hasMigrated = (currentUser as any).unsafeMetadata?.migrated === true;
-
-  const activeFeatures = isPro ? [
-      "Безлимит проектов (Личные)",
-      "Экспорт маркеров в DaVinci/Premiere",
-      "Приоритетная поддержка",
-      "Доступ к бета-функциям (AI)",
-      "4K Video Proxies"
-  ] : [
-      "До 3-х активных проектов",
-      "Комментарии и просмотр",
-      "Базовая поддержка",
-      "720p Video Proxies"
-  ];
 
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
@@ -289,7 +291,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                 <div className="lg:col-span-2 space-y-6">
                     {/* Main Subscription Card */}
                     <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
-                        {/* ... Subscription UI (Existing) ... */}
+                        {/* ... Subscription UI ... */}
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                             <div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div>
                         </div>
@@ -476,9 +478,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                         placeholder="YCMA..."
                                                     />
                                                 </div>
-                                                <p className="text-[10px] text-zinc-500 mt-2">
-                                                    Ваши ключи шифруются перед сохранением в базе данных. <a href="#" className="underline hover:text-white">Инструкция по настройке CORS</a>
-                                                </p>
+                                                <div className="flex justify-between items-center mt-2">
+                                                    <p className="text-[10px] text-zinc-500">
+                                                        Ваши ключи шифруются перед сохранением.
+                                                    </p>
+                                                    <button onClick={() => setShowCorsHelp(true)} className="text-[10px] text-indigo-400 hover:text-indigo-300 underline flex items-center gap-1">
+                                                        <HelpCircle size={10} /> Инструкция по CORS
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -574,6 +581,31 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                         {t('profile.tiers')}
                     </h3>
                     <RoadmapBlock />
+                </div>
+            )}
+
+            {/* CORS HELP MODAL */}
+            {showCorsHelp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+                        <button onClick={() => setShowCorsHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
+                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">Настройка CORS</h2>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">Для того чтобы браузер мог загружать файлы в ваше хранилище и воспроизводить их, необходимо добавить эту конфигурацию в настройки вашего Bucket.</p>
+                        
+                        <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-auto max-h-64 relative group">
+                            <pre>{CORS_CONFIG_JSON}</pre>
+                            <button 
+                                onClick={() => copyToClipboard(CORS_CONFIG_JSON)}
+                                className="absolute top-2 right-2 p-2 bg-white dark:bg-zinc-800 rounded-lg shadow-sm text-zinc-500 hover:text-black dark:hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <RefreshCw size={14} />
+                            </button>
+                        </div>
+                        
+                        <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
+                            <button onClick={() => setShowCorsHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Понятно</button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

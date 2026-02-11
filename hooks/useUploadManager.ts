@@ -1,8 +1,8 @@
+
 import React, { useState, useRef } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
-// Removed: import { upload } from '@vercel/blob/client';
 import { api } from '../services/apiClient';
 import { useDrive } from '../services/driveContext';
 
@@ -65,9 +65,8 @@ export const useUploadManager = (
             let nextVersionNumber = 1;
             
             // Extract base name and extension
-            // Remove extension
             let rawTitle = file.name.replace(/\.[^/.]+$/, "");
-            // Sanitize: Keep alphanumeric, spaces, dashes, underscores. Remove others to prevent FS/URL issues.
+            // Sanitize: Keep alphanumeric, spaces, dashes, underscores.
             let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
             if (!assetTitle) assetTitle = "Video_Asset";
 
@@ -77,14 +76,10 @@ export const useUploadManager = (
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
                 if (existingAsset) {
                     nextVersionNumber = existingAsset.versions.length + 1;
-                    // NOTE: We now use the UPLOADED FILE NAME as the base for the new version filename
-                    // This allows keeping context like "Cut_v2_ColorGraded" instead of forcing "AssetTitle_v3"
                 }
             }
 
             // Construct Filename: {SanitizedName}_v{Number}.{ext}
-            // If it's a fresh upload, it gets _v1. 
-            // If it's a version, it gets _vX based on count.
             const finalFileName = `${assetTitle}_v${nextVersionNumber}.${ext}`;
 
             // 2. Generate Thumbnail
@@ -94,7 +89,29 @@ export const useUploadManager = (
 
             let assetUrl = '';
             let googleDriveId = undefined;
+            let s3Key = undefined;
             let storageType: StorageType = 'vercel';
+
+            // --- STORAGE SELECTION LOGIC ---
+            let useS3 = false;
+            
+            if (!isMockMode) {
+                // Check if user has S3 configured
+                try {
+                    const token = await getToken();
+                    const s3Res = await fetch('/api/storage/config', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (s3Res.ok) {
+                        const s3Config = await s3Res.json();
+                        if (s3Config && s3Config.isActive) {
+                            useS3 = true;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Failed to check S3 config, falling back to Drive/Default");
+                }
+            }
 
             // 3. Upload Process
             if (isMockMode) {
@@ -104,12 +121,58 @@ export const useUploadManager = (
                 }
                 assetUrl = URL.createObjectURL(file);
                 storageType = 'local';
+            } else if (useS3) {
+                // --- S3 UPLOAD PATH ---
+                const token = await getToken();
+                // 1. Get Presigned URL
+                const presignRes = await fetch('/api/storage/presign', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        operation: 'put',
+                        key: `anotee/${projectId}/${finalFileName}`, // Organized folder structure
+                        contentType: file.type
+                    })
+                });
+
+                if (!presignRes.ok) throw new Error("Failed to generate upload link (S3)");
+                const { url: uploadUrl, key } = await presignRes.json();
+
+                // 2. Upload to S3 directly
+                // Using XHR for progress tracking
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('PUT', uploadUrl);
+                    xhr.setRequestHeader('Content-Type', file.type);
+                    
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            updateProgress(Math.round((e.loaded / e.total) * 100));
+                        }
+                    };
+
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            resolve(true);
+                        } else {
+                            reject(new Error(`S3 Upload failed: ${xhr.status}`));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error("Network error during S3 upload"));
+                    xhr.send(file);
+                });
+
+                storageType = 's3';
+                s3Key = key;
+
             } else {
-                // FORCE GOOGLE DRIVE UPLOAD
-                // We no longer support Vercel Blob uploads for cost reasons.
+                // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
                 const isDriveReady = GoogleDriveService.isAuthenticated();
                 if (!isDriveReady) {
-                    throw new Error("Google Drive required. Please connect Drive in your Profile settings.");
+                    throw new Error("Storage Error: Connect S3 or Google Drive in Profile.");
                 }
 
                 const safeProjectName = project ? project.name : "Unknown Project";
@@ -130,8 +193,6 @@ export const useUploadManager = (
                     googleDriveId = result.id;
                     storageType = 'drive';
                     
-                    // CRITICAL: Ensure Permissions are Public immediately after upload
-                    // This prevents "Access Denied" when the player tries to load it via 'uc' link
                     await GoogleDriveService.makeFilePublic(result.id);
 
                 } catch (driveErr: any) {
@@ -143,7 +204,6 @@ export const useUploadManager = (
             }
 
             // 4. Construct New Project State
-            // Refetch index to be safe against async state changes
             const projIndex = projects.findIndex(p => p.id === projectId);
             if (projIndex === -1) throw new Error("Project not found during upload finalization");
 
@@ -153,9 +213,10 @@ export const useUploadManager = (
                 id: generateId(),
                 versionNumber: nextVersionNumber, 
                 filename: finalFileName,
-                url: assetUrl, // Will be empty for Drive files, Player handles generation via googleDriveId
+                url: assetUrl, 
                 storageType,
                 googleDriveId,
+                s3Key, // New Field
                 uploadedAt: 'Just now',
                 comments: [],
                 localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
@@ -163,22 +224,20 @@ export const useUploadManager = (
             };
 
             if (targetAssetId) {
-                // Adding Version to Existing Asset
+                // Adding Version
                 const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
                 if (assetIdx !== -1) {
                     const asset = { ...updatedProject.assets[assetIdx] };
-                    
-                    // Add new version
                     asset.versions = [...asset.versions, newVersion];
                     asset.thumbnail = thumbnailDataUrl;
-                    asset.currentVersionIndex = asset.versions.length - 1; // Switch to new version
+                    asset.currentVersionIndex = asset.versions.length - 1; 
                     updatedProject.assets[assetIdx] = asset;
                 }
             } else {
                 // New Asset
                 const newAsset: ProjectAsset = {
                     id: generateId(),
-                    title: assetTitle, // Use the sanitized name as title
+                    title: assetTitle,
                     thumbnail: thumbnailDataUrl,
                     currentVersionIndex: 0,
                     versions: [newVersion]
@@ -190,7 +249,6 @@ export const useUploadManager = (
 
             // 5. Try Sync
             try {
-                // Optimistically update UI
                 setProjects(currentProjects => {
                     const newAllProjects = [...currentProjects];
                     const idx = newAllProjects.findIndex(p => p.id === projectId);
@@ -198,7 +256,6 @@ export const useUploadManager = (
                     return newAllProjects;
                 });
 
-                // Send to Server
                 await forceSync([updatedProject]);
                 
                 updateTask({ status: 'done', progress: 100 });
