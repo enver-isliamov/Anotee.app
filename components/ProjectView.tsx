@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -26,7 +25,7 @@ interface ProjectViewProps {
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
   onboardingActiveStep?: number;
-  uploadTasks: UploadTask[]; // NEW
+  uploadTasks: UploadTask[]; 
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks }) => {
@@ -63,8 +62,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
   const isLocked = project.isLocked;
 
-  // SHARE PERMISSION CHECK
-  const canShare = isPro || config.team_collab.enabledForFree;
+  // SHARE PERMISSION CHECKS (Granular)
+  const canInviteTeam = isPro ? config.sharing_project.enabledForPro : config.sharing_project.enabledForFree;
+  const canSharePublicLink = isPro ? config.sharing_public_link.enabledForPro : config.sharing_public_link.enabledForFree;
 
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
@@ -93,13 +93,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     : project.assets;
 
   // Find active uploads for this project
-  // Since we rely on project name, this might be broad but safe enough for UI feedback
   const activeUpload = uploadTasks.find(t => t.projectName === project.name);
 
   // --- HANDLERS ---
-  
-  // --- INLINE TILE DROP LOGIC ---
-  // No longer global handlers. 
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -194,8 +190,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleShareProject = () => {
     if (isLocked) return;
-    if (!canShare) {
-        notify("Sharing is available on Pro plan.", "warning");
+    if (!canInviteTeam && !project.orgId) {
+        notify("Invite feature is locked. Upgrade to Pro.", "warning");
         return;
     }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
@@ -208,8 +204,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         notify(t('dash.locked_msg'), "error");
         return;
     }
-    if (!canShare) {
-        notify("Sharing is available on Pro plan.", "warning");
+    if (!canSharePublicLink) {
+        notify("Public Links are locked. Upgrade to Pro.", "warning");
         return;
     }
     setShareTarget({ type: 'asset', id: asset.id, name: asset.title });
@@ -456,7 +452,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
              </div>
           )}
 
-          {!isLocked && !restrictedAssetId && canShare && (
+          {!isLocked && !restrictedAssetId && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
               {project.orgId ? (
@@ -472,10 +468,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   <button 
                     id="tour-share-btn"
                     onClick={handleShareProject}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                    title="Share via Public Link"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium ${canInviteTeam ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-70'}`}
+                    title={canInviteTeam ? "Invite via Email" : "Invites are locked (Pro)"}
+                    disabled={!canInviteTeam}
                   >
-                    <Globe size={16} />
+                    <UserPlus size={16} />
                     <span className="hidden md:inline">{t('pv.invite')}</span>
                   </button>
               )}
@@ -494,7 +491,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       {restrictedAssetId && (
         <div className="bg-orange-900/20 border-b border-orange-900/30 text-orange-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
             <Info size={12} />
-            Viewing restricted asset.
+            Review Mode: Access limited to specific assets.
         </div>
       )}
 
@@ -554,7 +551,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}
                         
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                            {!isLocked && canShare && (
+                            {!isLocked && canSharePublicLink && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}
                                     className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"
@@ -662,13 +659,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             </div>
                         </div>
                         
+                        {/* Invite Collaborator Section */}
                         {shareTarget.type === 'project' && (
                             <div className="mt-4 border-t border-zinc-800 pt-4">
-                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Invite Collaborator (Personal)</div>
-                                <div className="flex gap-2">
-                                    <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
-                                    <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2 flex items-center gap-2">
+                                    Invite Collaborator (Personal)
+                                    {!canInviteTeam && <span className="px-1.5 py-0.5 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-500/20 flex items-center gap-1"><Crown size={8} /> PRO</span>}
                                 </div>
+                                
+                                {canInviteTeam ? (
+                                    <div className="flex gap-2">
+                                        <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
+                                        <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
+                                        <p className="text-[10px] text-zinc-500 mb-2">Invite specific people to your team to collaborate privately.</p>
+                                        <button className="w-full bg-zinc-800 text-zinc-400 text-xs font-bold py-1.5 rounded cursor-not-allowed opacity-50" disabled>Upgrade to Invite</button>
+                                    </div>
+                                )}
                             </div>
                         )}
                       </>

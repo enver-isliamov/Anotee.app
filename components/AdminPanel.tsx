@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
 
 interface AdminUser {
@@ -18,7 +18,8 @@ interface AdminUser {
 const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
     // General
     max_projects: "Лимиты проектов",
-    team_collab: "Командная работа (Invite)",
+    sharing_project: "Шеринг Проекта (Team Invite)",
+    sharing_public_link: "Публичные ссылки (Review Link)",
     project_locking: "Блокировка (NDA Mode)",
     version_comparison: "Сравнение версий (Split View)",
     
@@ -41,7 +42,8 @@ const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
 };
 
 const CONFIG_GROUPS = {
-    general: ['max_projects', 'team_collab', 'project_locking', 'version_comparison'],
+    general: ['max_projects', 'project_locking', 'version_comparison'],
+    sharing: ['sharing_project', 'sharing_public_link'],
     export: ['export_xml', 'export_csv', 'local_file_link'],
     ai: ['ai_transcription', 'high_res_proxies', 'google_drive'],
     ui: ['ui_upsell_banner', 'ui_roadmap_block', 'ui_help_button', 'ui_footer', 'ui_drive_connect']
@@ -49,6 +51,7 @@ const CONFIG_GROUPS = {
 
 const SUB_TABS = [
     { id: 'general', label: 'Основные', icon: Sliders },
+    { id: 'sharing', label: 'Доступ и Шеринг', icon: Users },
     { id: 'export', label: 'Экспорт', icon: Download },
     { id: 'ai', label: 'AI и Облако', icon: Sparkles },
     { id: 'ui', label: 'Интерфейс', icon: Layout },
@@ -323,11 +326,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const onDragStart = (e: React.DragEvent, type: 'PLAN' | 'FEATURE', index: number, parentId?: string) => {
         dragItem.current = { type, index, parentId };
         e.dataTransfer.effectAllowed = "move";
-        // Ghost image usually handled by browser, but we can set it here if needed
     };
 
     const onDragOver = (e: React.DragEvent) => {
-        e.preventDefault(); // Necessary to allow dropping
+        e.preventDefault(); 
     };
 
     const onDrop = (e: React.DragEvent, type: 'PLAN' | 'FEATURE', targetIndex: number, parentId?: string) => {
@@ -337,35 +339,23 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         if (dragItem.current.type !== type) return;
         if (dragItem.current.index === targetIndex && dragItem.current.parentId === parentId) return;
 
-        // --- PLAN REORDERING ---
         if (type === 'PLAN') {
             const newOrder = [...paymentConfig.planOrder];
             const draggedPlanKey = newOrder[dragItem.current.index];
-            
-            // Remove from old position
             newOrder.splice(dragItem.current.index, 1);
-            // Insert at new position
             newOrder.splice(targetIndex, 0, draggedPlanKey);
-            
             setPaymentConfig(prev => ({
                 ...prev,
                 planOrder: newOrder
             }));
-        } 
-        
-        // --- FEATURE REORDERING ---
-        else if (type === 'FEATURE' && parentId === dragItem.current.parentId) {
-            // Reorder only within the same plan
+        } else if (type === 'FEATURE' && parentId === dragItem.current.parentId) {
             const planKey = parentId as keyof typeof paymentConfig.plans;
             const features = [...paymentConfig.plans[planKey].features];
             const draggedFeature = features[dragItem.current.index];
-
             features.splice(dragItem.current.index, 1);
             features.splice(targetIndex, 0, draggedFeature);
-
             handlePlanChange(planKey, 'features', features);
         }
-
         dragItem.current = null;
     };
 
@@ -398,7 +388,6 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </div>
 
                 <div className="space-y-4 pl-0 md:pl-2 flex-1 flex flex-col">
-                    {/* Basic Info */}
                     <div className="grid grid-cols-2 gap-2">
                         <div className="col-span-2">
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Title</label>
@@ -418,7 +407,6 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* Features Editor */}
                     <div className="flex-1">
                         <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-2">Features</label>
                         <div className="space-y-2">
@@ -468,7 +456,6 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* Footer Info */}
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-auto">
                         <div>
                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>

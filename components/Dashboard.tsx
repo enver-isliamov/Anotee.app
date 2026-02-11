@@ -70,6 +70,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [client, setClient] = useState('');
   const [description, setDescription] = useState('');
 
+  // --- CONFIG CHECKS ---
+  const canShareProject = isPro ? config.sharing_project.enabledForPro : config.sharing_project.enabledForFree;
+
   // --- FILTERING LOGIC (SEPARATE OWNED VS SHARED) ---
   const activeOrgId = organization?.id;
 
@@ -95,10 +98,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const currentLimit = isPro ? (config.max_projects.limitPro || 1000) : freeLimit;
   const createdProjectsCount = ownedProjects.length;
   const canCreate = createdProjectsCount < currentLimit; 
-
-  // SHARE PERMISSION CHECK
-  // If Free plan, check config.team_collab.enabledForFree
-  const canShareProjects = isPro || config.team_collab.enabledForFree;
 
   // PERMISSION CHECKS (Project Level)
   const canManageProject = (project: Project) => {
@@ -216,15 +215,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleShareClick = (e: React.MouseEvent, project: Project) => {
       e.stopPropagation();
       
-      if (!canShareProjects) {
-          notify("Sharing is restricted on the Free plan. Upgrade to Pro.", "warning");
-          return;
-      }
-
       if (project.isLocked) {
           notify(t('dash.locked_msg'), "error");
           return;
       }
+
+      if (!canShareProject) {
+          notify("Sharing is locked. Upgrade to Pro.", "warning");
+          // Optionally redirect to pricing
+          return;
+      }
+
       setSharingProject(project);
   };
 
@@ -418,8 +419,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                         </button>
                                         <button 
                                             onClick={(e) => handleShareClick(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProjects ? 'text-zinc-600 dark:text-zinc-600 cursor-not-allowed' : (project.isLocked ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400')}`}
-                                            title={!canShareProjects ? "Sharing blocked for Free plan" : t('common.share')}
+                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProject || project.isLocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                            title={!canShareProject ? "Upgrade to Share" : t('common.share')}
+                                            disabled={!canShareProject}
                                         >
                                             <Share2 size={14} />
                                         </button>
