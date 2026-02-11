@@ -103,7 +103,7 @@ export interface AppConfig {
     export_csv: FeatureRule;
     google_drive: FeatureRule;
     ai_transcription: FeatureRule;
-    team_collab: FeatureRule;
+    team_collab: FeatureRule; // Controls INVITING specific members via email. Public link sharing is always available for owners.
     local_file_link: FeatureRule;
     high_res_proxies: FeatureRule;
     project_locking: FeatureRule;

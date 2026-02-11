@@ -96,10 +96,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const createdProjectsCount = ownedProjects.length;
   const canCreate = createdProjectsCount < currentLimit; 
 
-  // SHARE PERMISSION CHECK
-  // If Free plan, check config.team_collab.enabledForFree
-  const canShareProjects = isPro || config.team_collab.enabledForFree;
-
   // PERMISSION CHECKS (Project Level)
   const canManageProject = (project: Project) => {
       if (!project.orgId) return project.ownerId === currentUser.id;
@@ -216,11 +212,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleShareClick = (e: React.MouseEvent, project: Project) => {
       e.stopPropagation();
       
-      if (!canShareProjects) {
-          notify("Sharing is restricted on the Free plan. Upgrade to Pro.", "warning");
-          return;
-      }
-
+      // Allow sharing link for ALL users (Free & Pro)
       if (project.isLocked) {
           notify(t('dash.locked_msg'), "error");
           return;
@@ -418,8 +410,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                         </button>
                                         <button 
                                             onClick={(e) => handleShareClick(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProjects ? 'text-zinc-600 dark:text-zinc-600 cursor-not-allowed' : (project.isLocked ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400')}`}
-                                            title={!canShareProjects ? "Sharing blocked for Free plan" : t('common.share')}
+                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${project.isLocked ? 'text-zinc-400 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                            title={t('common.share')}
                                         >
                                             <Share2 size={14} />
                                         </button>

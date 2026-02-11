@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -64,7 +64,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const isLocked = project.isLocked;
 
   // SHARE PERMISSION CHECK
-  const canShare = isPro || config.team_collab.enabledForFree;
+  // canInviteTeam controls access to inviting specific people via Email (Team feature)
+  // Public Link sharing is available to everyone
+  const canInviteTeam = isPro || config.team_collab.enabledForFree;
 
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
@@ -194,10 +196,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleShareProject = () => {
     if (isLocked) return;
-    if (!canShare) {
-        notify("Sharing is available on Pro plan.", "warning");
-        return;
-    }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
     setIsShareModalOpen(true);
   };
@@ -206,10 +204,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     e.stopPropagation(); 
     if (isLocked) {
         notify(t('dash.locked_msg'), "error");
-        return;
-    }
-    if (!canShare) {
-        notify("Sharing is available on Pro plan.", "warning");
         return;
     }
     setShareTarget({ type: 'asset', id: asset.id, name: asset.title });
@@ -456,7 +450,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
              </div>
           )}
 
-          {!isLocked && !restrictedAssetId && canShare && (
+          {!isLocked && !restrictedAssetId && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
               {project.orgId ? (
@@ -554,7 +548,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}
                         
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                            {!isLocked && canShare && (
+                            {!isLocked && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}
                                     className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"
@@ -662,13 +656,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             </div>
                         </div>
                         
+                        {/* Invite Collaborator Section */}
                         {shareTarget.type === 'project' && (
                             <div className="mt-4 border-t border-zinc-800 pt-4">
-                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Invite Collaborator (Personal)</div>
-                                <div className="flex gap-2">
-                                    <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
-                                    <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2 flex items-center gap-2">
+                                    Invite Collaborator (Personal)
+                                    {!canInviteTeam && <span className="px-1.5 py-0.5 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-500/20 flex items-center gap-1"><Crown size={8} /> PRO</span>}
                                 </div>
+                                
+                                {canInviteTeam ? (
+                                    <div className="flex gap-2">
+                                        <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
+                                        <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
+                                        <p className="text-[10px] text-zinc-500 mb-2">Invite specific people to your team to collaborate privately.</p>
+                                        <button className="w-full bg-zinc-800 text-zinc-400 text-xs font-bold py-1.5 rounded cursor-not-allowed opacity-50" disabled>Upgrade to Invite</button>
+                                    </div>
+                                )}
                             </div>
                         )}
                       </>
