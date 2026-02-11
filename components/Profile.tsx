@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -48,37 +48,41 @@ const CORS_CONFIG_JSON = `[
   }
 ]`;
 
-const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: string, linkText: string }> = {
+const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: string, linkText: string, warning?: string }> = {
     yandex: {
         title: 'Yandex Object Storage',
         steps: [
-            'Перейдите в консоль Yandex Cloud.',
-            'Создайте "Сервисный аккаунт" в нужном каталоге.',
-            'Назначьте роль "storage.editor".',
-            'Создайте "Статический ключ доступа" для этого аккаунта.',
-            'Скопируйте ID ключа и Секретный ключ сюда.'
+            'Создайте Бакет в консоли Object Storage.',
+            'Перейдите в раздел "Сервисные аккаунты" (в меню слева).',
+            'Создайте новый аккаунт и ВАЖНО: добавьте ему роль "storage.editor".',
+            'Нажмите на созданный аккаунт -> "Создать новый ключ" -> "Создать статический ключ доступа".',
+            'Скопируйте "Идентификатор ключа" (Access Key) и "Секретный ключ" (Secret Key).'
         ],
         link: 'https://console.cloud.yandex.ru/',
-        linkText: 'Открыть консоль Yandex'
+        linkText: 'Открыть консоль Yandex',
+        warning: 'Без роли "storage.editor" загрузка работать не будет!'
     },
     cloudflare: {
         title: 'Cloudflare R2',
         steps: [
-            'Откройте R2 Dashboard.',
-            'Нажмите "Manage R2 API Tokens" справа.',
-            'Создайте токен с правами "Admin Read & Write".',
-            'Скопируйте Access Key ID и Secret Access Key.'
+            'Зайдите в R2 Object Storage. Нажмите "Create bucket" и дайте имя (например, anotee).',
+            'В меню R2 справа найдите "Account details". Скопируйте "Account ID". Ваш Endpoint будет: https://<AccountID>.r2.cloudflarestorage.com',
+            'На главной странице R2 справа нажмите ссылку "Manage R2 API Tokens".',
+            'Нажмите "Create API token". Выберите права: "Admin Read & Write".',
+            'Нажмите "Create API Token". Скопируйте "Access Key ID" и "Secret Access Key" из появившегося окна.'
         ],
-        link: 'https://dash.cloudflare.com/',
-        linkText: 'Открыть Cloudflare R2'
+        link: 'https://dash.cloudflare.com/?to=/:account/r2',
+        linkText: 'Открыть Cloudflare R2',
+        warning: 'Убедитесь, что Endpoint НЕ содержит имя бакета в конце.'
     },
     selectel: {
         title: 'Selectel Storage',
         steps: [
-            'Перейдите в раздел "Облачное хранилище".',
-            'Создайте пользователя в разделе "Управление доступом".',
-            'Используйте имя пользователя как Access Key.',
-            'Пароль пользователя является Secret Key.'
+            'Создайте контейнер (бакет) в разделе "Облачное хранилище".',
+            'Перейдите в раздел "Управление доступом" -> "Пользователи".',
+            'Создайте пользователя с ролью "Администратор облачного хранилища".',
+            'Имя пользователя — это Access Key. Пароль пользователя — это Secret Key.',
+            'Endpoint всегда: https://s3.storage.selcloud.ru'
         ],
         link: 'https://my.selectel.ru/storage',
         linkText: 'Открыть Selectel'
@@ -86,9 +90,11 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     aws: {
         title: 'AWS S3',
         steps: [
-            'Откройте IAM Console.',
-            'Создайте пользователя с правами "AmazonS3FullAccess".',
-            'Сгенерируйте Access Keys в вкладке "Security credentials".'
+            'Откройте IAM Console -> Users -> Create User.',
+            'При создании выберите "Attach policies directly" и найдите "AmazonS3FullAccess".',
+            'После создания пользователя откройте вкладку "Security credentials".',
+            'Нажмите "Create access key" -> выберите "Third-party service".',
+            'Скопируйте ключи.'
         ],
         link: 'https://console.aws.amazon.com/iam',
         linkText: 'Открыть AWS Console'
@@ -637,14 +643,21 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
             {/* PROVIDER HELP MODAL */}
             {showProviderHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
                         <button onClick={() => setShowProviderHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
                         <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">{currentProviderGuide.title}</h2>
                         <p className="text-xs text-zinc-500 mb-4">Инструкция по получению ключей доступа</p>
                         
+                        {currentProviderGuide.warning && (
+                            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                <p className="font-medium">{currentProviderGuide.warning}</p>
+                            </div>
+                        )}
+
                         <div className="space-y-3 mb-6">
                             {currentProviderGuide.steps.map((step, idx) => (
-                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
                                     <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">{idx + 1}</div>
                                     <p>{step}</p>
                                 </div>
