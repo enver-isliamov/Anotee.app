@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -116,7 +116,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
       region: 'ru-central1',
       endpoint: 'https://storage.yandexcloud.net',
       accessKeyId: '',
-      secretAccessKey: ''
+      secretAccessKey: '',
+      publicUrl: ''
   });
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
@@ -160,7 +161,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                           region: data.region,
                           accessKeyId: data.accessKeyId,
                           secretAccessKey: data.secretAccessKey, // Will be masked
-                          publicUrl: data.publicUrl
+                          publicUrl: data.publicUrl || ''
                       });
                       setActiveStorageTab('s3'); // Auto switch if configured
                   }
@@ -510,6 +511,27 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                     />
                                                 </div>
                                             </div>
+                                            
+                                            {/* PUBLIC URL / CDN INPUT */}
+                                            <div className="col-span-2">
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5 flex justify-between">
+                                                    <span>Public URL / CDN (Optional)</span>
+                                                    <span className="text-zinc-600 font-normal normal-case">For Custom Domains</span>
+                                                </label>
+                                                <div className="relative">
+                                                    <LinkIcon size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    <input 
+                                                        value={s3Config.publicUrl || ''} 
+                                                        onChange={(e) => setS3Config(p => ({...p, publicUrl: e.target.value}))}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                        placeholder="https://cdn.mysite.com"
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] text-zinc-600 mt-1">
+                                                    Если указано, плеер будет использовать этот домен вместо Endpoint. Полезно для Cloudflare.
+                                                </p>
+                                            </div>
+
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
                                                 <div className="relative">
