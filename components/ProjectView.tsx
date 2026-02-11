@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Project, ProjectAsset, User, StorageType } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle } from 'lucide-react';
+import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -25,10 +25,11 @@ interface ProjectViewProps {
   restrictedAssetId?: string;
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
-  onboardingActiveStep?: number; // Legacy prop, kept for compatibility but not used
+  onboardingActiveStep?: number;
+  uploadTasks: UploadTask[]; // NEW
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks }) => {
   const { t } = useLanguage();
   const { isPro } = useSubscription();
   const { config } = useAppConfig();
@@ -83,10 +84,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   // Org Settings Modal
   const [isOrgSettingsOpen, setIsOrgSettingsOpen] = useState(false);
   
-  // Drag & Drop
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCounterRef = useRef(0);
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,52 +91,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     ? project.assets.filter(a => a.id === restrictedAssetId)
     : project.assets;
 
+  // Find active uploads for this project
+  // Since we rely on project name, this might be broad but safe enough for UI feedback
+  const activeUpload = uploadTasks.find(t => t.projectName === project.name);
+
   // --- HANDLERS ---
-  const handleDragEnter = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragCounterRef.current++;
-      if (e.dataTransfer.items && e.dataTransfer.items.length > 0 && canEditProject && !isLocked) {
-          setIsDragging(true);
-      }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragCounterRef.current--;
-      if (dragCounterRef.current === 0) {
-          setIsDragging(false);
-      }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-      dragCounterRef.current = 0;
-
-      if (!canEditProject || isLocked) return;
-
-      if (!isMockMode && !isDriveReady) {
-          notify("Google Drive is not connected. Please go to Profile.", "error");
-          return;
-      }
-
-      const files = Array.from(e.dataTransfer.files) as File[];
-      const videoFiles = files.filter(f => f.type.startsWith('video/'));
-      
-      if (videoFiles.length === 0) {
-          if (files.length > 0) notify("Only video files supported", "warning");
-          return;
-      }
-      onUploadAsset(videoFiles[0], project.id, true);
-  };
+  
+  // --- INLINE TILE DROP LOGIC ---
+  // No longer global handlers. 
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -339,14 +298,94 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       setIsOrgSettingsOpen(true);
   };
 
+  // --- INLINE UPLOAD TILE COMPONENT ---
+  const UploadZoneTile = () => {
+      const [isDragOver, setIsDragOver] = useState(false);
+      const isProcessing = activeUpload && activeUpload.status !== 'done' && activeUpload.status !== 'error';
+
+      const onDragOver = (e: React.DragEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (canEditProject && !isLocked) setIsDragOver(true);
+      };
+
+      const onDragLeave = (e: React.DragEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+      };
+
+      const onDrop = (e: React.DragEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+
+          if (!canEditProject || isLocked) return;
+          if (!isMockMode && !isDriveReady) {
+              notify("Google Drive is not connected. Upload disabled.", "error");
+              return;
+          }
+
+          const files = Array.from(e.dataTransfer.files) as File[];
+          const videoFiles = files.filter(f => f.type.startsWith('video/'));
+          
+          if (videoFiles.length === 0) {
+              if (files.length > 0) notify("Only video files supported", "warning");
+              return;
+          }
+          onUploadAsset(videoFiles[0], project.id, true);
+      };
+
+      const handleClick = () => {
+          if (!canEditProject || isLocked) return;
+          if (!isMockMode && !isDriveReady) {
+              notify("Google Drive is not connected. Upload disabled.", "error");
+              return;
+          }
+          fileInputRef.current?.click();
+      };
+
+      // Styling
+      let borderClass = 'border-zinc-300 dark:border-zinc-800 hover:border-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-900/50';
+      if (isDragOver) borderClass = 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 scale-[1.02]';
+      if (isProcessing) borderClass = 'border-indigo-500/50 bg-zinc-50 dark:bg-zinc-900 cursor-default';
+
+      if (!canEditProject || isLocked) return null;
+
+      return (
+          <div 
+            onClick={!isProcessing ? handleClick : undefined}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={`aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer group relative overflow-hidden ${borderClass}`}
+          >
+              {isProcessing ? (
+                  <div className="flex flex-col items-center gap-3 w-full px-4">
+                      <Loader2 className="animate-spin text-indigo-500" size={32} />
+                      <div className="w-full text-center">
+                          <div className="text-xs font-bold text-zinc-900 dark:text-white truncate mb-1">{activeUpload.file.name}</div>
+                          <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${activeUpload.progress}%` }}></div>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">{activeUpload.progress}% Uploading</div>
+                      </div>
+                  </div>
+              ) : (
+                  <>
+                      <div className={`p-3 rounded-full mb-3 transition-transform ${isDragOver ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110'}`}>
+                          <Plus size={24} />
+                      </div>
+                      <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? 'Drop to Upload' : t('pv.upload_asset')}</h3>
+                      <p className="text-[10px] text-zinc-400 mt-1">Drag & Drop or Click</p>
+                  </>
+              )}
+          </div>
+      );
+  };
+
   return (
-    <div 
-        className="flex flex-col h-screen bg-zinc-950 relative"
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-    >
+    <div className="flex flex-col h-screen bg-zinc-950 relative">
       <header className="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-hidden flex-1">
           <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-white shrink-0 p-1 mr-1">
@@ -432,15 +471,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         </div>
       )}
 
-      {/* DROP OVERLAY */}
-      {isDragging && !isLocked && (
-          <div className="absolute inset-0 z-50 bg-indigo-600/90 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-200 border-4 border-white/20 border-dashed m-4 rounded-3xl">
-              <FileVideo size={64} className="mb-4 animate-bounce" />
-              <h2 className="text-3xl font-bold mb-2">Drop Video to Upload</h2>
-              <p className="text-white/80">Releasing will upload to {!isMockMode ? 'Google Drive' : 'Local Mock Storage'}</p>
-          </div>
-      )}
-
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-[1600px] mx-auto">
             {/* Asset Grid */}
@@ -467,62 +497,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             <span className="hidden md:inline">Local Mode</span>
                         </div>
                     )}
-
-                    <button 
-                        id="tour-upload-btn"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={!isMockMode && !isDriveReady}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium border border-indigo-700/50 min-w-[100px] justify-center"
-                        title={!isMockMode && !isDriveReady ? "Connect Google Drive to Upload" : "Upload Video"}
-                    >
-                        <Upload size={14} />
-                        {t('pv.upload_asset')}
-                    </button>
                     </div>
                 )}
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                {visibleAssets.length === 0 && !isDragging && (
-                    <div 
-                        onClick={() => {
-                            if (isMockMode || isDriveReady) {
-                                fileInputRef.current?.click();
-                            } else {
-                                notify("Connect Drive to upload", "error");
-                            }
-                        }}
-                        className={`col-span-full h-[60vh] border-2 border-dashed rounded-3xl flex flex-col items-center justify-center transition-all group relative overflow-hidden ${!isMockMode && !isDriveReady ? 'border-red-800/50 bg-red-900/10 cursor-not-allowed' : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer'}`}
-                    >
-                        <div className="absolute top-0 right-0 p-8 opacity-10 font-black text-9xl text-indigo-500 rotate-12 pointer-events-none">02</div>
-                        
-                        {!isMockMode && !isDriveReady ? (
-                            <>
-                                <div className="w-20 h-20 bg-red-900/20 rounded-full flex items-center justify-center mb-6 shadow-sm relative z-10">
-                                    <AlertCircle size={32} className="text-red-500" />
-                                </div>
-                                <h3 className="text-xl font-bold mb-2 relative z-10 text-red-400">Drive Disconnected</h3>
-                                <p className="text-sm max-w-xs text-center mb-6 relative z-10 text-red-300/70">
-                                    You must connect your Google Account to upload videos.
-                                </p>
-                            </>
-                        ) : (
-                            <>
-                                <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm relative z-10">
-                                    <Upload size={32} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                                </div>
-                                <h3 className="text-xl font-bold mb-2 relative z-10 text-zinc-700 dark:text-zinc-300">Step 2: Upload Video</h3>
-                                <p className="text-sm max-w-xs text-center mb-6 relative z-10 text-zinc-500">
-                                    Drag and drop your video file here. <br/>
-                                    <span className="text-xs opacity-70">Supports MP4, MOV, MKV</span>
-                                </p>
-                                <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all pointer-events-none relative z-10">
-                                    Select File
-                                </button>
-                            </>
-                        )}
-                    </div>
-                )}
+                {/* NEW INLINE UPLOAD TILE - Always First */}
+                <UploadZoneTile />
 
                 {visibleAssets.map((asset) => {
                     const lastVer = asset.versions[asset.versions.length-1];

@@ -668,6 +668,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 restrictedAssetId={view.restrictedAssetId}
                 isMockMode={isMockMode}
                 onUploadAsset={handleUploadAsset} 
+                uploadTasks={uploadTasks} // NEW
             />
           </ErrorBoundary>
         )}
@@ -687,7 +688,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           </ErrorBoundary>
         )}
         
-        <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
+        {/* Only show global UploadWidget if NOT in ProjectView */}
+        {view.type !== 'PROJECT_VIEW' && (
+            <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
+        )}
         
         {/* NEW TOUR GUIDE */}
         {tourTargetId && (
