@@ -1,3 +1,4 @@
+
 import { Project, User, ProjectAsset, Comment } from '../types';
 import { MOCK_PROJECTS } from '../constants';
 import { generateId } from './utils';
@@ -66,7 +67,7 @@ export const api = {
         }
     },
 
-    getProjects: async (user: User | null, explicitToken?: string | null, orgId?: string, projectId?: string): Promise<Project[]> => {
+    getProjects: async (user: User | null, explicitToken?: string | null, orgId?: string, projectId?: string, assetId?: string): Promise<Project[]> => {
         if (IS_MOCK_MODE) {
             // Simulate network delay
             await new Promise(r => setTimeout(r, 600));
@@ -95,6 +96,7 @@ export const api = {
             const params = new URLSearchParams();
             if (orgId) params.append('orgId', orgId);
             if (projectId) params.append('projectId', projectId);
+            if (assetId) params.append('assetId', assetId); // Pass assetId for sandboxing
             if (params.toString()) url += `?${params.toString()}`;
 
             const res = await fetch(url, { headers });

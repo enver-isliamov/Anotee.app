@@ -158,14 +158,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       if (!currentUser) return null;
       const params = new URLSearchParams(window.location.search);
       const directProjectId = params.get('projectId');
-      return ['/api/data', currentUser.id, organization?.id, directProjectId || ''];
+      const directAssetId = params.get('assetId'); // Added AssetID to key
+      return ['/api/data', currentUser.id, organization?.id, directProjectId || '', directAssetId || ''];
   };
 
   // SWR Fetcher
   const fetcher = async () => {
       const params = new URLSearchParams(window.location.search);
       const directProjectId = params.get('projectId');
-      return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined);
+      const directAssetId = params.get('assetId'); // Pass to API
+      return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined, directAssetId || undefined);
   };
 
   // --- SMART POLLING OPTIMIZATION ---
@@ -288,7 +290,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         } else if (path === '/demo') {
             setView({ type: 'LIVE_DEMO' });
         } else if (pId && aId) {
-            setView({ type: 'PLAYER', projectId: pId, assetId: aId });
+            setView({ type: 'PLAYER', projectId: pId, assetId: aId, restrictedAssetId: aId }); // Set Restricted Asset
         } else if (pId) {
             setView({ type: 'PROJECT_VIEW', projectId: pId });
         } else {
