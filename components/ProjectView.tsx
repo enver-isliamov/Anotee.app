@@ -310,11 +310,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleCopyLink = () => {
     const origin = window.location.origin;
     let url = '';
+    
     if (shareTarget?.type === 'project') {
-       url = `${origin}?projectId=${shareTarget.id}`;
+       // Invite Link: Explicitly add invite=true
+       url = `${origin}?projectId=${shareTarget.id}&invite=true`;
     } else {
+       // Review Link: Explicitly limit to asset
        url = `${origin}?projectId=${project.id}&assetId=${shareTarget?.id}`;
     }
+    
     navigator.clipboard.writeText(url);
     setIsCopied(true);
     notify(t('common.link_copied'), "success");
@@ -667,7 +671,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
                             <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
                             <div className="flex items-center gap-2">
-                                <input type="text" readOnly value={`${window.location.origin}?projectId=${project.id}${shareTarget.type === 'asset' ? `&assetId=${shareTarget.id}` : ''}`} className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" />
+                                <input 
+                                    type="text" 
+                                    readOnly 
+                                    value={
+                                        shareTarget.type === 'project' 
+                                            ? `${window.location.origin}?projectId=${shareTarget.id}&invite=true` // Invite Link
+                                            : `${window.location.origin}?projectId=${project.id}&assetId=${shareTarget.id}` // Asset Review Link
+                                    } 
+                                    className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
+                                />
                                 <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-medium ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>{isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}</button>
                             </div>
                         </div>

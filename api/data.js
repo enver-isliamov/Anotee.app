@@ -92,7 +92,8 @@ export default async function handler(req, res) {
         try {
           const targetOrgId = req.query.orgId;
           const specificProjectId = req.query.projectId;
-          const specificAssetId = req.query.assetId; // Passed from URL for Auto-Join
+          const specificAssetId = req.query.assetId; // Passed from URL for Review Link
+          const isInviteLink = req.query.invite === 'true'; // New Flag for Full Access Invite
 
           let query;
 
@@ -104,68 +105,84 @@ export default async function handler(req, res) {
                   const projectRow = rows[0];
                   let projectData = projectRow.data;
                   
-                  // Access Check
-                  let hasAccess = false;
-                  if (projectData.publicAccess === 'view') {
-                      hasAccess = true;
-                  } else {
-                      hasAccess = await checkProjectAccess(user, projectRow);
-                  }
+                  // 1. Initial Access Check (Owner or Existing Member)
+                  let hasAccess = await checkProjectAccess(user, projectRow);
+                  
+                  // 2. Auto-Join Logic (For Public Projects)
+                  // Only run if not already a member (hasAccess is false) OR need to upgrade permissions
+                  if (!projectRow.org_id && projectData.publicAccess === 'view') {
+                      
+                      const currentTeam = projectData.team || [];
+                      const memberIndex = currentTeam.findIndex(m => m.id === user.id);
+                      let shouldUpdate = false;
+                      let newTeam = [...currentTeam];
 
-                  if (hasAccess) {
-                      // --- AUTO-JOIN & PERMISSION UPGRADE LOGIC ---
-                      if (!projectRow.org_id) {
-                          const currentTeam = projectData.team || [];
-                          const memberIndex = currentTeam.findIndex(m => m.id === user.id);
-                          
-                          let shouldUpdate = false;
-                          let newTeam = [...currentTeam];
-
-                          // CASE A: User is NEW.
-                          if (memberIndex === -1 && projectData.publicAccess === 'view') {
-                              // If accessed via Review Link (has assetId) -> RESTRICTED Viewer
-                              // If accessed via Invite Link (no assetId) -> FULL Viewer
+                      // Scenario A: Upgrade Restricted User to Full Member (via Invite Link)
+                      if (memberIndex !== -1 && isInviteLink && newTeam[memberIndex].restrictedAssetId) {
+                          newTeam[memberIndex] = {
+                              ...newTeam[memberIndex],
+                              restrictedAssetId: undefined // Remove restriction
+                          };
+                          shouldUpdate = true;
+                          hasAccess = true; // Ensure access is granted
+                      }
+                      
+                      // Scenario B: User is NOT in team. Try to join.
+                      else if (memberIndex === -1) {
+                          // B1. INVITE LINK -> Full Access
+                          if (isInviteLink) {
+                              newTeam.push({
+                                  id: user.id,
+                                  name: user.name,
+                                  avatar: user.avatar,
+                                  email: user.email,
+                                  role: 'viewer'
+                                  // No restrictedAssetId
+                              });
+                              shouldUpdate = true;
+                              hasAccess = true;
+                          }
+                          // B2. REVIEW LINK -> Restricted Access
+                          else if (specificAssetId) {
                               newTeam.push({
                                   id: user.id,
                                   name: user.name,
                                   avatar: user.avatar,
                                   email: user.email,
                                   role: 'viewer',
-                                  restrictedAssetId: specificAssetId || undefined // Persist restriction
+                                  restrictedAssetId: specificAssetId // Sandbox!
                               });
                               shouldUpdate = true;
-                          } 
-                          // CASE B: User IS Member but Restricted.
-                          // If they now access via Invite Link (no assetId), UPGRADE to Full.
-                          else if (memberIndex !== -1 && newTeam[memberIndex].restrictedAssetId && !specificAssetId) {
-                              newTeam[memberIndex] = {
-                                  ...newTeam[memberIndex],
-                                  restrictedAssetId: undefined // Remove restriction
-                              };
-                              shouldUpdate = true;
+                              hasAccess = true;
                           }
-
-                          if (shouldUpdate) {
-                              projectData = { ...projectData, team: newTeam };
-                              sql`
-                                  UPDATE projects 
-                                  SET data = ${JSON.stringify(projectData)}::jsonb 
-                                  WHERE id = ${specificProjectId}
-                              `.catch(err => console.error("Auto-join update failed", err));
+                          // B3. DIRECT LINK (No params) -> DENY
+                          else {
+                              // Do nothing. Access remains false.
+                              // This prevents random users from joining just by guessing ID.
                           }
                       }
 
+                      if (shouldUpdate) {
+                          projectData = { ...projectData, team: newTeam };
+                          // Async update, don't wait blocking
+                          sql`
+                              UPDATE projects 
+                              SET data = ${JSON.stringify(projectData)}::jsonb 
+                              WHERE id = ${specificProjectId}
+                          `.catch(err => console.error("Auto-join update failed", err));
+                      }
+                  }
+
+                  if (hasAccess) {
                       // --- SANDBOXING (CRITICAL) ---
-                      // Filter data based on DB permissions, NOT just URL params.
-                      // Even if URL has no assetId, if DB says "restricted", we restrict.
+                      // Filter data based on DB permissions.
                       const sanitizedData = sanitizeProjectForUser(projectData, user);
                       query = [{ ...projectRow, data: sanitizedData }];
-
                   } else {
-                      query = [];
+                      return res.status(403).json({ error: "Access Denied. You must be invited to view this project." });
                   }
               } else {
-                  query = [];
+                  return res.status(404).json({ error: "Project not found" });
               }
 
           } else if (targetOrgId) {
@@ -178,7 +195,6 @@ export default async function handler(req, res) {
               query = rows;
           } else {
               // --- DASHBOARD LIST (PERSONAL + SHARED) ---
-              // Modified query to ensure we fetch shared projects where user is in team
               const userEmail = user.email || null;
               
               const { rows } = await sql`
@@ -200,7 +216,6 @@ export default async function handler(req, res) {
               `;
               
               // Apply Sandboxing to List Items too!
-              // This ensures Dashboard tiles don't leak info (e.g. asset count)
               query = rows.map(row => ({
                   ...row,
                   data: sanitizeProjectForUser(row.data, user)
@@ -238,8 +253,6 @@ export default async function handler(req, res) {
           if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
 
           // Extra check: Restricted users cannot edit project settings (name, description, team)
-          // They can only comment (which goes via comment API).
-          // Allow limited patches? No, restricted users are viewers usually.
           const projectData = rows[0].data;
           const member = projectData.team?.find(m => m.id === user.id);
           if (member?.restrictedAssetId && (updates.name || updates.team || updates.publicAccess)) {
@@ -298,7 +311,7 @@ export default async function handler(req, res) {
                     const existingData = checkExists.rows[0].data;
                     const member = existingData.team?.find(m => m.id === user.id);
                     if (member?.restrictedAssetId) {
-                        continue; // Skip silently or error? Skip to prevent data corruption.
+                        continue; 
                     }
 
                     await sql`
