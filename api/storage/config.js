@@ -1,36 +1,7 @@
 
 import { sql } from '@vercel/postgres';
 import { verifyUser } from '../_auth.js';
-import crypto from 'crypto';
-
-// --- ENCRYPTION HELPERS ---
-// We use the existing CLERK_SECRET_KEY as a master key to avoid new env requirements.
-// We derive a 32-byte key from it.
-const MASTER_SECRET = process.env.CLERK_SECRET_KEY || 'default-fallback-secret-key-do-not-use-in-prod';
-const ALGORITHM = 'aes-256-cbc';
-
-function getCipherKey() {
-    return crypto.createHash('sha256').update(MASTER_SECRET).digest();
-}
-
-function encrypt(text) {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(ALGORITHM, getCipherKey(), iv);
-    let encrypted = cipher.update(text);
-    encrypted = Buffer.concat([encrypted, cipher.final()]);
-    return iv.toString('hex') + ':' + encrypted.toString('hex');
-}
-
-function decrypt(text) {
-    if (!text) return null;
-    const textParts = text.split(':');
-    const iv = Buffer.from(textParts.shift(), 'hex');
-    const encryptedText = Buffer.from(textParts.join(':'), 'hex');
-    const decipher = crypto.createDecipheriv(ALGORITHM, getCipherKey(), iv);
-    let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString();
-}
+import { encrypt } from '../_crypto.js';
 
 export default async function handler(req, res) {
     try {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2 } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -59,6 +59,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
+  
+  // Test Connection State
+  const [isTestingS3, setIsTestingS3] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -113,6 +117,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
           ...preset,
           provider: provider as any
       }));
+      setTestResult(null);
   };
 
   const handleSaveS3 = async () => {
@@ -136,6 +141,34 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
           alert("Ошибка сохранения настроек. Проверьте соединение.");
       } finally {
           setIsSavingS3(false);
+      }
+  };
+
+  const handleTestConnection = async () => {
+      // First save to ensure backend has latest credentials (especially for secret key)
+      await handleSaveS3();
+      
+      setIsTestingS3(true);
+      setTestResult(null);
+      
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/storage/test', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          const data = await res.json();
+          
+          if (res.ok && data.success) {
+              setTestResult({ success: true, message: `Успешно! Доступ к бакету '${data.bucket}' есть.` });
+          } else {
+              setTestResult({ success: false, message: data.error || "Ошибка соединения" });
+          }
+      } catch (e: any) {
+          setTestResult({ success: false, message: e.message || "Сбой сети" });
+      } finally {
+          setIsTestingS3(false);
       }
   };
 
@@ -449,10 +482,26 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                             </div>
                                         </div>
 
-                                        <div className="pt-4 border-t border-zinc-800 flex justify-end">
+                                        {/* Status Message Area */}
+                                        {testResult && (
+                                            <div className={`p-3 rounded-lg text-xs font-bold border ${testResult.success ? 'bg-green-900/20 text-green-400 border-green-800' : 'bg-red-900/20 text-red-400 border-red-800'} flex items-center gap-2 animate-in fade-in slide-in-from-top-2`}>
+                                                {testResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                                                {testResult.message}
+                                            </div>
+                                        )}
+
+                                        <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
+                                            <button 
+                                                onClick={handleTestConnection}
+                                                disabled={isSavingS3 || isTestingS3}
+                                                className="px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+                                            >
+                                                {isTestingS3 ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                                                Проверить
+                                            </button>
                                             <button 
                                                 onClick={handleSaveS3}
-                                                disabled={isSavingS3}
+                                                disabled={isSavingS3 || isTestingS3}
                                                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50"
                                             >
                                                 {isSavingS3 ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
