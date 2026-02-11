@@ -11,10 +11,43 @@ const isDbConnectionError = (err) => {
     );
 };
 
+// Helper: Securely filter project data for a specific user based on their permissions
+function sanitizeProjectForUser(projectData, user) {
+    if (!projectData) return null;
+    
+    const team = projectData.team || [];
+    const memberRecord = team.find(m => m.id === user.id);
+    const isOwner = projectData.ownerId === user.id;
+
+    // If Owner or explicitly unrestricted member -> Return Full
+    if (isOwner) return projectData;
+    
+    // Check for restriction in DB
+    const restrictedAssetId = memberRecord?.restrictedAssetId;
+
+    if (restrictedAssetId) {
+        // FILTERING LOGIC:
+        // 1. Filter Assets: Keep only the restricted one.
+        const allowedAssets = projectData.assets.filter(a => a.id === restrictedAssetId);
+        
+        // 2. Hide Team: Privacy protection (Reviewers shouldn't see full team list)
+        // Keep only Owner and Self
+        const safeTeam = team.filter(m => m.id === user.id || m.id === projectData.ownerId);
+
+        return {
+            ...projectData,
+            assets: allowedAssets,
+            team: safeTeam,
+            isRestrictedView: true // Flag for UI
+        };
+    }
+
+    return projectData;
+}
+
 export default async function handler(req, res) {
   try {
       // FORCE EMAIL FETCH: Required for "Shared with Me" personal invites to work.
-      // NOTE: This increases Clerk API usage. Client-side polling interval has been increased to mitigate 429 errors.
       const requireEmail = true; 
       const user = await verifyUser(req, requireEmail);
       
@@ -34,12 +67,9 @@ export default async function handler(req, res) {
           
           let canDelete = false;
           
-          // 1. Universal Owner Override
-          // Check Clerk ID OR Legacy Email (if available)
           if (projectRow.owner_id === user.id || (user.email && projectRow.owner_id === user.email)) {
               canDelete = true;
           }
-          // 2. Org Admin Check
           else if (projectRow.org_id) {
               try {
                   const clerk = getClerkClient();
@@ -62,7 +92,7 @@ export default async function handler(req, res) {
         try {
           const targetOrgId = req.query.orgId;
           const specificProjectId = req.query.projectId;
-          const specificAssetId = req.query.assetId; // NEW: For Sandboxing
+          const specificAssetId = req.query.assetId; // Passed from URL for Auto-Join
 
           let query;
 
@@ -74,7 +104,7 @@ export default async function handler(req, res) {
                   const projectRow = rows[0];
                   let projectData = projectRow.data;
                   
-                  // Public Access Check
+                  // Access Check
                   let hasAccess = false;
                   if (projectData.publicAccess === 'view') {
                       hasAccess = true;
@@ -83,85 +113,54 @@ export default async function handler(req, res) {
                   }
 
                   if (hasAccess) {
-                      // --- SECURITY: ASSET SANDBOXING ---
-                      // If user requested a specific asset link, AND they are NOT a team member/owner,
-                      // we must hide all other assets to prevent "Back" button leakage.
-                      if (specificAssetId) {
-                          // Check if user is a full member (Owner, Team array, or Org)
-                          const isFullMember = await checkProjectAccess(user, projectRow);
-                          
-                          if (!isFullMember) {
-                              // User is a Guest accessing via Public Link -> Filter Assets
-                              const allowedAsset = projectData.assets.find(a => a.id === specificAssetId);
-                              if (allowedAsset) {
-                                  projectData = {
-                                      ...projectData,
-                                      assets: [allowedAsset], // ONLY show the requested asset
-                                      // Optional: Strip sensitive team info
-                                      team: projectData.team.filter(m => m.role === 'owner') // Only show owner info
-                                  };
-                              } else {
-                                  // Requested asset not found or deleted
-                                  return res.status(404).json({ error: "Asset not found or access denied" });
-                              }
-                          }
-                      }
-
-                      query = [{ ...projectRow, data: projectData }];
-
-                      // --- AUTO-JOIN LOGIC ---
-                      // If user accessed via link (Public) or Email Invite, but is not fully in DB 'team' array with ID, add them.
-                      // This ensures the project appears in their Dashboard later.
-                      if (!projectRow.org_id) { // Only for Personal projects (Orgs use Clerk members)
+                      // --- AUTO-JOIN & PERMISSION UPGRADE LOGIC ---
+                      if (!projectRow.org_id) {
                           const currentTeam = projectData.team || [];
-                          const alreadyInTeamById = currentTeam.some(m => m.id === user.id);
+                          const memberIndex = currentTeam.findIndex(m => m.id === user.id);
                           
-                          // Check if they are in team via Email (Legacy Invite)
-                          const invitedByEmailIndex = user.email 
-                              ? currentTeam.findIndex(m => m.email === user.email || m.id === user.email) 
-                              : -1;
-
                           let shouldUpdate = false;
                           let newTeam = [...currentTeam];
 
-                          if (invitedByEmailIndex !== -1 && !alreadyInTeamById) {
-                              // CASE 1: Convert Email Invite to Full User (Claim Invite)
-                              newTeam[invitedByEmailIndex] = {
-                                  ...newTeam[invitedByEmailIndex],
-                                  id: user.id, // Migrate to Clerk ID
-                                  name: user.name || newTeam[invitedByEmailIndex].name,
-                                  avatar: user.avatar || newTeam[invitedByEmailIndex].avatar
+                          // CASE A: User is NEW.
+                          if (memberIndex === -1 && projectData.publicAccess === 'view') {
+                              // If accessed via Review Link (has assetId) -> RESTRICTED Viewer
+                              // If accessed via Invite Link (no assetId) -> FULL Viewer
+                              newTeam.push({
+                                  id: user.id,
+                                  name: user.name,
+                                  avatar: user.avatar,
+                                  email: user.email,
+                                  role: 'viewer',
+                                  restrictedAssetId: specificAssetId || undefined // Persist restriction
+                              });
+                              shouldUpdate = true;
+                          } 
+                          // CASE B: User IS Member but Restricted.
+                          // If they now access via Invite Link (no assetId), UPGRADE to Full.
+                          else if (memberIndex !== -1 && newTeam[memberIndex].restrictedAssetId && !specificAssetId) {
+                              newTeam[memberIndex] = {
+                                  ...newTeam[memberIndex],
+                                  restrictedAssetId: undefined // Remove restriction
                               };
                               shouldUpdate = true;
-                          } else if (!alreadyInTeamById && projectData.publicAccess === 'view') {
-                              // CASE 2: Public Link Access -> Add to Team as Viewer
-                              // ONLY IF NOT SANDBOXED (Full Project Link)
-                              // If accessed via asset link, we don't necessarily add them to dashboard
-                              if (!specificAssetId) {
-                                  newTeam.push({
-                                      id: user.id,
-                                      name: user.name,
-                                      avatar: user.avatar,
-                                      email: user.email,
-                                      role: 'viewer'
-                                  });
-                                  shouldUpdate = true;
-                              }
                           }
 
                           if (shouldUpdate) {
-                              // Async update DB (don't await strictly to keep response fast)
-                              const updatedData = { ...projectData, team: newTeam };
+                              projectData = { ...projectData, team: newTeam };
                               sql`
                                   UPDATE projects 
-                                  SET data = ${JSON.stringify(updatedData)}::jsonb 
+                                  SET data = ${JSON.stringify(projectData)}::jsonb 
                                   WHERE id = ${specificProjectId}
                               `.catch(err => console.error("Auto-join update failed", err));
-                              
-                              // Return updated data immediately
-                              query[0].data = updatedData;
                           }
                       }
+
+                      // --- SANDBOXING (CRITICAL) ---
+                      // Filter data based on DB permissions, NOT just URL params.
+                      // Even if URL has no assetId, if DB says "restricted", we restrict.
+                      const sanitizedData = sanitizeProjectForUser(projectData, user);
+                      query = [{ ...projectRow, data: sanitizedData }];
+
                   } else {
                       query = [];
                   }
@@ -170,7 +169,7 @@ export default async function handler(req, res) {
               }
 
           } else if (targetOrgId) {
-              // --- ORG LIST FETCH ---
+              // --- ORG LIST ---
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
@@ -178,12 +177,12 @@ export default async function handler(req, res) {
               `;
               query = rows;
           } else {
-              // --- PERSONAL WORKSPACE FETCH ---
-              // Uses user.email to match "Shared with Me" projects via invites
+              // --- DASHBOARD LIST (PERSONAL + SHARED) ---
+              // Modified query to ensure we fetch shared projects where user is in team
               const userEmail = user.email || null;
               
               const { rows } = await sql`
-                SELECT data, org_id FROM projects 
+                SELECT data, org_id, owner_id FROM projects 
                 WHERE (org_id IS NULL OR org_id = '') 
                 AND (
                     owner_id = ${user.id} 
@@ -199,12 +198,20 @@ export default async function handler(req, res) {
                 )
                 ORDER BY updated_at DESC
               `;
-              query = rows;
+              
+              // Apply Sandboxing to List Items too!
+              // This ensures Dashboard tiles don't leak info (e.g. asset count)
+              query = rows.map(row => ({
+                  ...row,
+                  data: sanitizeProjectForUser(row.data, user)
+              }));
           }
 
           const projects = query.map(r => {
               const p = r.data;
               if (r.org_id && !p.orgId) p.orgId = r.org_id;
+              // Ensure we return ownerId for permissions check on frontend
+              if (r.owner_id && !p.ownerId) p.ownerId = r.owner_id;
               return p;
           });
           
@@ -212,24 +219,32 @@ export default async function handler(req, res) {
 
         } catch (dbError) {
            if (isDbConnectionError(dbError)) return res.status(503).json({ error: "DB Offline", code: "DB_OFFLINE" });
-           // Check for missing table error
            if (dbError.code === '42P01') return res.status(200).json([]); 
-           
            console.error("DB GET Error:", dbError); 
            return res.status(500).json({ error: "Database error", code: dbError.code });
         }
       } 
       
-      // --- PATCH: Partial Updates ---
+      // --- PATCH ---
       if (req.method === 'PATCH') {
           const { projectId, updates, _version } = req.body;
-          if (!projectId || !updates) return res.status(400).json({ error: "Missing projectId or updates" });
+          if (!projectId || !updates) return res.status(400).json({ error: "Missing projectId" });
 
           const { rows } = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId}`;
           if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
           
+          // Check access
           const hasAccess = await checkProjectAccess(user, rows[0]);
           if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
+
+          // Extra check: Restricted users cannot edit project settings (name, description, team)
+          // They can only comment (which goes via comment API).
+          // Allow limited patches? No, restricted users are viewers usually.
+          const projectData = rows[0].data;
+          const member = projectData.team?.find(m => m.id === user.id);
+          if (member?.restrictedAssetId && (updates.name || updates.team || updates.publicAccess)) {
+               return res.status(403).json({ error: "Restricted users cannot modify project settings." });
+          }
 
           const currentDbData = rows[0].data;
           const currentVer = currentDbData._version || 0;
@@ -254,7 +269,7 @@ export default async function handler(req, res) {
           return res.status(200).json({ success: true, project: newData });
       }
 
-      // --- POST: Upsert (Single or Array) ---
+      // --- POST (SYNC) ---
       if (req.method === 'POST') {
         let projectsToSync = req.body;
         if (typeof projectsToSync === 'string') try { projectsToSync = JSON.parse(projectsToSync); } catch(e) {}
@@ -279,6 +294,13 @@ export default async function handler(req, res) {
                     const hasAccess = await checkProjectAccess(user, checkExists.rows[0]);
                     if (!hasAccess) continue; 
                     
+                    // Restricted users cannot overwrite project data via Sync
+                    const existingData = checkExists.rows[0].data;
+                    const member = existingData.team?.find(m => m.id === user.id);
+                    if (member?.restrictedAssetId) {
+                        continue; // Skip silently or error? Skip to prevent data corruption.
+                    }
+
                     await sql`
                         UPDATE projects 
                         SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown } from 'lucide-react';
@@ -58,8 +59,18 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         
   const isProjectOwner = project.ownerId === currentUser.id;
   
-  const canEditProject = (isProjectOwner || isProjectMember) && !restrictedAssetId;
-  const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
+  // DETERMINE RESTRICTED STATUS
+  // Check if current user is restricted in the team list
+  const isRestrictedUser = useMemo(() => {
+      const me = project.team?.find(m => m.id === currentUser.id);
+      return !!me?.restrictedAssetId;
+  }, [project.team, currentUser.id]);
+
+  // If passed as prop (URL param) OR deduced from DB data
+  const effectiveRestrictedId = restrictedAssetId || (isRestrictedUser ? project.assets[0]?.id : undefined);
+
+  const canEditProject = (isProjectOwner || isProjectMember) && !isRestrictedUser;
+  const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !isRestrictedUser;
   const isLocked = project.isLocked;
 
   // SHARE PERMISSION CHECKS (Granular)
@@ -88,8 +99,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
 
-  const visibleAssets = restrictedAssetId 
-    ? project.assets.filter(a => a.id === restrictedAssetId)
+  // If restricted, we assume the backend already filtered the assets array. 
+  // We double-check here just for UI consistency.
+  const visibleAssets = isRestrictedUser 
+    ? project.assets 
     : project.assets;
 
   // Find active uploads for this project
@@ -428,8 +441,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         <div className="flex items-center gap-3 shrink-0">
           <LanguageSelector />
           
-          {/* TEAM AVATARS */}
-          {!restrictedAssetId && (
+          {/* TEAM AVATARS - Hidden for Restricted Users */}
+          {!isRestrictedUser && (
             <div 
               onClick={() => setIsParticipantsModalOpen(true)}
               className="flex -space-x-2 cursor-pointer hover:opacity-80 transition-opacity ml-2"
@@ -445,14 +458,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           )}
 
           {/* PERSONAL PROJECT INDICATOR */}
-          {!restrictedAssetId && !project.orgId && (
+          {!isRestrictedUser && !project.orgId && (
              <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace">
                  <UserIcon size={12} />
                  <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
              </div>
           )}
 
-          {!isLocked && !restrictedAssetId && (
+          {!isLocked && !isRestrictedUser && (
             <>
               <div className="h-6 w-px bg-zinc-800 mx-1"></div>
               {project.orgId ? (
@@ -488,7 +501,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       )}
 
-      {restrictedAssetId && (
+      {isRestrictedUser && (
         <div className="bg-orange-900/20 border-b border-orange-900/30 text-orange-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
             <Info size={12} />
             Review Mode: Access limited to specific assets.
