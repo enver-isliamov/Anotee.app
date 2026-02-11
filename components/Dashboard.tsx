@@ -244,22 +244,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
       setIsDeleting(project.id);
       try {
+          // 1. DELETE VERCEL BLOB ASSETS
           const urlsToDelete: string[] = [];
+          const hasS3Assets = project.assets.some(a => a.versions.some(v => v.storageType === 's3'));
+
           project.assets.forEach(asset => {
               asset.versions.forEach(v => {
-                  if (v.url.startsWith('http')) urlsToDelete.push(v.url);
+                  if (v.url.startsWith('http') && v.storageType === 'vercel') urlsToDelete.push(v.url);
               });
           });
-          if (!isMockMode && urlsToDelete.length > 0) {
-              await api.deleteAssets(urlsToDelete, project.id);
-          }
+
           if (!isMockMode) {
+              // Blob cleanup
+              if (urlsToDelete.length > 0) {
+                  await api.deleteAssets(urlsToDelete, project.id);
+              }
+              
+              // S3 cleanup (Delete entire project folder)
+              if (hasS3Assets) {
+                  try {
+                      const token = await getToken();
+                      await fetch('/api/storage?action=delete_folder', {
+                          method: 'POST',
+                          headers: { 
+                              'Authorization': `Bearer ${token}`,
+                              'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({ prefix: `anotee/${project.id}/` })
+                      });
+                  } catch (e) {
+                      console.warn("Failed to clean up S3 folder", e);
+                  }
+              }
+
+              // DB cleanup
               const res = await fetch(`/api/data?projectId=${project.id}`, {
                   method: 'DELETE',
                   headers: { 'Authorization': `Bearer ${await getToken()}` }
               });
               if (!res.ok) throw new Error("Failed to delete project row");
           }
+          
           onDeleteProject(project.id);
           notify("Project deleted successfully", "success");
       } catch(e) {

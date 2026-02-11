@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
-import { useOrganization, OrganizationProfile } from '@clerk/clerk-react';
+import { useOrganization, OrganizationProfile, useAuth } from '@clerk/clerk-react';
 import { useDrive } from '../services/driveContext';
 import { mapClerkUserToAppUser, isOrgAdmin } from '../services/userUtils';
 import logo from '../logo.svg';
@@ -33,6 +33,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const { t } = useLanguage();
   const { isPro } = useSubscription();
   const { config } = useAppConfig();
+  const { getToken } = useAuth();
   
   // --- CLERK ORGANIZATION LOGIC ---
   const { organization, memberships } = useOrganization({
@@ -131,15 +132,41 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
     try {
         if (!isMockMode) {
-            if (deleteFromDrive && isDriveReady) {
-                notify("Deleting files from Drive...", "info");
-                for (const v of asset.versions) {
-                    if (v.storageType === 'drive' && v.googleDriveId) {
-                        await GoogleDriveService.deleteFile(v.googleDriveId);
+            if (deleteFromDrive) {
+                // 1. DELETE FROM GOOGLE DRIVE
+                if (isDriveReady) {
+                    notify("Deleting files from Drive...", "info");
+                    for (const v of asset.versions) {
+                        if (v.storageType === 'drive' && v.googleDriveId) {
+                            await GoogleDriveService.deleteFile(v.googleDriveId);
+                        }
+                    }
+                }
+
+                // 2. DELETE FROM S3
+                const s3Keys = asset.versions
+                    .filter(v => v.storageType === 's3' && v.s3Key)
+                    .map(v => v.s3Key);
+                
+                if (s3Keys.length > 0) {
+                    notify("Deleting files from S3...", "info");
+                    try {
+                        const token = await getToken();
+                        await fetch('/api/storage?action=delete', {
+                            method: 'POST',
+                            headers: { 
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ keys: s3Keys })
+                        });
+                    } catch (e) {
+                        console.error("Failed to delete from S3", e);
                     }
                 }
             }
 
+            // 3. DELETE FROM VERCEL BLOB (System)
             const urlsToDelete: string[] = [];
             asset.versions.forEach(v => {
                 if (v.storageType === 'vercel' && v.url.startsWith('http')) {
@@ -508,6 +535,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 {visibleAssets.map((asset) => {
                     const lastVer = asset.versions[asset.versions.length-1];
                     const isDrive = lastVer?.storageType === 'drive';
+                    const isS3 = lastVer?.storageType === 's3';
                     
                     return (
                     <div 
@@ -523,6 +551,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
                         />
                         {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
+                        {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}
+                        
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
                             {!isLocked && canShare && (
                                 <button 
@@ -574,7 +604,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   <div className="space-y-3">
                       {isDriveReady && !isMockMode && (
                           <button onClick={() => confirmDeleteAsset(true)} disabled={isDeleting} className="w-full flex items-center justify-between p-4 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 rounded-xl text-left transition-colors group">
-                              <div><div className="font-bold text-red-400 text-sm mb-0.5">Delete Everywhere</div><div className="text-[10px] text-red-300/60">Remove from dashboard & trash Drive files</div></div>
+                              <div><div className="font-bold text-red-400 text-sm mb-0.5">Delete Everywhere</div><div className="text-[10px] text-red-300/60">Remove from dashboard & trash Cloud files</div></div>
                               <Trash2 size={18} className="text-red-500 group-hover:scale-110 transition-transform"/>
                           </button>
                       )}

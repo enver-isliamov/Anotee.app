@@ -3,7 +3,7 @@ import { sql } from '@vercel/postgres';
 import { verifyUser } from './_auth.js';
 import { encrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
-import { ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export default async function handler(req, res) {
@@ -153,6 +153,64 @@ export default async function handler(req, res) {
                 key,
                 publicUrl: config.public_url 
             });
+        }
+
+        // --- ACTION: DELETE OBJECTS (POST) ---
+        if (action === 'delete') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            
+            const { keys } = req.body;
+            if (!keys || !Array.isArray(keys) || keys.length === 0) {
+                return res.status(400).json({ error: "No keys provided" });
+            }
+
+            const { s3, config } = await getS3Client(user.id);
+
+            const command = new DeleteObjectsCommand({
+                Bucket: config.bucket,
+                Delete: {
+                    Objects: keys.map(k => ({ Key: k })),
+                    Quiet: true
+                }
+            });
+
+            await s3.send(command);
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: DELETE FOLDER/PREFIX (POST) ---
+        if (action === 'delete_folder') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            
+            const { prefix } = req.body;
+            if (!prefix) return res.status(400).json({ error: "Prefix required" });
+
+            const { s3, config } = await getS3Client(user.id);
+
+            // 1. List objects to find what to delete
+            // Note: Loops if > 1000 objects, implemented simple version for now
+            const listCmd = new ListObjectsV2Command({
+                Bucket: config.bucket,
+                Prefix: prefix
+            });
+
+            const listedObjects = await s3.send(listCmd);
+
+            if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+                return res.status(200).json({ success: true, message: "Nothing to delete" });
+            }
+
+            // 2. Delete found objects
+            const deleteCmd = new DeleteObjectsCommand({
+                Bucket: config.bucket,
+                Delete: {
+                    Objects: listedObjects.Contents.map(({ Key }) => ({ Key })),
+                    Quiet: true
+                }
+            });
+
+            await s3.send(deleteCmd);
+            return res.status(200).json({ success: true, count: listedObjects.Contents.length });
         }
 
         return res.status(400).json({ error: "Invalid action" });
