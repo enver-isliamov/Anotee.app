@@ -99,7 +99,8 @@ export const useUploadManager = (
                 // Check if user has S3 configured
                 try {
                     const token = await getToken();
-                    const s3Res = await fetch('/api/storage/config', {
+                    // UPDATED API PATH
+                    const s3Res = await fetch('/api/storage?action=config', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (s3Res.ok) {
@@ -125,7 +126,8 @@ export const useUploadManager = (
                 // --- S3 UPLOAD PATH ---
                 const token = await getToken();
                 // 1. Get Presigned URL
-                const presignRes = await fetch('/api/storage/presign', {
+                // UPDATED API PATH
+                const presignRes = await fetch('/api/storage?action=presign', {
                     method: 'POST',
                     headers: { 
                         'Authorization': `Bearer ${token}`,

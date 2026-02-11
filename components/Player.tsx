@@ -419,7 +419,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 try {
                     const token = await getToken();
                     // Get Presigned GET URL
-                    const presignRes = await fetch('/api/storage/presign', {
+                    // UPDATED API PATH
+                    const presignRes = await fetch('/api/storage?action=presign', {
                         method: 'POST',
                         headers: { 
                             'Authorization': `Bearer ${token}`,

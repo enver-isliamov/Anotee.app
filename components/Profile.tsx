@@ -93,7 +93,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
       const loadS3Config = async () => {
           try {
               const token = await getToken();
-              const res = await fetch('/api/storage/config', {
+              // UPDATED API PATH
+              const res = await fetch('/api/storage?action=config', {
                   headers: { 'Authorization': `Bearer ${token}` }
               });
               if (res.ok) {
@@ -134,7 +135,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
       setIsSavingS3(true);
       try {
           const token = await getToken();
-          const res = await fetch('/api/storage/config', {
+          // UPDATED API PATH
+          const res = await fetch('/api/storage?action=config', {
               method: 'POST',
               headers: { 
                   'Authorization': `Bearer ${token}`,
@@ -163,7 +165,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
       
       try {
           const token = await getToken();
-          const res = await fetch('/api/storage/test', {
+          // UPDATED API PATH
+          const res = await fetch('/api/storage?action=test', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` }
           });
