@@ -103,7 +103,11 @@ export interface AppConfig {
     export_csv: FeatureRule;
     google_drive: FeatureRule;
     ai_transcription: FeatureRule;
-    team_collab: FeatureRule; // Controls INVITING specific members via email. Public link sharing is always available for owners.
+    
+    // Sharing & Access
+    sharing_project: FeatureRule; // Invite Team via Email
+    sharing_public_link: FeatureRule; // Public Links for Assets
+    
     local_file_link: FeatureRule;
     high_res_proxies: FeatureRule;
     project_locking: FeatureRule;
@@ -122,20 +126,24 @@ export const DEFAULT_CONFIG: AppConfig = {
     max_projects: { enabledForFree: true, enabledForPro: true, limitFree: 3, limitPro: 1000 },
     export_xml: { enabledForFree: false, enabledForPro: true },
     export_csv: { enabledForFree: false, enabledForPro: true },
-    google_drive: { enabledForFree: false, enabledForPro: true }, // Logic handled in components, allowing drive for all but UI controlled
+    google_drive: { enabledForFree: false, enabledForPro: true }, 
     ai_transcription: { enabledForFree: true, enabledForPro: true },
-    team_collab: { enabledForFree: false, enabledForPro: true }, // Default: Block sharing for Free
+    
+    // Sharing Defaults (Strict for Free)
+    sharing_project: { enabledForFree: false, enabledForPro: true }, 
+    sharing_public_link: { enabledForFree: false, enabledForPro: true },
+    
     local_file_link: { enabledForFree: true, enabledForPro: true },
     high_res_proxies: { enabledForFree: false, enabledForPro: true },
     project_locking: { enabledForFree: false, enabledForPro: true },
     version_comparison: { enabledForFree: true, enabledForPro: true },
 
     // UI Defaults
-    ui_upsell_banner: { enabledForFree: true, enabledForPro: false }, // Hide upsell for Pro users by default
+    ui_upsell_banner: { enabledForFree: true, enabledForPro: false },
     ui_roadmap_block: { enabledForFree: true, enabledForPro: false },
     ui_help_button: { enabledForFree: true, enabledForPro: true },
     ui_footer: { enabledForFree: true, enabledForPro: true },
-    ui_drive_connect: { enabledForFree: true, enabledForPro: true }, // Enabled for free to allow upload
+    ui_drive_connect: { enabledForFree: true, enabledForPro: true },
 };
 
 // --- PAYMENT INTEGRATION CONFIG ---

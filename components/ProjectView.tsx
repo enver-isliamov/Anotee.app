@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown } from 'lucide-react';
@@ -26,7 +25,7 @@ interface ProjectViewProps {
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
   onboardingActiveStep?: number;
-  uploadTasks: UploadTask[]; // NEW
+  uploadTasks: UploadTask[]; 
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks }) => {
@@ -63,10 +62,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !restrictedAssetId;
   const isLocked = project.isLocked;
 
-  // SHARE PERMISSION CHECK
-  // canInviteTeam controls access to inviting specific people via Email (Team feature)
-  // Public Link sharing is available to everyone
-  const canInviteTeam = isPro || config.team_collab.enabledForFree;
+  // SHARE PERMISSION CHECKS (Granular)
+  const canInviteTeam = isPro ? config.sharing_project.enabledForPro : config.sharing_project.enabledForFree;
+  const canSharePublicLink = isPro ? config.sharing_public_link.enabledForPro : config.sharing_public_link.enabledForFree;
 
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
@@ -95,13 +93,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     : project.assets;
 
   // Find active uploads for this project
-  // Since we rely on project name, this might be broad but safe enough for UI feedback
   const activeUpload = uploadTasks.find(t => t.projectName === project.name);
 
   // --- HANDLERS ---
-  
-  // --- INLINE TILE DROP LOGIC ---
-  // No longer global handlers. 
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -196,6 +190,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleShareProject = () => {
     if (isLocked) return;
+    if (!canInviteTeam && !project.orgId) {
+        notify("Invite feature is locked. Upgrade to Pro.", "warning");
+        return;
+    }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
     setIsShareModalOpen(true);
   };
@@ -204,6 +202,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     e.stopPropagation(); 
     if (isLocked) {
         notify(t('dash.locked_msg'), "error");
+        return;
+    }
+    if (!canSharePublicLink) {
+        notify("Public Links are locked. Upgrade to Pro.", "warning");
         return;
     }
     setShareTarget({ type: 'asset', id: asset.id, name: asset.title });
@@ -466,10 +468,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   <button 
                     id="tour-share-btn"
                     onClick={handleShareProject}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                    title="Share via Public Link"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium ${canInviteTeam ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-70'}`}
+                    title={canInviteTeam ? "Invite via Email" : "Invites are locked (Pro)"}
+                    disabled={!canInviteTeam}
                   >
-                    <Globe size={16} />
+                    <UserPlus size={16} />
                     <span className="hidden md:inline">{t('pv.invite')}</span>
                   </button>
               )}
@@ -488,7 +491,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       {restrictedAssetId && (
         <div className="bg-orange-900/20 border-b border-orange-900/30 text-orange-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
             <Info size={12} />
-            Viewing restricted asset.
+            Review Mode: Access limited to specific assets.
         </div>
       )}
 
@@ -548,7 +551,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}
                         
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                            {!isLocked && (
+                            {!isLocked && canSharePublicLink && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}
                                     className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"

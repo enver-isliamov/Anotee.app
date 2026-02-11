@@ -62,6 +62,7 @@ export default async function handler(req, res) {
         try {
           const targetOrgId = req.query.orgId;
           const specificProjectId = req.query.projectId;
+          const specificAssetId = req.query.assetId; // NEW: For Sandboxing
 
           let query;
 
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
               
               if (rows.length > 0) {
                   const projectRow = rows[0];
-                  const projectData = projectRow.data;
+                  let projectData = projectRow.data;
                   
                   // Public Access Check
                   let hasAccess = false;
@@ -82,7 +83,31 @@ export default async function handler(req, res) {
                   }
 
                   if (hasAccess) {
-                      query = [projectRow];
+                      // --- SECURITY: ASSET SANDBOXING ---
+                      // If user requested a specific asset link, AND they are NOT a team member/owner,
+                      // we must hide all other assets to prevent "Back" button leakage.
+                      if (specificAssetId) {
+                          // Check if user is a full member (Owner, Team array, or Org)
+                          const isFullMember = await checkProjectAccess(user, projectRow);
+                          
+                          if (!isFullMember) {
+                              // User is a Guest accessing via Public Link -> Filter Assets
+                              const allowedAsset = projectData.assets.find(a => a.id === specificAssetId);
+                              if (allowedAsset) {
+                                  projectData = {
+                                      ...projectData,
+                                      assets: [allowedAsset], // ONLY show the requested asset
+                                      // Optional: Strip sensitive team info
+                                      team: projectData.team.filter(m => m.role === 'owner') // Only show owner info
+                                  };
+                              } else {
+                                  // Requested asset not found or deleted
+                                  return res.status(404).json({ error: "Asset not found or access denied" });
+                              }
+                          }
+                      }
+
+                      query = [{ ...projectRow, data: projectData }];
 
                       // --- AUTO-JOIN LOGIC ---
                       // If user accessed via link (Public) or Email Invite, but is not fully in DB 'team' array with ID, add them.
@@ -110,14 +135,18 @@ export default async function handler(req, res) {
                               shouldUpdate = true;
                           } else if (!alreadyInTeamById && projectData.publicAccess === 'view') {
                               // CASE 2: Public Link Access -> Add to Team as Viewer
-                              newTeam.push({
-                                  id: user.id,
-                                  name: user.name,
-                                  avatar: user.avatar,
-                                  email: user.email,
-                                  role: 'viewer'
-                              });
-                              shouldUpdate = true;
+                              // ONLY IF NOT SANDBOXED (Full Project Link)
+                              // If accessed via asset link, we don't necessarily add them to dashboard
+                              if (!specificAssetId) {
+                                  newTeam.push({
+                                      id: user.id,
+                                      name: user.name,
+                                      avatar: user.avatar,
+                                      email: user.email,
+                                      role: 'viewer'
+                                  });
+                                  shouldUpdate = true;
+                              }
                           }
 
                           if (shouldUpdate) {
