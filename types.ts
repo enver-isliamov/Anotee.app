@@ -23,7 +23,18 @@ export interface Comment {
   replies?: Comment[];
 }
 
-export type StorageType = 'vercel' | 'drive' | 'local';
+export type StorageType = 'vercel' | 'drive' | 'local' | 's3';
+
+// S3 Configuration Interface (Stored in DB/State)
+export interface S3Config {
+    provider: 'yandex' | 'selectel' | 'cloudflare' | 'aws' | 'minio' | 'custom';
+    bucket: string;
+    region: string;
+    endpoint: string;
+    accessKeyId: string;
+    secretAccessKey: string; // Only used for saving, not returned fully by API
+    publicUrl?: string; // Optional custom domain
+}
 
 export interface VideoVersion {
   id: string;
@@ -36,6 +47,7 @@ export interface VideoVersion {
   
   storageType?: StorageType; 
   googleDriveId?: string; 
+  s3Key?: string; // Key path in the bucket
 
   localFileUrl?: string; 
   localFileName?: string;

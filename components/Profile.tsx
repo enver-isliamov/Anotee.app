@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
-import { User } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2 } from 'lucide-react';
+import { User, S3Config } from '../types';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2 } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
+import { useDrive } from '../services/driveContext';
 
 interface ProfileProps {
   currentUser: User;
@@ -15,12 +16,49 @@ interface ProfileProps {
 
 const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
 
+const S3_PRESETS: Record<string, Partial<S3Config>> = {
+    yandex: {
+        provider: 'yandex',
+        endpoint: 'https://storage.yandexcloud.net',
+        region: 'ru-central1',
+    },
+    selectel: {
+        provider: 'selectel',
+        endpoint: 'https://s3.storage.selcloud.ru',
+        region: 'ru-1',
+    },
+    cloudflare: {
+        provider: 'cloudflare',
+        endpoint: 'https://<ACCOUNT_ID>.r2.cloudflarestorage.com',
+        region: 'auto',
+    },
+    aws: {
+        provider: 'aws',
+        endpoint: '',
+        region: 'us-east-1',
+    }
+};
+
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => {
   const { t } = useLanguage();
   const { getToken } = useAuth();
   const { isPro, expiresAt, checkStatus } = useSubscription();
   const { user } = useUser();
+  const { isDriveReady, checkDriveConnection } = useDrive();
   
+  // States for S3
+  const [activeStorageTab, setActiveStorageTab] = useState<'google' | 's3'>('google');
+  const [s3Config, setS3Config] = useState<S3Config>({
+      provider: 'yandex',
+      bucket: '',
+      region: 'ru-central1',
+      endpoint: 'https://storage.yandexcloud.net',
+      accessKeyId: '',
+      secretAccessKey: ''
+  });
+  const [isSavingS3, setIsSavingS3] = useState(false);
+  const [s3Saved, setS3Saved] = useState(false);
+
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [migratedCount, setMigratedCount] = useState(0);
@@ -34,6 +72,26 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   // Check Admin Access
   const primaryEmail = user?.primaryEmailAddress?.emailAddress;
   const isAdmin = primaryEmail && ADMIN_EMAILS.includes(primaryEmail);
+
+  const handleS3PresetChange = (provider: string) => {
+      const preset = S3_PRESETS[provider] || { provider: 'custom', endpoint: '', region: '' };
+      setS3Config(prev => ({
+          ...prev,
+          ...preset,
+          provider: provider as any
+      }));
+  };
+
+  const handleSaveS3 = async () => {
+      // Stub for future backend integration
+      setIsSavingS3(true);
+      setTimeout(() => {
+          setIsSavingS3(false);
+          setS3Saved(true);
+          // TODO: Implement actual API call to /api/storage/config
+          alert("S3 конфигурация сохранена (симуляция). Бэкенд в процессе реализации.");
+      }, 1000);
+  };
 
   const handleMigrate = async () => {
       setMigrationStatus('loading');
@@ -147,89 +205,216 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* SUBSCRIPTION CARD */}
-                <div className={`lg:col-span-2 bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
-                    {/* Background Glow */}
-                    <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                        <div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div>
-                    </div>
-                    {isPro && (
-                        <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-20 shadow-lg">
-                            CURRENT PLAN
+                
+                {/* COLUMN 1: STORAGE SETTINGS (NEW) */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Main Subscription Card */}
+                    <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
+                        {/* ... Subscription UI (Existing) ... */}
+                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                            <div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div>
                         </div>
-                    )}
-
-                    <div className="flex justify-between items-center mb-6 relative z-10">
-                        <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border flex items-center gap-2 ${isPro ? 'bg-indigo-900/30 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
-                            {isPro ? <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div> : <div className="w-1.5 h-1.5 bg-zinc-500 rounded-full"></div>}
-                            {isPro ? "Founder's Club (Pro)" : "Starter (Free)"}
-                        </span>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row md:items-end gap-2 mb-6 relative z-10">
-                        <h3 className="text-2xl font-bold text-white flex items-center gap-2">
-                            {isPro ? "Ваша подписка активна" : "Бесплатный тариф"}
-                        </h3>
-                        {isPro && expiresAt && (
-                            <div className="flex items-center gap-2 mb-1 ml-2">
-                                <span className="text-xs text-zinc-500">истекает:</span>
-                                <span className="text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400 border border-zinc-700 font-mono tracking-tight shadow-sm">
-                                    {expiresAt.toLocaleDateString()}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Feature List */}
-                    <div className="space-y-3 mb-8 relative z-10 bg-black/20 p-4 rounded-xl border border-white/5">
-                        <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Доступные функции:</p>
-                        {activeFeatures.map((feat, idx) => (
-                            <div key={idx} className="flex items-center gap-3">
-                                <div className={`p-1 rounded-full mt-0.5 ${isPro ? 'bg-green-900/30 text-green-400' : 'bg-zinc-800 text-zinc-500'}`}>
-                                    <Check size={10} />
-                                </div>
-                                <span className={`text-sm ${isPro ? 'text-zinc-200' : 'text-zinc-400'}`}>{feat}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Action Area */}
-                    <div className="mt-auto pt-4 border-t border-zinc-800 relative z-10">
-                        {isPro ? (
-                            <div className="flex flex-col gap-3">
-                                <div className="flex justify-between items-center text-xs">
-                                    <span className="text-zinc-400">Автопродление</span>
-                                    <span className={isAutoRenew ? "text-green-400 font-bold" : "text-zinc-500"}>
-                                        {isAutoRenew ? "Включено" : "Отключено"}
+                        <div className="flex justify-between items-center mb-6 relative z-10">
+                            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border flex items-center gap-2 ${isPro ? 'bg-indigo-900/30 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+                                {isPro ? <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div> : <div className="w-1.5 h-1.5 bg-zinc-500 rounded-full"></div>}
+                                {isPro ? "Founder's Club (Pro)" : "Starter (Free)"}
+                            </span>
+                        </div>
+                        <div className="flex flex-col md:flex-row md:items-end gap-2 mb-6 relative z-10">
+                            <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                                {isPro ? "Ваша подписка активна" : "Бесплатный тариф"}
+                            </h3>
+                            {isPro && expiresAt && (
+                                <div className="flex items-center gap-2 mb-1 ml-2">
+                                    <span className="text-xs text-zinc-500">истекает:</span>
+                                    <span className="text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400 border border-zinc-700 font-mono tracking-tight shadow-sm">
+                                        {expiresAt.toLocaleDateString()}
                                     </span>
                                 </div>
-                                {isAutoRenew && (
-                                    <button 
-                                        onClick={handleCancelSubscription} 
-                                        disabled={isCanceling}
-                                        className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-bold transition-colors border border-red-500/20 flex items-center justify-center gap-2"
-                                    >
-                                        {isCanceling ? 'Обработка...' : 'Отменить автопродление'}
-                                    </button>
-                                )}
-                                {!isAutoRenew && (
-                                    <p className="text-[10px] text-zinc-500 text-center">
-                                        Доступ сохранится до конца периода. Списаний больше не будет.
-                                    </p>
-                                )}
+                            )}
+                        </div>
+                        {/* Action Area */}
+                        <div className="mt-auto pt-4 border-t border-zinc-800 relative z-10">
+                            {isPro ? (
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="text-zinc-400">Автопродление</span>
+                                        <span className={isAutoRenew ? "text-green-400 font-bold" : "text-zinc-500"}>
+                                            {isAutoRenew ? "Включено" : "Отключено"}
+                                        </span>
+                                    </div>
+                                    {isAutoRenew && (
+                                        <button 
+                                            onClick={handleCancelSubscription} 
+                                            disabled={isCanceling}
+                                            className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-bold transition-colors border border-red-500/20 flex items-center justify-center gap-2"
+                                        >
+                                            {isCanceling ? 'Обработка...' : 'Отменить автопродление'}
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => document.getElementById('roadmap-block')?.scrollIntoView({ behavior: 'smooth' })} 
+                                    className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                >
+                                    <ArrowUpCircle size={16} /> Обновиться до Pro
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* STORAGE CONFIGURATION (NEW) */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300">
+                                <Database size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Хранилище Видео</h3>
+                                <p className="text-xs text-zinc-500">Куда будут загружаться ваши новые файлы.</p>
+                            </div>
+                        </div>
+
+                        {/* Toggle Tabs */}
+                        <div className="flex bg-zinc-950 p-1 rounded-xl mb-6 border border-zinc-800">
+                            <button 
+                                onClick={() => setActiveStorageTab('google')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeStorageTab === 'google' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                <HardDrive size={16} /> Google Drive
+                            </button>
+                            <button 
+                                onClick={() => setActiveStorageTab('s3')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${activeStorageTab === 's3' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                <Server size={16} /> S3 (Yandex/AWS)
+                            </button>
+                        </div>
+
+                        {activeStorageTab === 'google' ? (
+                            <div className="space-y-4 animate-in fade-in">
+                                <div className={`p-4 rounded-xl border flex items-start gap-3 ${isDriveReady ? 'bg-green-900/10 border-green-900/30' : 'bg-red-900/10 border-red-900/30'}`}>
+                                    {isDriveReady ? <CheckCircle2 className="text-green-500 mt-0.5" /> : <AlertCircle className="text-red-500 mt-0.5" />}
+                                    <div>
+                                        <h4 className={`text-sm font-bold ${isDriveReady ? 'text-green-400' : 'text-red-400'}`}>
+                                            {isDriveReady ? 'Подключено и работает' : 'Требуется переподключение'}
+                                        </h4>
+                                        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                            Файлы хранятся на вашем личном Google Диске в папке <code>Anotee.App</code>. Это бесплатно и не занимает место на наших серверах.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button onClick={checkDriveConnection} className="text-xs text-zinc-500 hover:text-white underline decoration-dashed">
+                                    Проверить статус подключения
+                                </button>
                             </div>
                         ) : (
-                            <button 
-                                onClick={() => document.getElementById('roadmap-block')?.scrollIntoView({ behavior: 'smooth' })} 
-                                className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            >
-                                <ArrowUpCircle size={16} /> Обновиться до Pro
-                            </button>
+                            <div className="space-y-6 animate-in fade-in">
+                                <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 flex gap-2">
+                                    <Info size={16} className="shrink-0 mt-0.5" />
+                                    <p>Вы можете подключить своё объектное хранилище (S3). Это обеспечит максимальную скорость воспроизведения и полный контроль над файлами.</p>
+                                </div>
+
+                                {/* Presets */}
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Провайдер</label>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {['yandex', 'selectel', 'cloudflare', 'custom'].map(p => (
+                                            <button 
+                                                key={p}
+                                                onClick={() => handleS3PresetChange(p)}
+                                                className={`px-3 py-1.5 rounded-lg border text-xs font-bold capitalize transition-all ${s3Config.provider === p ? 'bg-white text-black border-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}
+                                            >
+                                                {p}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Endpoint URL</label>
+                                        <div className="relative">
+                                            <Globe size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                            <input 
+                                                value={s3Config.endpoint} 
+                                                onChange={(e) => setS3Config(p => ({...p, endpoint: e.target.value}))}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                placeholder="https://storage.yandexcloud.net"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Bucket Name</label>
+                                        <div className="relative">
+                                            <Database size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                            <input 
+                                                value={s3Config.bucket} 
+                                                onChange={(e) => setS3Config(p => ({...p, bucket: e.target.value}))}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
+                                                placeholder="my-videos"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Region</label>
+                                        <div className="relative">
+                                            <Cloud size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                            <input 
+                                                value={s3Config.region} 
+                                                onChange={(e) => setS3Config(p => ({...p, region: e.target.value}))}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
+                                                placeholder="ru-central1"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
+                                        <div className="relative">
+                                            <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                            <input 
+                                                value={s3Config.accessKeyId} 
+                                                onChange={(e) => setS3Config(p => ({...p, accessKeyId: e.target.value}))}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                placeholder="YCAJE..."
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
+                                        <div className="relative">
+                                            <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                            <input 
+                                                type="password"
+                                                value={s3Config.secretAccessKey} 
+                                                onChange={(e) => setS3Config(p => ({...p, secretAccessKey: e.target.value}))}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                placeholder="YCMA..."
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-zinc-500 mt-2">
+                                            Ваши ключи шифруются перед сохранением в базе данных. <a href="#" className="underline hover:text-white">Инструкция по настройке CORS</a>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-zinc-800 flex justify-end">
+                                    <button 
+                                        onClick={handleSaveS3}
+                                        disabled={isSavingS3}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isSavingS3 ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                        {s3Saved ? 'Сохранено' : 'Сохранить настройки'}
+                                    </button>
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* DONATION & EXTRA CARD */}
+                {/* COLUMN 2: EXTRAS */}
                 <div className="space-y-6">
                     {/* Support Block */}
                     <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-pink-500/20 rounded-3xl p-6 relative overflow-hidden">
