@@ -3,6 +3,7 @@ import { sql } from '@vercel/postgres';
 import { verifyUser } from './_auth.js';
 import { encrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
+import { checkProjectAccess } from './_permissions.js';
 import { ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -16,7 +17,36 @@ export default async function handler(req, res) {
             return res.status(401).json({ error: "Unauthorized" });
         }
 
+        // Helper to determine which S3 credentials to use
+        // If projectId is passed, we check access and use the PROJECT OWNER'S credentials.
+        // Otherwise, we use the CURRENT USER'S credentials.
+        const getContextS3 = async (bodyProjectId) => {
+            let targetUserId = user.id;
+
+            if (bodyProjectId) {
+                // 1. Fetch Project Owner
+                const { rows } = await sql`SELECT owner_id, org_id, data FROM projects WHERE id = ${bodyProjectId}`;
+                if (rows.length === 0) {
+                    throw new Error("Project not found");
+                }
+                const projectRow = rows[0];
+
+                // 2. Verify Access (Security Critical)
+                const hasAccess = await checkProjectAccess(user, projectRow);
+                if (!hasAccess) {
+                    throw new Error("Forbidden: No access to this project");
+                }
+
+                // 3. Switch context to Owner
+                // Note: owner_id in DB is the reliable source of truth
+                targetUserId = projectRow.owner_id;
+            }
+
+            return await getS3Client(targetUserId);
+        };
+
         // --- ACTION: CONFIG (GET/POST) ---
+        // Config always relates to the CURRENT user's settings, not a project context.
         if (action === 'config') {
             // Lazy DB Migration
             await sql`
@@ -120,7 +150,9 @@ export default async function handler(req, res) {
         if (action === 'configure_cors') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
-            const { s3, config } = await getS3Client(user.id);
+            // Usually user configures their own bucket, but theoretically an admin could configure a shared one.
+            // Using getContextS3 allows flexibility.
+            const { s3, config } = await getContextS3(req.body.projectId);
 
             const corsParams = {
                 Bucket: config.bucket,
@@ -154,13 +186,14 @@ export default async function handler(req, res) {
         if (action === 'presign') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
-            const { operation, key, contentType } = req.body;
+            const { operation, key, contentType, projectId } = req.body;
 
             if (!operation || !key) {
                 return res.status(400).json({ error: "Missing operation or key" });
             }
 
-            const { s3, config } = await getS3Client(user.id);
+            // CRITICAL: Switch context if projectId is provided
+            const { s3, config } = await getContextS3(projectId);
             
             let command;
             let expiresIn = 3600; // 1 hour link validity
@@ -193,12 +226,13 @@ export default async function handler(req, res) {
         if (action === 'delete') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
             
-            const { keys } = req.body;
+            const { keys, projectId } = req.body;
             if (!keys || !Array.isArray(keys) || keys.length === 0) {
                 return res.status(400).json({ error: "No keys provided" });
             }
 
-            const { s3, config } = await getS3Client(user.id);
+            // CRITICAL: Switch context if projectId is provided
+            const { s3, config } = await getContextS3(projectId);
 
             const command = new DeleteObjectsCommand({
                 Bucket: config.bucket,
@@ -216,13 +250,13 @@ export default async function handler(req, res) {
         if (action === 'delete_folder') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
             
-            const { prefix } = req.body;
+            const { prefix, projectId } = req.body;
             if (!prefix) return res.status(400).json({ error: "Prefix required" });
 
-            const { s3, config } = await getS3Client(user.id);
+            // CRITICAL: Switch context if projectId is provided
+            const { s3, config } = await getContextS3(projectId);
 
             // 1. List objects to find what to delete
-            // Note: Loops if > 1000 objects, implemented simple version for now
             const listCmd = new ListObjectsV2Command({
                 Bucket: config.bucket,
                 Prefix: prefix
@@ -257,7 +291,10 @@ export default async function handler(req, res) {
         if (msg.includes("SignatureDoesNotMatch")) msg = "Неверный Secret Key";
         if (msg.includes("NoSuchBucket")) msg = "Бакет с таким именем не найден";
         if (msg.includes("ENOTFOUND") || msg.includes("EAI_AGAIN")) msg = "Неверный Endpoint URL";
+        if (msg.includes("Forbidden") || msg.includes("Unauthorized")) msg = "Доступ запрещен (Проверьте права проекта)";
 
-        return res.status(500).json({ success: false, error: msg });
+        // Return a generic error if it's an internal crash, otherwise pass the message
+        const status = msg.includes("Forbidden") ? 403 : 500;
+        return res.status(status).json({ success: false, error: msg });
     }
 }

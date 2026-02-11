@@ -97,20 +97,22 @@ export const useUploadManager = (
             
             if (!isMockMode) {
                 // Check if user has S3 configured
+                // Note: We check config for CURRENT user first, but if uploading to shared project, 
+                // the upload will fail if we don't have WRITE access to the owner's bucket.
+                // However, the check here is just "should we use S3?".
+                // Ideally, we should check if the PROJECT uses S3.
+                // For now, let's assume if the current user has S3 set up, they prefer S3.
+                // Or better: try to presign with projectId. If backend says "Owner has S3", use it.
+                
                 try {
                     const token = await getToken();
-                    // UPDATED API PATH
-                    const s3Res = await fetch('/api/storage?action=config', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (s3Res.ok) {
-                        const s3Config = await s3Res.json();
-                        if (s3Config && s3Config.isActive) {
-                            useS3 = true;
-                        }
-                    }
+                    // We check if we can get a presigned URL for this project.
+                    // Instead of full config check, we'll try the upload flow immediately below.
+                    // But to know *which* flow (Drive vs S3) to pick, we need a hint.
+                    // Let's default to S3 attempt first if not Drive-forced.
+                    useS3 = true; 
                 } catch (e) {
-                    console.warn("Failed to check S3 config, falling back to Drive/Default");
+                    console.warn("Failed to check token");
                 }
             }
 
@@ -123,87 +125,96 @@ export const useUploadManager = (
                 assetUrl = URL.createObjectURL(file);
                 storageType = 'local';
             } else if (useS3) {
-                // --- S3 UPLOAD PATH ---
-                const token = await getToken();
-                // 1. Get Presigned URL
-                // UPDATED API PATH
-                const presignRes = await fetch('/api/storage?action=presign', {
-                    method: 'POST',
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        operation: 'put',
-                        key: `anotee/${projectId}/${finalFileName}`, // Organized folder structure
-                        contentType: file.type
-                    })
-                });
-
-                if (!presignRes.ok) throw new Error("Failed to generate upload link (S3)");
-                const { url: uploadUrl, key } = await presignRes.json();
-
-                // 2. Upload to S3 directly
-                // Using XHR for progress tracking
-                await new Promise((resolve, reject) => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('PUT', uploadUrl);
-                    xhr.setRequestHeader('Content-Type', file.type);
-                    
-                    xhr.upload.onprogress = (e) => {
-                        if (e.lengthComputable) {
-                            updateProgress(Math.round((e.loaded / e.total) * 100));
-                        }
-                    };
-
-                    xhr.onload = () => {
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            resolve(true);
-                        } else {
-                            reject(new Error(`S3 Upload failed: ${xhr.status}`));
-                        }
-                    };
-                    xhr.onerror = () => reject(new Error("Network error during S3 upload"));
-                    xhr.send(file);
-                });
-
-                storageType = 's3';
-                s3Key = key;
-
-            } else {
-                // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
-                const isDriveReady = GoogleDriveService.isAuthenticated();
-                if (!isDriveReady) {
-                    throw new Error("Storage Error: Connect S3 or Google Drive in Profile.");
-                }
-
-                const safeProjectName = project ? project.name : "Unknown Project";
-
+                let s3UploadSuccess = false;
                 try {
-                    const appFolder = await GoogleDriveService.ensureAppFolder();
-                    const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                    
-                    let folderName = assetTitle;
-                    if (targetAssetId && project) {
-                            const existingAsset = project.assets.find(a => a.id === targetAssetId);
-                            if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
-                    }
+                    // --- S3 UPLOAD PATH ---
+                    const token = await getToken();
+                    // 1. Get Presigned URL (PUT)
+                    const presignRes = await fetch('/api/storage?action=presign', {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            operation: 'put',
+                            key: `anotee/${projectId}/${finalFileName}`, 
+                            contentType: file.type,
+                            projectId: projectId // CRITICAL: Upload to Project Owner's Bucket
+                        })
+                    });
 
-                    const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
+                    if (presignRes.ok) {
+                        const { url: uploadUrl, key } = await presignRes.json();
 
-                    const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
-                    googleDriveId = result.id;
-                    storageType = 'drive';
-                    
-                    await GoogleDriveService.makeFilePublic(result.id);
+                        // 2. Upload to S3 directly
+                        await new Promise((resolve, reject) => {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('PUT', uploadUrl);
+                            xhr.setRequestHeader('Content-Type', file.type);
+                            
+                            xhr.upload.onprogress = (e) => {
+                                if (e.lengthComputable) {
+                                    updateProgress(Math.round((e.loaded / e.total) * 100));
+                                }
+                            };
 
-                } catch (driveErr: any) {
-                    if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
-                            throw new Error("Drive Session Expired. Please refresh page/reconnect.");
-                    }
-                    throw driveErr;
+                            xhr.onload = () => {
+                                if (xhr.status >= 200 && xhr.status < 300) {
+                                    resolve(true);
+                                } else {
+                                    reject(new Error(`S3 Upload failed: ${xhr.status}`));
+                                }
+                            };
+                            xhr.onerror = () => reject(new Error("Network error during S3 upload"));
+                            xhr.send(file);
+                        });
+
+                        storageType = 's3';
+                        s3Key = key;
+                        s3UploadSuccess = true;
+                    } 
+                } catch (e) {
+                    console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
+                    // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
                 }
-            }
+
+                if (!s3UploadSuccess) {
+                     // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
+                    const isDriveReady = GoogleDriveService.isAuthenticated();
+                    if (!isDriveReady) {
+                        throw new Error("Storage Error: S3 not configured for this project, and Drive not connected.");
+                    }
+
+                    const safeProjectName = project ? project.name : "Unknown Project";
+
+                    try {
+                        const appFolder = await GoogleDriveService.ensureAppFolder();
+                        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+                        
+                        let folderName = assetTitle;
+                        if (targetAssetId && project) {
+                                const existingAsset = project.assets.find(a => a.id === targetAssetId);
+                                if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+                        }
+
+                        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
+
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
+                        googleDriveId = result.id;
+                        storageType = 'drive';
+                        
+                        await GoogleDriveService.makeFilePublic(result.id);
+
+                    } catch (driveErr: any) {
+                        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
+                                throw new Error("Drive Session Expired. Please refresh page/reconnect.");
+                        }
+                        throw driveErr;
+                    }
+                }
+
+            } 
 
             // 4. Construct New Project State
             const projIndex = projects.findIndex(p => p.id === projectId);

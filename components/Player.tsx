@@ -428,7 +428,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                         },
                         body: JSON.stringify({
                             operation: 'get',
-                            key: version.s3Key
+                            key: version.s3Key,
+                            projectId: project.id // CRITICAL: Pass projectId for access check
                         })
                     });
                     
@@ -442,7 +443,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             setDriveUrl(data.url);
                         }
                     } else {
-                        throw new Error("Failed to sign S3 URL");
+                        const err = await presignRes.json();
+                        console.error("S3 Sign Failed", err);
+                        throw new Error(err.error || "Failed to sign S3 URL");
                     }
                 } catch (e) {
                     console.error("S3 Load Error", e);
