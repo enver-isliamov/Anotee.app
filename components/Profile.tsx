@@ -53,27 +53,27 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
         title: 'Yandex Object Storage',
         steps: [
             'Создайте Бакет в консоли Object Storage.',
-            'Перейдите в раздел "Сервисные аккаунты" (в меню слева).',
-            'Создайте новый аккаунт и ВАЖНО: добавьте ему роль "storage.editor".',
+            'Перейдите в раздел "Сервисные аккауты" (в меню слева).',
+            'Создайте новый аккаунт и ВАЖНО: добавьте ему роль "storage.editor" (Редактор хранилища).',
             'Нажмите на созданный аккаунт -> "Создать новый ключ" -> "Создать статический ключ доступа".',
             'Скопируйте "Идентификатор ключа" (Access Key) и "Секретный ключ" (Secret Key).'
         ],
         link: 'https://console.cloud.yandex.ru/',
         linkText: 'Открыть консоль Yandex',
-        warning: 'Без роли "storage.editor" загрузка работать не будет!'
+        warning: 'Если не выдать роль storage.editor, загрузка работать не будет!'
     },
     cloudflare: {
         title: 'Cloudflare R2',
         steps: [
-            'Зайдите в R2 Object Storage. Нажмите "Create bucket" и дайте имя (например, anotee).',
-            'В меню R2 справа найдите "Account details". Скопируйте "Account ID". Ваш Endpoint будет: https://<AccountID>.r2.cloudflarestorage.com',
-            'На главной странице R2 справа нажмите ссылку "Manage R2 API Tokens".',
-            'Нажмите "Create API token". Выберите права: "Admin Read & Write".',
-            'Нажмите "Create API Token". Скопируйте "Access Key ID" и "Secret Access Key" из появившегося окна.'
+            'Зайдите в R2 Overview. Справа в колонке "Account Details" скопируйте "Account ID".',
+            'Ваш Endpoint: https://<AccountID>.r2.cloudflarestorage.com',
+            'Там же справа нажмите ссылку "Manage R2 API Tokens".',
+            'Нажмите "Create API token". Выберите шаблон: "Admin Read & Write".',
+            'Нажмите "Create API Token" внизу. Скопируйте "Access Key ID" и "Secret Access Key" из появившегося окна.'
         ],
         link: 'https://dash.cloudflare.com/?to=/:account/r2',
         linkText: 'Открыть Cloudflare R2',
-        warning: 'Убедитесь, что Endpoint НЕ содержит имя бакета в конце.'
+        warning: 'В поле Endpoint вставляйте ссылку БЕЗ имени бакета в конце.'
     },
     selectel: {
         title: 'Selectel Storage',
