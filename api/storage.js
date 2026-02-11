@@ -3,7 +3,7 @@ import { sql } from '@vercel/postgres';
 import { verifyUser } from './_auth.js';
 import { encrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
-import { ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export default async function handler(req, res) {
@@ -114,6 +114,40 @@ export default async function handler(req, res) {
                 bucket: config.bucket,
                 provider: config.provider 
             });
+        }
+
+        // --- ACTION: CONFIGURE CORS (POST) ---
+        if (action === 'configure_cors') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+
+            const { s3, config } = await getS3Client(user.id);
+
+            const corsParams = {
+                Bucket: config.bucket,
+                CORSConfiguration: {
+                    CORSRules: [
+                        {
+                            AllowedHeaders: ["*"],
+                            AllowedMethods: ["GET", "PUT", "HEAD", "POST", "DELETE"],
+                            AllowedOrigins: ["*"],
+                            ExposeHeaders: ["ETag", "x-amz-meta-custom-header"],
+                            MaxAgeSeconds: 3000
+                        }
+                    ]
+                }
+            };
+
+            try {
+                const command = new PutBucketCorsCommand(corsParams);
+                await s3.send(command);
+                return res.status(200).json({ success: true, message: "CORS successfully configured applied." });
+            } catch (e) {
+                console.error("CORS Config Failed:", e);
+                return res.status(403).json({ 
+                    error: "Failed to apply CORS. Ensure your Access Key has 's3:PutBucketCORS' permission.", 
+                    details: e.message 
+                });
+            }
         }
 
         // --- ACTION: PRESIGN URL (POST) ---

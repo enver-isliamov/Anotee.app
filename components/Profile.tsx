@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2 } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -123,8 +123,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
   
-  // Test Connection State
+  // Test & Auto-Config State
   const [isTestingS3, setIsTestingS3] = useState(false);
+  const [isConfiguringCors, setIsConfiguringCors] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showCorsHelp, setShowCorsHelp] = useState(false);
   const [showProviderHelp, setShowProviderHelp] = useState(false);
@@ -234,6 +235,34 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
           setTestResult({ success: false, message: e.message || "Сбой сети" });
       } finally {
           setIsTestingS3(false);
+      }
+  };
+
+  const handleAutoCors = async () => {
+      // First save ensure backend has creds
+      await handleSaveS3();
+      
+      setIsConfiguringCors(true);
+      setTestResult(null);
+
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/storage?action=configure_cors', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          const data = await res.json();
+          
+          if (res.ok && data.success) {
+              setTestResult({ success: true, message: "CORS успешно настроен! Загрузка должна работать." });
+          } else {
+              setTestResult({ success: false, message: data.error || "Не удалось настроить CORS." });
+          }
+      } catch (e) {
+          setTestResult({ success: false, message: "Сбой сети при настройке CORS." });
+      } finally {
+          setIsConfiguringCors(false);
       }
   };
 
@@ -575,7 +604,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                             </div>
                                         )}
 
-                                        <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
+                                        <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3 flex-wrap">
+                                            {/* AUTO-CORS BUTTON */}
+                                            <button 
+                                                onClick={handleAutoCors}
+                                                disabled={isConfiguringCors || isSavingS3}
+                                                className="px-4 py-2.5 rounded-xl border border-indigo-500/30 hover:bg-indigo-900/20 text-indigo-300 text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+                                                title="Автоматически настроить CORS в облаке"
+                                            >
+                                                {isConfiguringCors ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                                Авто-CORS
+                                            </button>
+
                                             <button 
                                                 onClick={handleTestConnection}
                                                 disabled={isSavingS3 || isTestingS3}
