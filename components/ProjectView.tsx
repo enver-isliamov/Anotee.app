@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -571,8 +571,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             {!isLocked && canSharePublicLink && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}
-                                    className="p-1.5 bg-black/60 hover:bg-indigo-600 text-white rounded-md backdrop-blur-sm transition-colors"
-                                    title={t('pv.copy_link')}
+                                    className="p-1.5 bg-black/60 hover:bg-orange-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                    title="Copy Review Link (Restricted Access)"
                                 >
                                     <LinkIcon size={12} />
                                 </button>
@@ -640,11 +640,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               
               {isShareModalOpen && shareTarget && (
                 <>
-                  <div className="flex items-center gap-2 mb-1">
-                      <div className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-400">
-                          {project.orgId ? <UserPlus size={18} /> : <Globe size={18} />}
+                  <div className="flex items-center gap-2 mb-4">
+                      <div className={`p-1.5 rounded-lg ${shareTarget.type === 'project' ? 'bg-green-500/10 text-green-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                          {shareTarget.type === 'project' ? <UserPlus size={18} /> : <Eye size={18} />}
                       </div>
-                      <h2 className="text-lg font-bold text-white">{t('pv.share.title')}</h2>
+                      <h2 className="text-lg font-bold text-white">
+                          {shareTarget.type === 'project' ? "Invite Team" : "Share for Review"}
+                      </h2>
                   </div>
                   
                   {project.orgId ? (
@@ -656,8 +658,23 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       </div>
                   ) : (
                       <>
-                        <p className="text-xs text-zinc-400 mb-4 leading-relaxed">{t('pv.share.desc')}</p>
-                        
+                        {/* Access Type Explainer */}
+                        <div className={`mb-4 p-3 rounded-xl border flex items-start gap-3 ${shareTarget.type === 'project' ? 'bg-green-900/10 border-green-500/20' : 'bg-orange-900/10 border-orange-500/20'}`}>
+                            <div className={`shrink-0 mt-0.5 ${shareTarget.type === 'project' ? 'text-green-500' : 'text-orange-500'}`}>
+                                {shareTarget.type === 'project' ? <Globe size={16} /> : <EyeOff size={16} />}
+                            </div>
+                            <div>
+                                <div className={`text-xs font-bold uppercase mb-1 ${shareTarget.type === 'project' ? 'text-green-400' : 'text-orange-400'}`}>
+                                    {shareTarget.type === 'project' ? "Full Access (Invite)" : "Restricted Access (Review)"}
+                                </div>
+                                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                    {shareTarget.type === 'project' 
+                                        ? "User will be added to the team and can see ALL files in this project." 
+                                        : "User will see ONLY this specific file. Access to other assets is blocked."}
+                                </p>
+                            </div>
+                        </div>
+
                         {shareTarget.type === 'project' && isProjectOwner && (
                             <div className="mb-4 bg-zinc-800/50 p-3 rounded-xl border border-zinc-700 flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-zinc-300">
@@ -669,7 +686,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         )}
 
                         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
-                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
+                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">
+                                {shareTarget.type === 'project' ? "Invite Link" : "Review Link"}
+                            </div>
                             <div className="flex items-center gap-2">
                                 <input 
                                     type="text" 

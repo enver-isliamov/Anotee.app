@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
-import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight, Users } from 'lucide-react';
+import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight, Users, Globe, UserPlus, Eye, Link } from 'lucide-react';
 import { generateId, isExpired, getDaysRemaining } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
@@ -55,9 +55,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [editDesc, setEditDesc] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Share State
+  // Share State (Complex Modal)
   const [sharingProject, setSharingProject] = useState<Project | null>(null);
+  const [shareTab, setShareTab] = useState<'invite' | 'public'>('public'); // Default to Public Link
   const [isCopied, setIsCopied] = useState(false);
+  const [isTogglingAccess, setIsTogglingAccess] = useState(false);
 
   // Deletion State
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -227,11 +229,43 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
 
       setSharingProject(project);
+      setShareTab('public'); // Default to the safer/easier option
+  };
+
+  const togglePublicAccess = async () => {
+      if (!sharingProject) return;
+      setIsTogglingAccess(true);
+      
+      const newAccess = sharingProject.publicAccess === 'view' ? 'none' : 'view';
+      
+      try {
+          if (!isMockMode) {
+              await api.patchProject(sharingProject.id, { publicAccess: newAccess }, sharingProject._version || 0);
+          }
+          
+          // Optimistic update
+          const updated = { ...sharingProject, publicAccess: newAccess as 'view' | 'none' };
+          setSharingProject(updated);
+          onEditProject(sharingProject.id, { publicAccess: newAccess as 'view' | 'none' });
+          
+          notify(newAccess === 'view' ? "Public Access Enabled" : "Public Access Disabled", "info");
+      } catch(e) {
+          notify("Failed to change settings", "error");
+      } finally {
+          setIsTogglingAccess(false);
+      }
   };
 
   const handleCopyLink = () => {
       if (!sharingProject) return;
-      const url = `${window.location.origin}?projectId=${sharingProject.id}`;
+      
+      const origin = window.location.origin;
+      let url = `${origin}?projectId=${sharingProject.id}`;
+      
+      if (shareTab === 'invite') {
+          url += '&invite=true';
+      }
+      
       navigator.clipboard.writeText(url);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
@@ -621,22 +655,101 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {sharingProject && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200 p-6">
-                <button onClick={() => setSharingProject(null)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
-                <div className="flex items-center gap-2 mb-1">
-                    <div className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-600 dark:text-indigo-400"><Share2 size={18} /></div>
-                    <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{t('common.share')}</h2>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200 p-6">
+                <button onClick={() => setSharingProject(null)} className="absolute top-4 right-4 text-zinc-400 hover:text-white"><X size={20} /></button>
+                
+                <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                    <Share2 size={20} className="text-indigo-500" /> Share "{sharingProject.name}"
+                </h2>
+
+                {/* TABS */}
+                <div className="flex p-1 bg-zinc-800 rounded-xl mb-6">
+                    <button 
+                        onClick={() => setShareTab('public')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${shareTab === 'public' ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Client Review
+                    </button>
+                    <button 
+                        onClick={() => setShareTab('invite')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${shareTab === 'invite' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Invite Team
+                    </button>
                 </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 font-medium">{t('pv.share.desc')}</p>
-                <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 mb-2">
-                    <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">{t('pv.share.link')}</div>
-                    <div className="flex items-center gap-2">
-                        <input type="text" readOnly value={`${window.location.origin}?projectId=${sharingProject.id}`} className="bg-transparent flex-1 text-xs text-zinc-600 dark:text-zinc-300 outline-none truncate font-mono" />
-                        <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-bold ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}>
-                            {isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}
-                        </button>
+
+                {/* CONTENT: PUBLIC LINK */}
+                {shareTab === 'public' && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                        <div className="bg-blue-900/10 border border-blue-500/20 p-3 rounded-xl flex gap-3">
+                            <Globe className="text-blue-400 shrink-0 mt-0.5" size={18} />
+                            <div>
+                                <h3 className="text-xs font-bold text-blue-300 mb-1">Public Access</h3>
+                                <p className="text-[10px] text-blue-200/70 leading-relaxed">
+                                    Anyone with the link can view files. No sign-up required. Ideal for clients.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between py-2 border-b border-zinc-800">
+                            <span className="text-sm text-zinc-300 font-medium">Enable Link Access</span>
+                            <button 
+                                onClick={togglePublicAccess}
+                                disabled={isTogglingAccess}
+                                className={`w-10 h-5 rounded-full relative transition-colors ${sharingProject.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}
+                            >
+                                <div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${sharingProject.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div>
+                            </button>
+                        </div>
+
+                        {sharingProject.publicAccess === 'view' && (
+                            <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Review Link</div>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="text" 
+                                        readOnly 
+                                        value={`${window.location.origin}?projectId=${sharingProject.id}`} 
+                                        className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
+                                    />
+                                    <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-bold ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                                        {isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                </div>
+                )}
+
+                {/* CONTENT: INVITE TEAM */}
+                {shareTab === 'invite' && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <div className="bg-green-900/10 border border-green-500/20 p-3 rounded-xl flex gap-3">
+                            <UserPlus className="text-green-400 shrink-0 mt-0.5" size={18} />
+                            <div>
+                                <h3 className="text-xs font-bold text-green-300 mb-1">Team Member</h3>
+                                <p className="text-[10px] text-green-200/70 leading-relaxed">
+                                    Full access to edit, upload, and comment. User will be added to the project team.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Invite Link</div>
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    type="text" 
+                                    readOnly 
+                                    value={`${window.location.origin}?projectId=${sharingProject.id}&invite=true`} 
+                                    className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
+                                />
+                                <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-bold ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                                    {isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
           </div>
       )}
