@@ -61,6 +61,20 @@ export default async function handler(req, res) {
         }
     }
 
+    // 3. Get App Version (Public)
+    if (action === 'get_version') {
+        try {
+            await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'app_version'`;
+            // Value stored as JSONB, so it might be wrapped in quotes or an object. 
+            // We store it as { version: "vX.X" } to be safe with JSONB
+            return res.status(200).json(rows.length > 0 ? rows[0].value : null);
+        } catch (e) {
+            console.error(e);
+            return res.status(200).json(null);
+        }
+    }
+
     // --- STRICT ADMIN ACTIONS (Middleware Check) ---
     // Everything below this line REQUIRES admin access
     try {
@@ -223,6 +237,24 @@ export default async function handler(req, res) {
                 VALUES ('payment_config', ${JSON.stringify(config)}::jsonb)
                 ON CONFLICT (key) 
                 DO UPDATE SET value = ${JSON.stringify(config)}::jsonb;
+            `;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- UPDATE APP VERSION ---
+        if (action === 'update_version') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const { version } = req.body;
+            
+            if (!version || typeof version !== 'string') {
+                return res.status(400).json({ error: "Version string required" });
+            }
+
+            await sql`
+                INSERT INTO system_settings (key, value) 
+                VALUES ('app_version', ${JSON.stringify({ version })}::jsonb)
+                ON CONFLICT (key) 
+                DO UPDATE SET value = ${JSON.stringify({ version })}::jsonb;
             `;
             return res.status(200).json({ success: true });
         }

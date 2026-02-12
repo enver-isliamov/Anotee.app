@@ -8,6 +8,7 @@ import { IntegrationBlock } from './StaticPages';
 import { RoadmapBlock } from './RoadmapBlock';
 import { WorkflowBlock, ROIBlock, FeaturesBlock } from './LandingBlocks';
 import { SignInButton } from '@clerk/clerk-react';
+import { useAppVersion } from '../hooks/useAppVersion';
 
 interface LoginProps {
   onLogin: (user: User, token?: string) => void;
@@ -48,6 +49,7 @@ const LoginCard: React.FC = () => {
 
 export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   const { t } = useLanguage();
+  const { version, loading } = useAppVersion();
 
   return (
     <div className="min-h-screen w-full bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white selection:bg-indigo-500/30">
@@ -72,7 +74,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                 <div className="lg:col-span-7 space-y-8 animate-in slide-in-from-bottom-8 duration-700">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[10px] uppercase font-bold tracking-widest text-zinc-600 dark:text-zinc-400 shadow-sm">
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                        <span>Anotee v1.2602.1</span>
+                        <span>Anotee {version}</span>
                     </div>
 
                     <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">

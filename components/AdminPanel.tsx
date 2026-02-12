@@ -1,8 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users, FlaskConical } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users, FlaskConical, Tag } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
+import { useAppVersion } from '../hooks/useAppVersion';
 
 interface AdminUser {
     id: string;
@@ -74,6 +75,11 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
     const [configLoading, setConfigLoading] = useState(false);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
 
+    // Version Data
+    const { version: fetchedVersion } = useAppVersion();
+    const [appVersion, setAppVersion] = useState('');
+    const [isSavingVersion, setIsSavingVersion] = useState(false);
+
     // Payment Data
     const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
     const [paymentLoading, setPaymentLoading] = useState(false);
@@ -91,6 +97,10 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
     // Stats Calculation
     const totalUsers = users.length;
     const proUsers = users.filter(u => u.plan === 'pro' || u.plan === 'lifetime').length;
+
+    useEffect(() => {
+        if (fetchedVersion) setAppVersion(fetchedVersion);
+    }, [fetchedVersion]);
 
     const fetchUsers = async () => {
         setUsersLoading(true);
@@ -258,6 +268,26 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
             alert("Не удалось сохранить конфигурацию");
         } finally {
             setIsSavingConfig(false);
+        }
+    };
+
+    const handleSaveVersion = async () => {
+        setIsSavingVersion(true);
+        try {
+            const token = await getToken();
+            await fetch('/api/admin?action=update_version', {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ version: appVersion })
+            });
+            alert("Версия обновлена!");
+        } catch (e) {
+            alert("Ошибка обновления версии");
+        } finally {
+            setIsSavingVersion(false);
         }
     };
 
@@ -818,6 +848,33 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
             {/* TAB: FEATURES */}
             {activeTab === 'features' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    
+                    {/* APP VERSION CONTROL */}
+                    <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl mb-6 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <Tag className="text-indigo-500" size={18} />
+                            <div>
+                                <h3 className="text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">App Version</h3>
+                                <p className="text-[10px] text-zinc-500">Отображается на главной странице и в логах</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                value={appVersion}
+                                onChange={(e) => setAppVersion(e.target.value)}
+                                className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono w-40"
+                                placeholder="v1.0.0"
+                            />
+                            <button 
+                                onClick={handleSaveVersion}
+                                disabled={isSavingVersion}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold disabled:opacity-50"
+                            >
+                                {isSavingVersion ? '...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-500/20 p-3 rounded-xl mb-6 flex items-start gap-3">
                         <AlertTriangle className="text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" size={16} />
                         <div>

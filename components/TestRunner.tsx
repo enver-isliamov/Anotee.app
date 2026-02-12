@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Play, CheckCircle2, XCircle, Loader2, Terminal, AlertTriangle, Bug, Activity, ShieldCheck } from 'lucide-react';
 import { TEST_SUITE, TestGroup, TestResult } from '../services/testSuite';
+import { useAppVersion } from '../hooks/useAppVersion';
 
 export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [results, setResults] = useState<Record<string, TestResult[]>>({});
@@ -9,6 +10,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [activeGroup, setActiveGroup] = useState<string | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     
+    const { version } = useAppVersion();
     const consoleRef = useRef<HTMLDivElement>(null);
 
     const addLog = (msg: string) => {
@@ -106,7 +108,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <Activity className="text-indigo-500" />
                             System Diagnostics
                         </h1>
-                        <p className="text-xs text-zinc-500 font-mono">Anotee v1.2602.1 Test Environment</p>
+                        <p className="text-xs text-zinc-500 font-mono">Anotee {version} Test Environment</p>
                     </div>
                 </div>
                 
