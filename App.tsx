@@ -98,16 +98,21 @@ interface TourStep {
 // --- TOUR CONFIGURATION ---
 const TOUR_STEPS: Record<string, TourStep[]> = {
     DASHBOARD: [
-        { id: 'tour-create-btn', title: '1. Создание проекта', desc: 'Начните с создания нового проекта для загрузки видео.' }
+        { id: 'tour-create-btn', title: '1. Создание проекта', desc: 'Начните с создания нового проекта. Здесь вы будете хранить и организовывать видео.' },
+        { id: 'tour-shared-section', title: '2. Чужие проекты', desc: 'Здесь появятся проекты, к которым вам дали доступ другие пользователи или ваша команда.', position: 'top' },
+        { id: 'tour-profile-btn', title: '3. Настройки и Оплата', desc: 'Управляйте подпиской, подключайте Google Drive и меняйте язык здесь.', position: 'left' }
     ],
     PROJECT_VIEW: [
-        { id: 'tour-upload-btn', title: '1. Загрузка видео', desc: 'Загрузите видеофайлы. Мы создадим прокси для быстрой работы.' },
-        { id: 'tour-share-btn', title: '2. Приглашение', desc: 'Отправьте ссылку клиенту или коллегам для совместной работы.' }
+        { id: 'tour-upload-zone', title: '1. Загрузка видео', desc: 'Просто перетащите файл в эту зону. Мы автоматически создадим легкие прокси для быстрого просмотра.' },
+        { id: 'tour-assets-grid', title: '2. Ваши файлы', desc: 'Здесь отображаются все загруженные видео. Кликните, чтобы открыть плеер.' },
+        { id: 'tour-share-btn', title: '3. Приглашение', desc: 'Готово к показу? Отправьте ссылку клиенту или добавьте коллегу в команду.' }
     ],
     PLAYER: [
-        { id: 'tour-comment-input', title: '1. Комментарии', desc: 'Оставляйте таймкод-комментарии. Используйте Enter для быстрой отправки.' },
-        { id: 'tour-sidebar-tabs', title: '2. Инструменты', desc: 'Переключайтесь между комментариями и AI-транскрипцией.', position: 'right' as const },
-        { id: 'tour-export-btn', title: '3. Экспорт', desc: 'Скачивайте маркеры для DaVinci Resolve или Premiere Pro.', position: 'left' as const }
+        { id: 'tour-version-selector', title: '1. Версии файла', desc: 'Загрузили новую версию монтажа? Переключайтесь между v1, v2, v3 здесь. История сохраняется.', position: 'bottom' },
+        { id: 'tour-timecode', title: '2. Точность кадров', desc: 'Мы считаем кадры, а не секунды. Нажмите здесь, чтобы сменить формат (FPS).', position: 'bottom' },
+        { id: 'tour-comment-input', title: '3. Комментарии', desc: 'Оставляйте правки. Они привязываются к текущему кадру. Нажмите Enter для отправки.', position: 'top' },
+        { id: 'tour-sidebar-tabs', title: '4. Инструменты', desc: 'Переключайтесь между списком правок и AI-транскрипцией речи.', position: 'right' },
+        { id: 'tour-export-btn', title: '5. Экспорт в монтажку', desc: 'Killer-feature: скачайте XML или CSV и импортируйте маркеры прямо в DaVinci Resolve или Premiere.', position: 'left' }
     ]
 };
 
@@ -540,7 +545,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           tourTitle = '1. Создайте проект';
           tourDesc = 'Начните работу с создания нового пространства.';
       } else if (view.type === 'PROJECT_VIEW' && currentProject && !hasAssets) {
-          tourTargetId = 'tour-upload-btn';
+          tourTargetId = 'tour-upload-zone';
           tourTitle = '2. Загрузите видео';
           tourDesc = 'Добавьте видеофайл. Мы создадим прокси для быстрой работы.';
       } else if (view.type === 'PLAYER' && currentProject && !hasComments) {
@@ -565,6 +570,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           }
       } else {
           handleDismissTour();
+      }
+  };
+
+  const handlePrevStep = () => {
+      if (isManualTourActive && tourStep > 0) {
+          setTourStep(prev => prev - 1);
       }
   };
 
@@ -703,6 +714,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 description={tourDesc}
                 onDismiss={handleDismissTour}
                 onNext={isManualTourActive ? handleNextStep : undefined}
+                onPrev={isManualTourActive ? handlePrevStep : undefined}
                 currentStep={tourCurrentStep}
                 totalSteps={tourTotalSteps}
                 position={tourPosition}

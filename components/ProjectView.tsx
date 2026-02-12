@@ -394,6 +394,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
       return (
           <div 
+            id="tour-upload-zone"
             onClick={!isProcessing ? handleClick : undefined}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
@@ -542,7 +543,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 )}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                 {/* NEW INLINE UPLOAD TILE - Always First */}
                 <UploadZoneTile />
 

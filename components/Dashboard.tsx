@@ -330,9 +330,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
   };
 
-  const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode, emptyMsg: string) => {
+  const renderProjectGrid = (projectList: Project[], title: string, icon: React.ReactNode, emptyMsg: string, containerId?: string) => {
       return (
-          <div className="mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+          <div id={containerId} className="mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
               <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2 mb-4 border-b border-zinc-200 dark:border-zinc-800 pb-2">
                   {icon}
                   {title}
@@ -532,7 +532,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
               sharedProjects,
               t('dash.shared_projects'),
               <Users size={18} className="text-green-500" />,
-              "No projects shared with you."
+              "No projects shared with you.",
+              "tour-shared-section"
           )
       )}
       
