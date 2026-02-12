@@ -2,9 +2,6 @@
 import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
 
-// 🛑 UPDATE: Added your yandex email here
-const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
-
 export default async function handler(req, res) {
     const { action } = req.query;
 
@@ -15,7 +12,19 @@ export default async function handler(req, res) {
         try {
             // Try to identify user, but don't crash if guest
             const user = await verifyUser(req); 
-            const isAdmin = user && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+            
+            // Check admin status via Clerk Metadata if user exists
+            let isAdmin = false;
+            if (user && user.userId) {
+                try {
+                    const clerk = getClerkClient();
+                    const clerkUser = await clerk.users.getUser(user.userId);
+                    const role = clerkUser.publicMetadata?.role;
+                    isAdmin = role === 'admin' || role === 'superadmin';
+                } catch (e) {
+                    console.warn("Failed to verify admin status for config fetch", e);
+                }
+            }
 
             // Create table if not exists just in case
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
@@ -78,12 +87,21 @@ export default async function handler(req, res) {
     // --- STRICT ADMIN ACTIONS (Middleware Check) ---
     // Everything below this line REQUIRES admin access
     try {
-        const user = await verifyUser(req, true); // Force email fetch
-        if (!user || !user.email || !ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) {
-            return res.status(403).json({ error: "Forbidden: Admins only" });
+        const user = await verifyUser(req); // No need to force email anymore
+        if (!user) {
+            return res.status(401).json({ error: "Unauthorized" });
         }
 
         const clerk = getClerkClient();
+        
+        // CRITICAL: Fetch fresh user data from Clerk to check Metadata Role
+        const clerkUser = await clerk.users.getUser(user.userId);
+        const role = clerkUser.publicMetadata?.role;
+        const isSuperAdmin = role === 'admin' || role === 'superadmin';
+
+        if (!isSuperAdmin) {
+            return res.status(403).json({ error: "Forbidden: Admins only" });
+        }
 
         // --- SETUP DATABASE ---
         if (action === 'setup') {
@@ -154,6 +172,7 @@ export default async function handler(req, res) {
             const data = usersList.data.map(u => {
                 const meta = u.publicMetadata || {};
                 const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
+                const uRole = meta.role;
                 return {
                     id: u.id,
                     name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
@@ -162,7 +181,8 @@ export default async function handler(req, res) {
                     plan: meta.plan || 'free',
                     expiresAt: meta.expiresAt,
                     isAutoRenew: !!meta.yookassaPaymentMethodId,
-                    lastActive: u.lastSignInAt
+                    lastActive: u.lastSignInAt,
+                    isAdmin: uRole === 'admin' || uRole === 'superadmin'
                 };
             });
             return res.status(200).json({ users: data });
@@ -204,6 +224,24 @@ export default async function handler(req, res) {
                     plan: 'free',
                     status: 'inactive',
                     expiresAt: null
+                }
+            });
+            return res.status(200).json({ success: true });
+        }
+
+        // --- TOGGLE ADMIN ROLE ---
+        if (action === 'toggle_admin') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const { userId, makeAdmin } = req.body;
+            
+            // Prevent changing own role to avoid lockout
+            if (userId === user.userId) {
+                return res.status(400).json({ error: "Cannot change own admin status via API" });
+            }
+
+            await clerk.users.updateUserMetadata(userId, {
+                publicMetadata: {
+                    role: makeAdmin ? 'admin' : 'user'
                 }
             });
             return res.status(200).json({ success: true });

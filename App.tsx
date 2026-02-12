@@ -329,11 +329,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   useEffect(() => {
     if (!isLoaded) return;
     if (isSignedIn && clerkUser) {
+        const meta = clerkUser.publicMetadata as any;
+        const role = meta?.role;
         setCurrentUser({
             id: clerkUser.id,
             name: clerkUser.fullName || clerkUser.firstName || 'User',
             avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
-            email: clerkUser.primaryEmailAddress?.emailAddress
+            email: clerkUser.primaryEmailAddress?.emailAddress,
+            isAdmin: role === 'admin' || role === 'superadmin'
         });
     } else {
         setCurrentUser(null);
