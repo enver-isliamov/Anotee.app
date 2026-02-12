@@ -599,7 +599,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             {(!isSearchOpen || window.innerWidth > 768) && (
               <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
                    <div className="flex items-center gap-2 max-w-full">
-                       <div className="relative group/title min-w-0">
+                       <div className="relative group/title min-w-0" id="tour-version-selector">
                             <button onClick={() => setShowVersionSelector(!showVersionSelector)} className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 max-w-full">
                                 <div className="min-w-0 flex items-center gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
@@ -666,7 +666,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              </div>
              
              {/* ... Timecode ... */}
-             <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
+             <div id="tour-timecode" className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
                 <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime)}</div>
                 <div className="h-6 w-px bg-white/20"></div>
                 <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
@@ -753,7 +753,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           </div>
 
           <div className={`${isVerticalVideo ? 'absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pb-6 pt-10' : 'bg-zinc-900 border-t border-zinc-800 pb-2'} p-2 lg:p-4 shrink-0 transition-transform duration-300`}>
-             <div className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
+             <div id="tour-timeline" className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
                 <div className="w-full h-2 md:h-1.5 bg-zinc-700/50 rounded-full overflow-hidden relative"><div className="h-full bg-indigo-500" style={{ width: `${(currentTime / duration) * 100}%` }} /></div>
                 {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: c.status === 'resolved' ? '#22c55e' : cl }} />); })}
              </div>

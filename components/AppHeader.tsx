@@ -109,6 +109,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     <div className="hidden md:flex items-center gap-2 pl-2">
                         {/* Settings Link */}
                         <a 
+                            id="tour-profile-btn"
                             href="/profile"
                             onClick={(e) => { e.preventDefault(); onNavigate('PROFILE'); }}
                             className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
