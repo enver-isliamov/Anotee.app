@@ -27,6 +27,10 @@ export async function getUserFromToken(token, requireEmail = false) {
             clockSkewInMs: 60000 
         });
 
+        // Check metadata in JWT if present (must be configured in Clerk)
+        const role = (verified.metadata as any)?.role || (verified.publicMetadata as any)?.role || null;
+        const isAdmin = role === 'admin';
+
         // 1. FAST PATH: Check for Custom Claims (Zero-Latency)
         // We configured Clerk to inject 'email', 'org_id', 'org_role' into the token.
         if (verified.email) {
@@ -37,22 +41,23 @@ export async function getUserFromToken(token, requireEmail = false) {
                 orgId: verified.org_id || null,
                 orgRole: verified.org_role || null,
                 orgSlug: verified.org_slug || null,
-                // Name and Avatar aren't crucial for backend logic usually, 
-                // but we can set placeholders or fetch if absolutely critical (usually frontend handles display)
                 name: 'User', 
                 avatar: null, 
-                isVerified: true
+                isVerified: true,
+                isAdmin: isAdmin // Extracted from JWT if available
             };
         }
 
         // 2. SLOW PATH (Fallback): API Call
         // Used only if custom claims are missing (e.g. old session) AND email is required
-        if (requireEmail) {
-            console.log("⚠️ Auth: Falling back to slow API call (Custom Claims missing)");
+        // OR if we need to reliably check metadata that isn't in JWT
+        if (requireEmail || !verified.email) {
+            // console.log("⚠️ Auth: Falling back to slow API call");
             const clerk = getClerkClient();
             const user = await clerk.users.getUser(verified.sub);
             
             const primaryEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress;
+            const apiRole = user.publicMetadata?.role;
 
             return {
                 id: user.id,
@@ -60,7 +65,8 @@ export async function getUserFromToken(token, requireEmail = false) {
                 email: primaryEmail,
                 name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User',
                 avatar: user.imageUrl,
-                isVerified: true
+                isVerified: true,
+                isAdmin: apiRole === 'admin'
             };
         }
 
@@ -70,7 +76,8 @@ export async function getUserFromToken(token, requireEmail = false) {
             userId: verified.sub,
             email: null,
             name: 'User',
-            isVerified: true
+            isVerified: true,
+            isAdmin: isAdmin
         };
 
     } catch (e) {
