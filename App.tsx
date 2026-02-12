@@ -472,7 +472,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'DASHBOARD': path = '/'; break;
           case 'TERMS': path = '/terms'; break;
           case 'PRIVACY': path = '/privacy'; break;
-          // Note: /test is handled manually via URL or hidden button
+          case 'TEST_RUNNER': path = '/test'; break; // New path handling
       }
       
       window.history.pushState({}, '', path);
@@ -488,6 +488,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'DASHBOARD': setView({ type: 'DASHBOARD' }); break;
           case 'TERMS': setView({ type: 'TERMS' }); break;
           case 'PRIVACY': setView({ type: 'PRIVACY' }); break;
+          case 'TEST_RUNNER': setView({ type: 'TEST_RUNNER' }); break;
           default: setView({ type: 'DASHBOARD' });
       }
   };
@@ -632,7 +633,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return <><Login onLogin={() => {}} onNavigate={handleNavigate} />{isMockMode && <div className="fixed bottom-0 w-full bg-yellow-500 text-black text-center text-xs font-bold">PREVIEW MODE</div>}</>;
   }
 
-  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} /></div>;
+  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></div>;
 
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
