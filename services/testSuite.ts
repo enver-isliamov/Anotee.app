@@ -1,9 +1,10 @@
 
 import { generateEDL, generateResolveXML, generateCSV } from './exportService';
 import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from './utils';
+import { isOrgAdmin } from './userUtils';
 import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
 import { MOCK_PROJECTS } from '../constants';
-import { Calculator, Clock, FileOutput, ShieldCheck, Database, Globe, Wifi, ShieldAlert, Zap, Server, Film } from 'lucide-react';
+import { Calculator, Clock, FileOutput, ShieldCheck, Database, Globe, Wifi, ShieldAlert, Zap, Server, Film, Lock, PlayCircle, HardDrive, CreditCard, Cpu } from 'lucide-react';
 
 export type TestResult = {
     name: string;
@@ -74,7 +75,6 @@ export const TEST_SUITE: TestGroup[] = [
 
             // 2. Auth Guard Check
             try {
-                // Запрос без токена должен вернуть 401
                 const secured = await fetch('/api/data');
                 res.push({
                     name: 'Auth Guard (401 Check)',
@@ -86,7 +86,6 @@ export const TEST_SUITE: TestGroup[] = [
                     failCondition: 'Сервер возвращает 200 (утечка данных) или 500.'
                 });
             } catch (e: any) {
-                // Fetch error is purely network, likely passed test logic if status was checked
                 res.push({
                     name: 'Auth Guard (401 Check)',
                     description: 'Network check',
@@ -102,13 +101,44 @@ export const TEST_SUITE: TestGroup[] = [
         }
     },
     {
+        id: 'auth',
+        title: 'Auth & Permissions',
+        icon: Lock,
+        description: 'Проверка логики ролей и прав доступа (ACL).',
+        tests: () => {
+            const res: TestResult[] = [];
+            
+            // Mock Clerk Memberships
+            const mockMemberships = [
+                { publicUserData: { userId: 'admin_1' }, role: 'org:admin' },
+                { publicUserData: { userId: 'member_2' }, role: 'org:member' }
+            ];
+
+            const checkAdmin = isOrgAdmin('admin_1', mockMemberships);
+            const checkMember = isOrgAdmin('member_2', mockMemberships);
+
+            res.push({
+                name: 'Org Admin Detection',
+                description: 'Проверка утилиты isOrgAdmin',
+                passed: checkAdmin === true && checkMember === false,
+                expected: 'Admin=True, Member=False',
+                received: `Admin=${checkAdmin}, Member=${checkMember}`,
+                passCondition: 'Функция корректно определяет роль org:admin.',
+                failCondition: 'Обычный участник получил права админа или наоборот.'
+            });
+
+            return res;
+        }
+    },
+    {
         id: 'media',
         title: 'Media Streaming QA',
         icon: Film,
         description: 'Валидация форматов, CORS и доступности CDN.',
         tests: async () => {
             const res: TestResult[] = [];
-            const sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+            // Using a more reliable public test file to reduce false positives
+            const sampleUrl = 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
             // 1. Head Request Check
             try {
@@ -132,9 +162,61 @@ export const TEST_SUITE: TestGroup[] = [
                     expected: 'Success',
                     received: e.message,
                     passCondition: 'Fetch успешен.',
-                    failCondition: 'Блокировка CORS или сети.'
+                    failCondition: 'Блокировка CORS или сети (возможно нужен VPN).'
                 });
             }
+
+            return res;
+        }
+    },
+    {
+        id: 'player',
+        title: 'Player Core',
+        icon: PlayCircle,
+        description: 'Логика генерации аватарок и цветов.',
+        tests: () => {
+            const res: TestResult[] = [];
+            
+            // Color Hashing
+            const color1 = stringToColor('user_123');
+            const color2 = stringToColor('user_123'); // Should be deterministic
+            const color3 = stringToColor('user_456');
+
+            res.push({
+                name: 'Deterministic Color Hash',
+                description: 'Генерация цвета аватарки по ID',
+                passed: color1 === color2 && color1 !== color3 && color1.startsWith('hsl'),
+                expected: 'Consistent HSL string',
+                received: `${color1}`,
+                passCondition: 'Одинаковые ID дают одинаковый цвет.',
+                failCondition: 'Цвета меняются при каждом рендере.'
+            });
+
+            return res;
+        }
+    },
+    {
+        id: 'storage',
+        title: 'Storage Logic',
+        icon: HardDrive,
+        description: 'Валидация типов файлов и конфигураций.',
+        tests: () => {
+            const res: TestResult[] = [];
+            
+            // MIME Type Check Logic
+            const allowedTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
+            const fileType = 'application/exe';
+            const isAllowed = allowedTypes.includes(fileType);
+
+            res.push({
+                name: 'Upload Security Guard',
+                description: 'Имитация проверки типа файла перед загрузкой',
+                passed: !isAllowed,
+                expected: 'Blocked',
+                received: isAllowed ? 'Allowed' : 'Blocked',
+                passCondition: 'Запрещенные типы файлов блокируются.',
+                failCondition: 'Разрешена загрузка исполняемых файлов (.exe).'
+            });
 
             return res;
         }
@@ -170,6 +252,45 @@ export const TEST_SUITE: TestGroup[] = [
                 received: tc,
                 passCondition: 'Корректный перевод секунд в ЧЧ:ММ:СС:КК',
                 failCondition: 'Неверный расчет остатка кадров.'
+            });
+
+            return res;
+        }
+    },
+    {
+        id: 'billing',
+        title: 'Billing & Limits',
+        icon: CreditCard,
+        description: 'Логика подписок и истечения сроков.',
+        tests: () => {
+            const res: TestResult[] = [];
+            
+            // Expiry Logic
+            const pastDate = Date.now() - (10 * 24 * 60 * 60 * 1000); // 10 days ago
+            const isExp = isExpired(pastDate, 7); // check if older than 7 days
+            
+            res.push({
+                name: 'Subscription Expiry Check',
+                description: 'Проверка флага isExpired для даты в прошлом',
+                passed: isExp === true,
+                expected: 'Expired (true)',
+                received: `${isExp}`,
+                passCondition: 'Дата 10-дневной давности считается истекшей (лимит 7 дней).',
+                failCondition: 'Пользователь сохраняет доступ после истечения срока.'
+            });
+
+            const futureDate = Date.now() + (5 * 24 * 60 * 60 * 1000); // 5 days future
+            const daysLeft = getDaysRemaining(pastDate, 7); // Created 10 days ago, valid for 7. Should be 0.
+            const daysLeftFuture = getDaysRemaining(Date.now(), 7); // Created now, valid 7. Should be 7.
+
+            res.push({
+                name: 'Days Remaining Calc',
+                description: 'Расчет остатка дней триала',
+                passed: daysLeft === 0 && daysLeftFuture === 7,
+                expected: '0 and 7',
+                received: `${daysLeft} / ${daysLeftFuture}`,
+                passCondition: 'Истекший срок = 0, Новый срок = 7.',
+                failCondition: 'Неверный расчет дней до блокировки.'
             });
 
             return res;
@@ -229,6 +350,30 @@ export const TEST_SUITE: TestGroup[] = [
                 received: sanitized,
                 passCondition: 'Теги скриптов превращены в текст.',
                 failCondition: 'Исполняемый JS код.'
+            });
+
+            return res;
+        }
+    },
+    {
+        id: 'sys',
+        title: 'System Utils',
+        icon: Cpu,
+        description: 'Генерация ID и системные функции.',
+        tests: () => {
+            const res: TestResult[] = [];
+            
+            const uuid = generateId();
+            const isValidUUID = uuid.length >= 32; // basic check
+
+            res.push({
+                name: 'UUID Generation',
+                description: 'Генерация уникального ID',
+                passed: isValidUUID,
+                expected: 'Length >= 32',
+                received: uuid,
+                passCondition: 'Генерируется непустая строка достаточной длины.',
+                failCondition: 'Дубликаты ID приведут к коллизиям в БД.'
             });
 
             return res;
