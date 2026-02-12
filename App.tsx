@@ -6,6 +6,7 @@ import { Player } from './components/Player';
 import { Login } from './components/Login';
 import { Profile } from './components/Profile';
 import { AdminPanel } from './components/AdminPanel';
+import { TestRunner } from './components/TestRunner'; // Import the new component
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { LegalPage } from './components/LegalPages';
 import { LiveDemo } from './components/LiveDemo';
@@ -38,7 +39,8 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'TERMS' }
   | { type: 'PRIVACY' }
-  | { type: 'LIVE_DEMO' };
+  | { type: 'LIVE_DEMO' }
+  | { type: 'TEST_RUNNER' }; // New Route
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
@@ -290,6 +292,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             setView({ type: 'PROFILE' });
         } else if (path === '/demo') {
             setView({ type: 'LIVE_DEMO' });
+        } else if (path === '/test') { // Handle TEST URL
+            setView({ type: 'TEST_RUNNER' });
         } else if (pId && aId) {
             setView({ type: 'PLAYER', projectId: pId, assetId: aId, restrictedAssetId: aId }); 
         } else if (pId) {
@@ -303,6 +307,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // ... (Shortcuts and other logic remains same) ...
   useEffect(() => {
       const handleGlobalDrag = (e: DragEvent) => e.preventDefault();
       const handleGlobalKeys = (e: KeyboardEvent) => {
@@ -366,6 +371,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   const forceSync = async (projectsData: Project[]) => {
+      // ... (Same sync logic) ...
       if (!currentUser) return;
       lastLocalUpdateRef.current = Date.now();
       let token: string | null = null;
@@ -466,6 +472,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'DASHBOARD': path = '/'; break;
           case 'TERMS': path = '/terms'; break;
           case 'PRIVACY': path = '/privacy'; break;
+          // Note: /test is handled manually via URL or hidden button
       }
       
       window.history.pushState({}, '', path);
@@ -485,7 +492,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  // --- SMART ONBOARDING LOGIC ---
+  // ... (Tour Logic unchanged) ...
   const activeOrgId = organization?.id;
   const myProjects = projects.filter(p => {
       if (activeOrgId) return p.orgId === activeOrgId;
@@ -602,6 +609,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 
   if (view.type === 'LIVE_DEMO') return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
+  if (view.type === 'TEST_RUNNER') return <TestRunner onBack={() => handleNavigate('DASHBOARD')} />; // New Render
+
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
   if (!currentUser) {
