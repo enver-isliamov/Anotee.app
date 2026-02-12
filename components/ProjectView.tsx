@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff, CircleHelp } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -26,10 +26,11 @@ interface ProjectViewProps {
   isMockMode?: boolean;
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
   onboardingActiveStep?: number;
-  uploadTasks: UploadTask[]; 
+  uploadTasks: UploadTask[];
+  onStartTour?: () => void; // Added prop
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks, onStartTour }) => {
   const { t } = useLanguage();
   const { isPro } = useSubscription();
   const { config } = useAppConfig();
@@ -457,6 +458,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         <div className="flex items-center gap-3 shrink-0">
           <LanguageSelector />
           
+          {/* TOUR TRIGGER BUTTON */}
+          {onStartTour && (
+              <button 
+                  onClick={onStartTour}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-400 hover:bg-zinc-800 transition-colors"
+                  title="Show Help"
+              >
+                  <CircleHelp size={20} />
+              </button>
+          )}
+
           {/* TEAM AVATARS - Hidden for Restricted Users */}
           {!isRestrictedUser && (
             <div 

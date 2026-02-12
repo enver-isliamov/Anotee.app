@@ -676,6 +676,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 isMockMode={isMockMode}
                 onUploadAsset={handleUploadAsset} 
                 uploadTasks={uploadTasks} 
+                onStartTour={handleStartTour} // PASSED PROP
             />
           </ErrorBoundary>
         )}
