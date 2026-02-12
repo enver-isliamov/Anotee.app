@@ -106,7 +106,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <Activity className="text-indigo-500" />
                             System Diagnostics
                         </h1>
-                        <p className="text-xs text-zinc-500 font-mono">Anotee v1.5 Test Environment</p>
+                        <p className="text-xs text-zinc-500 font-mono">Anotee v1.2602.1 Test Environment</p>
                     </div>
                 </div>
                 
