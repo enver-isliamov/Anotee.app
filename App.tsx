@@ -6,7 +6,6 @@ import { Player } from './components/Player';
 import { Login } from './components/Login';
 import { Profile } from './components/Profile';
 import { AdminPanel } from './components/AdminPanel';
-import { TestRunner } from './components/TestRunner'; // Import the new component
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { LegalPage } from './components/LegalPages';
 import { LiveDemo } from './components/LiveDemo';
@@ -39,8 +38,7 @@ type ViewState =
   | { type: 'AI_FEATURES' }
   | { type: 'TERMS' }
   | { type: 'PRIVACY' }
-  | { type: 'LIVE_DEMO' }
-  | { type: 'TEST_RUNNER' }; // New Route
+  | { type: 'LIVE_DEMO' };
 
 // --- GLOBAL UPLOAD WIDGET COMPONENT ---
 const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => void }> = ({ tasks, onClose }) => {
@@ -292,8 +290,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             setView({ type: 'PROFILE' });
         } else if (path === '/demo') {
             setView({ type: 'LIVE_DEMO' });
-        } else if (path === '/test') { // Handle TEST URL
-            setView({ type: 'TEST_RUNNER' });
         } else if (pId && aId) {
             setView({ type: 'PLAYER', projectId: pId, assetId: aId, restrictedAssetId: aId }); 
         } else if (pId) {
@@ -307,7 +303,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // ... (Shortcuts and other logic remains same) ...
   useEffect(() => {
       const handleGlobalDrag = (e: DragEvent) => e.preventDefault();
       const handleGlobalKeys = (e: KeyboardEvent) => {
@@ -371,7 +366,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   };
 
   const forceSync = async (projectsData: Project[]) => {
-      // ... (Same sync logic) ...
       if (!currentUser) return;
       lastLocalUpdateRef.current = Date.now();
       let token: string | null = null;
@@ -472,7 +466,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'DASHBOARD': path = '/'; break;
           case 'TERMS': path = '/terms'; break;
           case 'PRIVACY': path = '/privacy'; break;
-          case 'TEST_RUNNER': path = '/test'; break; // New path handling
       }
       
       window.history.pushState({}, '', path);
@@ -488,12 +481,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'DASHBOARD': setView({ type: 'DASHBOARD' }); break;
           case 'TERMS': setView({ type: 'TERMS' }); break;
           case 'PRIVACY': setView({ type: 'PRIVACY' }); break;
-          case 'TEST_RUNNER': setView({ type: 'TEST_RUNNER' }); break;
           default: setView({ type: 'DASHBOARD' });
       }
   };
 
-  // ... (Tour Logic unchanged) ...
+  // --- SMART ONBOARDING LOGIC ---
   const activeOrgId = organization?.id;
   const myProjects = projects.filter(p => {
       if (activeOrgId) return p.orgId === activeOrgId;
@@ -610,8 +602,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 
   if (view.type === 'LIVE_DEMO') return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
-  if (view.type === 'TEST_RUNNER') return <TestRunner onBack={() => handleNavigate('DASHBOARD')} />; // New Render
-
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
   if (!currentUser) {
@@ -633,7 +623,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return <><Login onLogin={() => {}} onNavigate={handleNavigate} />{isMockMode && <div className="fixed bottom-0 w-full bg-yellow-500 text-black text-center text-xs font-bold">PREVIEW MODE</div>}</>;
   }
 
-  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></div>;
+  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} /></div>;
 
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
