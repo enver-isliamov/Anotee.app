@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Project, ProjectAsset, Comment, CommentStatus, User } from '../types';
 import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
-import { generateId, stringToColor } from '../services/utils';
+import { generateId, stringToColor, formatTimecode } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
@@ -58,7 +58,7 @@ const PlayerSidebar = React.memo(({
     startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
     transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
     transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
-    setTranscript, seekByFrame, videoFps, formatTimecode, t
+    setTranscript, seekByFrame, videoFps, t
 }: any) => {
     
     // Internal Swipe State for this component
@@ -129,7 +129,6 @@ const PlayerSidebar = React.memo(({
                 )}
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
-                    {/* ... (Existing comments render logic is unchanged, just wrapping div ID was added above) ... */}
                     {sidebarTab === 'comments' && filteredComments.map((comment: any) => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; 
                         
@@ -154,7 +153,7 @@ const PlayerSidebar = React.memo(({
                                 className={`rounded-lg p-2 border text-xs cursor-pointer transition-transform relative z-10 shadow-sm ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/50' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-zinc-700'} ${isA && !isSelected ? 'border-l-4 border-l-indigo-500 bg-zinc-50 dark:bg-zinc-800 shadow-md ring-1 ring-inset ring-indigo-500/20' : ''}`}
                             >
                                 <div className="flex justify-between items-start mb-1">
-                                    <div className="flex items-center gap-2"><span className="font-bold text-zinc-900 dark:text-zinc-100" style={{ color: cC }}>{a.name.split(' ')[0]}</span><span className={`font-mono text-[10px] px-1 rounded flex items-center gap-1 ${isA ? 'text-indigo-600 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30' : 'text-zinc-400 dark:text-zinc-500'}`}>{formatTimecode(comment.timestamp)}{comment.duration && <span className="opacity-50">→ {formatTimecode(comment.timestamp + comment.duration)}</span>}</span></div>
+                                    <div className="flex items-center gap-2"><span className="font-bold text-zinc-900 dark:text-zinc-100" style={{ color: cC }}>{a.name.split(' ')[0]}</span><span className={`font-mono text-[10px] px-1 rounded flex items-center gap-1 ${isA ? 'text-indigo-600 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30' : 'text-zinc-400 dark:text-zinc-500'}`}>{formatTimecode(comment.timestamp, videoFps)}{comment.duration && <span className="opacity-50">→ {formatTimecode(comment.timestamp + comment.duration, videoFps)}</span>}</span></div>
                                     <div className="flex items-center gap-1">
                                         {canEd && !isE && (<button onClick={(e) => { e.stopPropagation(); startEditing(comment); }} className="text-zinc-400 hover:text-blue-500 opacity-0 group-hover/wrapper:opacity-100 transition-opacity p-1" title={t('common.edit')}><Pencil size={12} /></button>)}
                                         {canD && !isE && (<button onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }} className="text-zinc-400 hover:text-red-500 opacity-0 group-hover/wrapper:opacity-100 transition-opacity p-1" title={t('common.delete')}><Trash2 size={12} /></button>)}
@@ -184,7 +183,7 @@ const PlayerSidebar = React.memo(({
                                 </div>
                             )}
                             {isTranscribing && (<div className="flex flex-col items-center justify-center h-64 px-8 text-center"><Loader2 size={32} className="animate-spin text-indigo-500 mb-4" /><div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden"><div className="bg-indigo-500 h-full transition-all duration-300 ease-out" style={{ width: `${transcribeProgress?.progress || 0}%` }} /></div><p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">{transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}</p></div>)}
-                            {transcript && transcript.length > 0 && (<div className="flex-1 overflow-y-auto p-2 space-y-1"><div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between"><span>Result</span><button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button></div>{transcript.map((chunk: TranscriptChunk, i: number) => { const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]; return (<div key={i} onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)} className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}><div className="flex gap-2"><span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">{chunk.timestamp ? formatTimecode(chunk.timestamp[0]) : '--:--'}</span><p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>{chunk.text}</p></div></div>); })}</div>)}
+                            {transcript && transcript.length > 0 && (<div className="flex-1 overflow-y-auto p-2 space-y-1"><div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between"><span>Result</span><button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button></div>{transcript.map((chunk: TranscriptChunk, i: number) => { const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]; return (<div key={i} onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)} className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}><div className="flex gap-2"><span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">{chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : '--:--'}</span><p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>{chunk.text}</p></div></div>); })}</div>)}
                         </div>
                     )}
                 </div>
@@ -284,21 +283,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const sidebarInputRef = useRef<HTMLInputElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   
-  // REFACTORED TIMECODE FORMATTER
-  const formatTimecode = (seconds: number) => {
-    const fps = videoFps || 30; 
-    const totalFrames = Math.floor(seconds * fps);
-    const h = Math.floor(totalFrames / (3600 * fps));
-    const m = Math.floor((totalFrames % (3600 * fps)) / (60 * fps));
-    const s = Math.floor((totalFrames % (60 * fps)) / fps);
-    const f = Math.floor(totalFrames % fps);
-    const hh = h.toString().padStart(2, '0');
-    const mm = m.toString().padStart(2, '0');
-    const ss = s.toString().padStart(2, '0');
-    const ff = f.toString().padStart(2, '0');
-    return `${hh}:${mm}:${ss}:${ff}`;
-  };
-
   useEffect(() => {
     localStorage.setItem('anotee_controls_pos', JSON.stringify(controlsPos));
   }, [controlsPos]);
@@ -667,7 +651,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              
              {/* ... Timecode ... */}
              <div id="tour-timecode" className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
-                <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime)}</div>
+                <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime, videoFps)}</div>
                 <div className="h-6 w-px bg-white/20"></div>
                 <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
@@ -685,7 +669,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer shrink-0 ${isListening ? 'bg-red-500/20 ring-4 ring-red-500/20 scale-110' : 'bg-zinc-800 hover:bg-zinc-700'}`} onClick={toggleListening}><Mic size={20} className={`${isListening ? 'text-red-500 animate-pulse' : 'text-zinc-400'}`} /></div>
                             <div className="flex-1 overflow-hidden">
                                 <h3 className="text-sm font-bold text-white mb-1 truncate">{isListening ? t('player.voice.listening') : t('player.voice.transcript')}</h3>
-                                <div className="flex items-center gap-2 text-indigo-400 font-mono text-[10px] bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-500/20 w-fit"><span>{formatTimecode(markerInPoint || currentTime)}</span>{markerOutPoint && (<><span>→</span><span>{formatTimecode(markerOutPoint)}</span></>)}</div>
+                                <div className="flex items-center gap-2 text-indigo-400 font-mono text-[10px] bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-500/20 w-fit"><span>{formatTimecode(markerInPoint || currentTime, videoFps)}</span>{markerOutPoint && (<><span>→</span><span>{formatTimecode(markerOutPoint, videoFps)}</span></>)}</div>
                             </div>
                         </div>
                         <textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder={isListening ? "Listening..." : "Type comment..."} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
@@ -772,13 +756,13 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 transcript={transcript} isTranscribing={isTranscribing} transcribeProgress={transcribeProgress} transcribeLanguage={transcribeLanguage}
                 setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
                 handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
-                setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} formatTimecode={formatTimecode} t={t}
+                setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
             />
         )}
 
         {!isFullscreen && sidebarTab === 'comments' && (
             <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime)} - {markerOutPoint ? formatTimecode(markerOutPoint) : '...'}</span></div></div>)}
+                {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>)}
                 <div className="flex gap-2 items-start" id="tour-comment-input">
                     <div className="relative flex-1">
                         <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? "Comments locked" : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />

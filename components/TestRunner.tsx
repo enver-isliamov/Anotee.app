@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { generateEDL, generateResolveXML, generateCSV } from '../services/exportService';
-import { generateId, stringToColor } from '../services/utils';
+import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from '../services/utils';
 import { Comment, CommentStatus } from '../types';
-import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock } from 'lucide-react';
 
 // --- TEST TYPES ---
 
@@ -71,6 +71,58 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     passed: framesNtsc === 299,
                     expected: '299 frames',
                     received: `${framesNtsc} frames`
+                });
+
+                return res;
+            }
+        },
+        {
+            id: 'time',
+            title: 'Time & Logic',
+            icon: Clock,
+            tests: () => {
+                const res: TestResult[] = [];
+                
+                // SMPTE Formatter
+                const t1 = formatTimecode(0, 25);
+                res.push({
+                    name: 'SMPTE Zero Check',
+                    description: 'Format 0s at 25fps',
+                    passed: t1 === '00:00:00:00',
+                    expected: '00:00:00:00',
+                    received: t1
+                });
+
+                const t2 = formatTimecode(65.5, 25); // 1 min 5 sec 12 frames (0.5 * 25 = 12.5 -> 12)
+                const t2Expected = '00:01:05:12';
+                res.push({
+                    name: 'SMPTE Complex Check',
+                    description: 'Format 65.5s at 25fps',
+                    passed: t2 === t2Expected,
+                    expected: t2Expected,
+                    received: t2
+                });
+
+                // Expiry Logic
+                const oneDayMs = 24 * 60 * 60 * 1000;
+                const eightDaysAgo = Date.now() - (8 * oneDayMs);
+                const expired = isExpired(eightDaysAgo, 7);
+                res.push({
+                    name: 'Expiry Check (>7 Days)',
+                    description: 'isExpired(8 days ago, 7 limit)',
+                    passed: expired === true,
+                    expected: 'true',
+                    received: String(expired)
+                });
+
+                const twoDaysAgo = Date.now() - (2 * oneDayMs);
+                const remaining = getDaysRemaining(twoDaysAgo, 7);
+                res.push({
+                    name: 'Days Remaining',
+                    description: 'getDaysRemaining(2 days ago, 7 limit)',
+                    passed: remaining === 5,
+                    expected: '5',
+                    received: String(remaining)
                 });
 
                 return res;
@@ -148,12 +200,25 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     if(ids.has(id)) collision = true;
                     ids.add(id);
                 }
+                
+                // Regex check for UUID-like structure (or fallback hex)
+                const sampleId = generateId();
+                const isValidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sampleId) || /^[0-9a-f]{30,}$/.test(sampleId); // Fallback is just hex string
+
                 res.push({
                     name: 'ID Generator Collision Test',
                     description: 'Генерация 100 уникальных UUID и проверка на дубликаты.',
                     passed: !collision,
                     expected: '0 Collisions',
                     received: collision ? 'Collision Detected' : 'Unique'
+                });
+
+                res.push({
+                    name: 'ID Format Check',
+                    description: 'Проверка формата ID (UUID v4 or Hex).',
+                    passed: isValidFormat,
+                    expected: 'UUID / Hex',
+                    received: sampleId
                 });
 
                 // Test Color Determinism (New)
@@ -198,7 +263,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         setResults(newResults);
         setIsRunning(false);
-        setExpandedGroup('export'); // Open export group to show new tests
+        setExpandedGroup('time'); // Open new group to show updates
     };
 
     // Auto-run on mount
@@ -230,7 +295,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <FlaskConical className="text-indigo-500" />
                                 System Diagnostics
                             </h1>
-                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.1</p>
+                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.2</p>
                         </div>
                     </div>
                     

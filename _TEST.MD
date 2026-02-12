@@ -10,7 +10,7 @@
 
 *   **Unit Testing:** `TestRunner.tsx` (In-App System Diagnostics).
 *   **API Testing:** `Postman` или `Hoppscotch` (для локальной отладки Serverless функций).
-*   **Environment:** Тесты запускаются прямо в production-сборке через секретный маршрут `/test`.
+*   **Environment:** Тесты запускаются прямо в production-сборке через секретный маршрут `/test` или кнопку "System Tests" в Админ панели.
 
 ---
 
@@ -23,14 +23,21 @@
 *   **FPS Math (25fps PAL):** Проверка точности расчета кадров. Гарантирует отсутствие "дрифта" звука при конвертации секунд в кадры.
 *   **FPS Math (29.97fps NTSC):** Проверка обработки дробных FPS.
 
-#### 2. Export Generators
+#### 2. Time & Logic
+*   **SMPTE Zero Check:** Проверка форматирования `00:00:00:00`.
+*   **SMPTE Complex Check:** Проверка форматирования таймкода со смешанным временем (минуты, секунды, кадры).
+*   **Expiry Check (>7 Days):** Проверка логики истечения срока проекта (Free Tier Limits).
+*   **Days Remaining:** Проверка расчета оставшихся дней.
+
+#### 3. Export Generators
 *   **EDL Structure:** Валидация заголовков экспортируемого файла.
 *   **XML Color Mapping:** Проверка, что статус комментария (`OPEN`/`RESOLVED`) корректно мапится в цвета маркеров Resolve (Red/Green).
 *   **CSV Sanitization:** Проверка экранирования кавычек (Excel CSV injection prevention).
 *   **XML Entity Escaping:** Проверка экранирования спецсимволов (`&`, `<`, `>`) во избежание генерации битых XML файлов.
 
-#### 3. System Utils
+#### 4. System Utils
 *   **ID Generator Collision:** Генерация 100 UUID и проверка на уникальность.
+*   **ID Format Check:** Валидация формата ID (UUID v4 structure).
 *   **Color Determinism:** Проверка, что функция `stringToColor` всегда возвращает одинаковый цвет для одного и того же User ID (нет случайности).
 
 ---

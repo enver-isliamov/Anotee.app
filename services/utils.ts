@@ -33,6 +33,25 @@ export const getDaysRemaining = (timestamp: number, days: number = 7): number =>
 };
 
 /**
+ * Formats seconds into SMPTE timecode (HH:MM:SS:FF).
+ * Handles frame drops via Math.floor logic.
+ */
+export const formatTimecode = (seconds: number, fps: number = 30): string => {
+    const totalFrames = Math.floor(seconds * fps);
+    const h = Math.floor(totalFrames / (3600 * fps));
+    const m = Math.floor((totalFrames % (3600 * fps)) / (60 * fps));
+    const s = Math.floor((totalFrames % (60 * fps)) / fps);
+    const f = Math.floor(totalFrames % fps);
+    
+    const hh = h.toString().padStart(2, '0');
+    const mm = m.toString().padStart(2, '0');
+    const ss = s.toString().padStart(2, '0');
+    const ff = f.toString().padStart(2, '0');
+    
+    return `${hh}:${mm}:${ss}:${ff}`;
+};
+
+/**
  * Generates a deterministic pastel color from a string (UserId).
  */
 export const stringToColor = (str: string): string => {
