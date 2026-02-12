@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { generateEDL, generateResolveXML, generateCSV } from '../services/exportService';
-import { generateId } from '../services/utils';
+import { generateId, stringToColor } from '../services/utils';
 import { Comment, CommentStatus } from '../types';
 import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical } from 'lucide-react';
 
@@ -48,8 +48,6 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 const res: TestResult[] = [];
                 
                 // Test 1: 25 FPS Calculation (PAL)
-                // 1.5 seconds at 25 FPS should be exactly 37.5 frames -> floor to 37 frames.
-                // 37 frames / 25 = 1 second + 12 frames.
                 const fps25 = 25;
                 const time25 = 1.5; 
                 const framesTotal = Math.floor(time25 * fps25); // 37
@@ -63,8 +61,6 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 });
 
                 // Test 2: NTSC Drop Frame Logic Check (Simplified)
-                // 29.97 FPS. 10 seconds.
-                // 10 * 29.97 = 299.7 -> floor 299 frames.
                 const fpsNtsc = 29.97;
                 const timeNtsc = 10;
                 const framesNtsc = Math.floor(timeNtsc * fpsNtsc);
@@ -87,7 +83,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             tests: () => {
                 const res: TestResult[] = [];
                 
-                // Test EDL
+                // Test EDL Header
                 const edl = generateEDL('Test', 1, mockComments, 24);
                 const hasTitle = edl.includes('TITLE: Test_v1');
                 res.push({
@@ -99,16 +95,39 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 });
 
                 // Test XML Color Mapping
-                // CommentStatus.OPEN should map to "Red" in Resolve XML logic
                 const xml = generateResolveXML('Test', 1, mockComments, 24);
                 const hasColorRed = xml.includes('<name>Red</name>'); 
-                
                 res.push({
                     name: 'XML Color Mapping',
                     description: 'Проверка маппинга цвета (Open Status -> Red Color) для DaVinci.',
                     passed: hasColorRed,
                     expected: '<name>Red</name>',
                     received: hasColorRed ? 'Found <name>Red</name>' : 'Tag Missing'
+                });
+
+                // Test CSV Escaping (New)
+                const trickyComment = [{ ...mockComments[0], text: 'Hello "World"' }];
+                const csv = generateCSV(trickyComment);
+                // Expected: "Hello ""World""" (Double quotes escaping)
+                const hasEscapedQuotes = csv.includes('""World""');
+                res.push({
+                    name: 'CSV Sanitization',
+                    description: 'Экранирование кавычек в CSV для Excel/Premiere.',
+                    passed: hasEscapedQuotes,
+                    expected: 'Hello ""World""',
+                    received: hasEscapedQuotes ? 'Escaped Correctly' : 'Injection Vulnerable'
+                });
+
+                // Test XML Special Char Escaping (New)
+                const xmlComment = [{ ...mockComments[0], text: 'Me & You < 3' }];
+                const unsafeXml = generateResolveXML('Test', 1, xmlComment, 24);
+                const isSafe = unsafeXml.includes('Me &amp; You &lt; 3');
+                res.push({
+                    name: 'XML Entity Escaping',
+                    description: 'Экранирование спецсимволов (& < >) для валидности XML.',
+                    passed: isSafe,
+                    expected: 'Me &amp; You &lt; 3',
+                    received: isSafe ? 'Escaped Correctly' : 'Invalid XML'
                 });
 
                 return res;
@@ -129,13 +148,24 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     if(ids.has(id)) collision = true;
                     ids.add(id);
                 }
-                
                 res.push({
                     name: 'ID Generator Collision Test',
                     description: 'Генерация 100 уникальных UUID и проверка на дубликаты.',
                     passed: !collision,
                     expected: '0 Collisions',
                     received: collision ? 'Collision Detected' : 'Unique'
+                });
+
+                // Test Color Determinism (New)
+                const userA = 'user_123';
+                const color1 = stringToColor(userA);
+                const color2 = stringToColor(userA);
+                res.push({
+                    name: 'Color Determinism',
+                    description: 'Один и тот же UserID должен всегда генерировать одинаковый цвет.',
+                    passed: color1 === color2,
+                    expected: color1,
+                    received: color2
                 });
 
                 return res;
@@ -168,7 +198,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         setResults(newResults);
         setIsRunning(false);
-        setExpandedGroup('math'); // Open first group by default
+        setExpandedGroup('export'); // Open export group to show new tests
     };
 
     // Auto-run on mount
@@ -200,7 +230,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <FlaskConical className="text-indigo-500" />
                                 System Diagnostics
                             </h1>
-                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.0</p>
+                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.1</p>
                         </div>
                     </div>
                     
