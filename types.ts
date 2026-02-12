@@ -8,9 +8,23 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
-  email?: string; // Added for admin checks
-  role?: 'owner' | 'editor' | 'viewer'; // Optional role field
-  restrictedAssetId?: string; // IF SET: User can ONLY see this specific asset in the project
+  email?: string; 
+  role?: 'owner' | 'editor' | 'viewer'; 
+  restrictedAssetId?: string; 
+  isAdmin?: boolean; // New RBAC field
+}
+
+// Admin User Interface used in Admin Panel
+export interface AdminUser {
+    id: string;
+    name: string;
+    email: string;
+    avatar: string;
+    plan: 'free' | 'pro' | 'lifetime';
+    expiresAt: number | null;
+    isAutoRenew: boolean;
+    lastActive: number;
+    isAdmin: boolean;
 }
 
 export interface Comment {

@@ -14,8 +14,6 @@ interface ProfileProps {
   onNavigate?: (page: string) => void;
 }
 
-const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
-
 const S3_PRESETS: Record<string, Partial<S3Config>> = {
     yandex: {
         provider: 'yandex',
@@ -141,8 +139,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const isAutoRenew = !!(user?.publicMetadata as any)?.yookassaPaymentMethodId;
 
   // Check Admin Access
-  const primaryEmail = user?.primaryEmailAddress?.emailAddress;
-  const isAdmin = primaryEmail && ADMIN_EMAILS.includes(primaryEmail);
+  const role = (user?.publicMetadata as any)?.role;
+  const isAdmin = role === 'admin' || role === 'superadmin';
 
   // Load S3 Config on Mount
   useEffect(() => {
