@@ -12,10 +12,20 @@ const isDbConnectionError = (err) => {
 };
 
 // Helper: Securely filter project data for a specific user based on their permissions
-function sanitizeProjectForUser(projectData, user) {
+function sanitizeProjectForUser(projectData, user, isGuest = false) {
     if (!projectData) return null;
     
     const team = projectData.team || [];
+    
+    // If Guest (Public Link Access), hide Team completely for privacy
+    if (isGuest) {
+        return {
+            ...projectData,
+            team: [], // Hide team emails from public viewers
+            isGuestView: true
+        };
+    }
+
     const memberRecord = team.find(m => m.id === user.id);
     const isOwner = projectData.ownerId === user.id;
 
@@ -108,10 +118,8 @@ export default async function handler(req, res) {
                   // 1. Initial Access Check (Owner or Existing Member)
                   let hasAccess = await checkProjectAccess(user, projectRow);
                   
-                  // 2. Auto-Join Logic (For Public Projects)
-                  // Only run if not already a member (hasAccess is false) OR need to upgrade permissions
-                  if (!projectRow.org_id && projectData.publicAccess === 'view') {
-                      
+                  // 2. Team Join Logic (Only if strictly needed)
+                  if (!projectRow.org_id) {
                       const currentTeam = projectData.team || [];
                       const memberIndex = currentTeam.findIndex(m => m.id === user.id);
                       let shouldUpdate = false;
@@ -124,12 +132,11 @@ export default async function handler(req, res) {
                               restrictedAssetId: undefined // Remove restriction
                           };
                           shouldUpdate = true;
-                          hasAccess = true; // Ensure access is granted
+                          hasAccess = true;
                       }
-                      
-                      // Scenario B: User is NOT in team. Try to join.
+                      // Scenario B: User NOT in team.
                       else if (memberIndex === -1) {
-                          // B1. INVITE LINK -> Full Access
+                          // B1. INVITE LINK -> Full Access (Write to DB)
                           if (isInviteLink) {
                               newTeam.push({
                                   id: user.id,
@@ -137,12 +144,11 @@ export default async function handler(req, res) {
                                   avatar: user.avatar,
                                   email: user.email,
                                   role: 'viewer'
-                                  // No restrictedAssetId
                               });
                               shouldUpdate = true;
                               hasAccess = true;
                           }
-                          // B2. REVIEW LINK -> Restricted Access
+                          // B2. REVIEW LINK -> Restricted Access (Write to DB)
                           else if (specificAssetId) {
                               newTeam.push({
                                   id: user.id,
@@ -150,21 +156,16 @@ export default async function handler(req, res) {
                                   avatar: user.avatar,
                                   email: user.email,
                                   role: 'viewer',
-                                  restrictedAssetId: specificAssetId // Sandbox!
+                                  restrictedAssetId: specificAssetId
                               });
                               shouldUpdate = true;
                               hasAccess = true;
                           }
-                          // B3. DIRECT LINK (No params) -> DENY
-                          else {
-                              // Do nothing. Access remains false.
-                              // This prevents random users from joining just by guessing ID.
-                          }
+                          // B3. DIRECT LINK -> Do NOT auto-join.
                       }
 
                       if (shouldUpdate) {
                           projectData = { ...projectData, team: newTeam };
-                          // Async update, don't wait blocking
                           sql`
                               UPDATE projects 
                               SET data = ${JSON.stringify(projectData)}::jsonb 
@@ -174,12 +175,15 @@ export default async function handler(req, res) {
                   }
 
                   if (hasAccess) {
-                      // --- SANDBOXING (CRITICAL) ---
-                      // Filter data based on DB permissions.
+                      // Member Access
                       const sanitizedData = sanitizeProjectForUser(projectData, user);
                       query = [{ ...projectRow, data: sanitizedData }];
+                  } else if (projectData.publicAccess === 'view') {
+                      // Guest Access (Read Only, No DB Write)
+                      const sanitizedData = sanitizeProjectForUser(projectData, user, true); // true = isGuest
+                      query = [{ ...projectRow, data: sanitizedData }];
                   } else {
-                      return res.status(403).json({ error: "Access Denied. You must be invited to view this project." });
+                      return res.status(403).json({ error: "Access Denied. Project is private." });
                   }
               } else {
                   return res.status(404).json({ error: "Project not found" });
