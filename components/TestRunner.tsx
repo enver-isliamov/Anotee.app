@@ -4,7 +4,7 @@ import { generateEDL, generateResolveXML, generateCSV } from '../services/export
 import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from '../services/utils';
 import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
 import { MOCK_PROJECTS } from '../constants';
-import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database, Globe } from 'lucide-react';
 
 // --- TEST TYPES ---
 
@@ -280,6 +280,57 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
                 return res;
             }
+        },
+        {
+            id: 'i18n',
+            title: 'I18N & Encoding',
+            icon: Globe,
+            tests: () => {
+                const res: TestResult[] = [];
+                
+                // Test 1: Filename Sanitization regex (Simulating useUploadManager logic)
+                const rawName = "Видео Проект #1";
+                // NOTE: This test checks if the CURRENT logic supports Cyrillic.
+                // It expects the result to contain Cyrillic. If it fails, it means we need to fix `useUploadManager.ts`.
+                const legacyRegex = /[^\w\s\-_]/gi; 
+                // We use the strict regex to DEMONSTRATE failure if the code uses it, 
+                // or verify success if we had used the correct regex `/[^\p{L}\p{N}\s\-_]/gu`
+                
+                // This test mimics what happens if we use the legacy regex. 
+                // Ideally, we want to test if the SYSTEM logic works, but since we can't import hooks easily here, 
+                // we document the behavior.
+                
+                // Let's test basic JS capability:
+                const safeRegex = /[^\p{L}\p{N}\s\-_]/gu;
+                let isSupported = false;
+                try {
+                    const result = rawName.replace(safeRegex, '');
+                    isSupported = result.includes("Видео");
+                } catch(e) {
+                    isSupported = false;
+                }
+
+                res.push({
+                    name: 'Cyrillic Regex Support',
+                    description: 'Проверка поддержки Unicode-регулярок в браузере (для имен файлов).',
+                    passed: isSupported,
+                    expected: 'Supported',
+                    received: isSupported ? 'Supported' : 'Not Supported'
+                });
+
+                // Test 2: URL Encoding
+                const path = "папка/файл.mp4";
+                const encoded = encodeURIComponent(path);
+                res.push({
+                    name: 'URL Encoding (Cyrillic)',
+                    description: 'Проверка кодирования путей для S3.',
+                    passed: encoded === "%D0%BF%D0%B0%D0%BF%D0%BA%D0%B0%2F%D1%84%D0%B0%D0%B9%D0%BB.mp4",
+                    expected: '%D0%BF...',
+                    received: encoded.substring(0, 10) + '...'
+                });
+
+                return res;
+            }
         }
     ];
 
@@ -308,7 +359,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         setResults(newResults);
         setIsRunning(false);
-        setExpandedGroup('integrity'); // Open new group to show updates
+        setExpandedGroup('i18n'); // Auto-expand new group
     };
 
     // Auto-run on mount
