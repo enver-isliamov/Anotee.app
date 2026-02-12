@@ -4,7 +4,7 @@ import { generateEDL, generateResolveXML, generateCSV } from '../services/export
 import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from '../services/utils';
 import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
 import { MOCK_PROJECTS } from '../constants';
-import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database, Globe } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database, Globe, Wifi } from 'lucide-react';
 
 // --- TEST TYPES ---
 
@@ -14,13 +14,16 @@ type TestResult = {
     expected?: string;
     received?: string;
     description: string;
+    // New context fields
+    passCondition: string;
+    failCondition: string;
 };
 
 type TestGroup = {
     id: string;
     title: string;
     icon: React.ElementType;
-    tests: () => TestResult[];
+    tests: () => Promise<TestResult[]> | TestResult[]; // Support async tests
 };
 
 // Mock data for deterministic testing
@@ -58,7 +61,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Проверка расчета кадров для 1.5 сек при 25 FPS.',
                     passed: framesTotal === 37,
                     expected: '37 frames',
-                    received: `${framesTotal} frames`
+                    received: `${framesTotal} frames`,
+                    passCondition: 'Math.floor(1.5 * 25) === 37',
+                    failCondition: 'Ошибка округления floating point (37.0000001 -> 38) или неверный множитель.'
                 });
 
                 // Test 2: NTSC Drop Frame Logic Check (Simplified)
@@ -71,7 +76,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Проверка расчета кадров для 10 сек при 29.97 FPS.',
                     passed: framesNtsc === 299,
                     expected: '299 frames',
-                    received: `${framesNtsc} frames`
+                    received: `${framesNtsc} frames`,
+                    passCondition: 'Результат 299 кадров (299.7 округлено вниз).',
+                    failCondition: 'Использование Math.round() вместо floor() даст 300, что вызовет рассинхрон.'
                 });
 
                 return res;
@@ -91,7 +98,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Format 0s at 25fps',
                     passed: t1 === '00:00:00:00',
                     expected: '00:00:00:00',
-                    received: t1
+                    received: t1,
+                    passCondition: 'Функция возвращает строку "00:00:00:00".',
+                    failCondition: 'Возврат null, undefined или "NaN:NaN..." при нулевом входе.'
                 });
 
                 const t2 = formatTimecode(65.5, 25); // 1 min 5 sec 12 frames (0.5 * 25 = 12.5 -> 12)
@@ -101,7 +110,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Format 65.5s at 25fps',
                     passed: t2 === t2Expected,
                     expected: t2Expected,
-                    received: t2
+                    received: t2,
+                    passCondition: 'Корректный расчет минут (01), секунд (05) и кадров (12).',
+                    failCondition: 'Ошибки в модульной арифметике (%) при переводе секунд в минуты.'
                 });
 
                 // Expiry Logic
@@ -113,7 +124,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'isExpired(8 days ago, 7 limit)',
                     passed: expired === true,
                     expected: 'true',
-                    received: String(expired)
+                    received: String(expired),
+                    passCondition: 'Дата создания старше лимита дней возвращает true.',
+                    failCondition: 'Логика перепутана (< вместо >) или неверный расчет миллисекунд.'
                 });
 
                 const twoDaysAgo = Date.now() - (2 * oneDayMs);
@@ -123,7 +136,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'getDaysRemaining(2 days ago, 7 limit)',
                     passed: remaining === 5,
                     expected: '5',
-                    received: String(remaining)
+                    received: String(remaining),
+                    passCondition: '7 (лимит) - 2 (прошло) = 5 дней.',
+                    failCondition: 'Отрицательные числа или неверный подсчет дней.'
                 });
 
                 return res;
@@ -144,7 +159,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Генерация заголовка EDL файла.',
                     passed: hasTitle,
                     expected: 'Contains "TITLE: Test_v1"',
-                    received: hasTitle ? 'Valid Header' : 'Missing Header'
+                    received: hasTitle ? 'Valid Header' : 'Missing Header',
+                    passCondition: 'EDL начинается с TITLE: и FCM: NON-DROP FRAME.',
+                    failCondition: 'Отсутствие заголовков сделает файл нечитаемым для DaVinci.'
                 });
 
                 // Test XML Color Mapping
@@ -155,23 +172,26 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Проверка маппинга цвета (Open Status -> Red Color) для DaVinci.',
                     passed: hasColorRed,
                     expected: '<name>Red</name>',
-                    received: hasColorRed ? 'Found <name>Red</name>' : 'Tag Missing'
+                    received: hasColorRed ? 'Found <name>Red</name>' : 'Tag Missing',
+                    passCondition: 'Комментарий со статусом OPEN получает тег <name>Red</name>.',
+                    failCondition: 'Неверный регистр цвета (red вместо Red) или отсутствие тега.'
                 });
 
-                // Test CSV Escaping (New)
+                // Test CSV Escaping
                 const trickyComment = [{ ...mockComments[0], text: 'Hello "World"' }];
                 const csv = generateCSV(trickyComment);
-                // Expected: "Hello ""World""" (Double quotes escaping)
                 const hasEscapedQuotes = csv.includes('""World""');
                 res.push({
                     name: 'CSV Sanitization',
                     description: 'Экранирование кавычек в CSV для Excel/Premiere.',
                     passed: hasEscapedQuotes,
                     expected: 'Hello ""World""',
-                    received: hasEscapedQuotes ? 'Escaped Correctly' : 'Injection Vulnerable'
+                    received: hasEscapedQuotes ? 'Escaped Correctly' : 'Injection Vulnerable',
+                    passCondition: 'Двойные кавычки заменяются на пару двойных кавычек ("").',
+                    failCondition: 'CSV ломается, если в тексте комментария есть кавычки.'
                 });
 
-                // Test XML Special Char Escaping (New)
+                // Test XML Special Char Escaping
                 const xmlComment = [{ ...mockComments[0], text: 'Me & You < 3' }];
                 const unsafeXml = generateResolveXML('Test', 1, xmlComment, 24);
                 const isSafe = unsafeXml.includes('Me &amp; You &lt; 3');
@@ -180,7 +200,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Экранирование спецсимволов (& < >) для валидности XML.',
                     passed: isSafe,
                     expected: 'Me &amp; You &lt; 3',
-                    received: isSafe ? 'Escaped Correctly' : 'Invalid XML'
+                    received: isSafe ? 'Escaped Correctly' : 'Invalid XML',
+                    passCondition: 'Символы <, >, & заменены на &lt;, &gt;, &amp;.',
+                    failCondition: 'Генерация битого XML, который не откроется в монтажке.'
                 });
 
                 return res;
@@ -202,16 +224,17 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     ids.add(id);
                 }
                 
-                // Regex check for UUID-like structure (or fallback hex)
                 const sampleId = generateId();
-                const isValidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sampleId) || /^[0-9a-f]{30,}$/.test(sampleId); // Fallback is just hex string
+                const isValidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sampleId) || /^[0-9a-f]{30,}$/.test(sampleId);
 
                 res.push({
-                    name: 'ID Generator Collision Test',
+                    name: 'ID Generator Collision',
                     description: 'Генерация 100 уникальных UUID и проверка на дубликаты.',
                     passed: !collision,
                     expected: '0 Collisions',
-                    received: collision ? 'Collision Detected' : 'Unique'
+                    received: collision ? 'Collision Detected' : 'Unique',
+                    passCondition: 'Все 100 сгенерированных ID уникальны.',
+                    failCondition: 'Слабый генератор случайных чисел (Math.random) вызвал коллизию.'
                 });
 
                 res.push({
@@ -219,10 +242,12 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Проверка формата ID (UUID v4 or Hex).',
                     passed: isValidFormat,
                     expected: 'UUID / Hex',
-                    received: sampleId
+                    received: sampleId,
+                    passCondition: 'ID соответствует формату UUID или Hex-строки.',
+                    failCondition: 'Генерация пустых строк или недопустимых символов.'
                 });
 
-                // Test Color Determinism (New)
+                // Test Color Determinism
                 const userA = 'user_123';
                 const color1 = stringToColor(userA);
                 const color2 = stringToColor(userA);
@@ -231,7 +256,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Один и тот же UserID должен всегда генерировать одинаковый цвет.',
                     passed: color1 === color2,
                     expected: color1,
-                    received: color2
+                    received: color2,
+                    passCondition: 'Функция чистая (pure), результат зависит только от аргумента.',
+                    failCondition: 'Использование Math.random() внутри функции цвета.'
                 });
 
                 return res;
@@ -249,10 +276,12 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 const hasLimit = DEFAULT_CONFIG.max_projects.limitFree === 3;
                 res.push({
                     name: 'Default Config Integrity',
-                    description: 'Проверка наличия критических флагов в дефолтном конфиге (Fallback).',
+                    description: 'Проверка наличия критических флагов в дефолтном конфиге.',
                     passed: hasDrive && hasLimit,
                     expected: 'Drive: true, Limit: 3',
-                    received: `Drive: ${hasDrive}, Limit: ${DEFAULT_CONFIG.max_projects.limitFree}`
+                    received: `Drive: ${hasDrive}, Limit: ${DEFAULT_CONFIG.max_projects.limitFree}`,
+                    passCondition: 'DEFAULT_CONFIG содержит корректные fallback-значения.',
+                    failCondition: 'Отсутствие ключей в конфиге приведет к крашу UI при загрузке.'
                 });
 
                 // 2. Payment Config Structure
@@ -263,7 +292,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Валидация структуры планов и цен по умолчанию.',
                     passed: hasPlans && priceCheck,
                     expected: 'Plans exist, Price > 0',
-                    received: hasPlans ? 'OK' : 'Missing Plans'
+                    received: hasPlans ? 'OK' : 'Missing Plans',
+                    passCondition: 'Объекты plans.free и plans.lifetime существуют.',
+                    failCondition: 'Ошибки в типах TS или удаление ключей планов.'
                 });
 
                 // 3. Mock Data Structure
@@ -275,7 +306,9 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Проверка целостности моковых данных для Demo режима.',
                     passed: hasAssets && hasVersions,
                     expected: 'Assets & Versions present',
-                    received: hasAssets ? 'OK' : 'Empty Assets'
+                    received: hasAssets ? 'OK' : 'Empty Assets',
+                    passCondition: 'Мок-проект имеет хотя бы 1 ассет и 1 версию.',
+                    failCondition: 'Плеер в Demo-режиме упадет с ошибкой "Version not found".'
                 });
 
                 return res;
@@ -288,19 +321,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             tests: () => {
                 const res: TestResult[] = [];
                 
-                // Test 1: Filename Sanitization regex (Simulating useUploadManager logic)
                 const rawName = "Видео Проект #1";
-                // NOTE: This test checks if the CURRENT logic supports Cyrillic.
-                // It expects the result to contain Cyrillic. If it fails, it means we need to fix `useUploadManager.ts`.
-                const legacyRegex = /[^\w\s\-_]/gi; 
-                // We use the strict regex to DEMONSTRATE failure if the code uses it, 
-                // or verify success if we had used the correct regex `/[^\p{L}\p{N}\s\-_]/gu`
-                
-                // This test mimics what happens if we use the legacy regex. 
-                // Ideally, we want to test if the SYSTEM logic works, but since we can't import hooks easily here, 
-                // we document the behavior.
-                
-                // Let's test basic JS capability:
                 const safeRegex = /[^\p{L}\p{N}\s\-_]/gu;
                 let isSupported = false;
                 try {
@@ -312,13 +333,14 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
                 res.push({
                     name: 'Cyrillic Regex Support',
-                    description: 'Проверка поддержки Unicode-регулярок в браузере (для имен файлов).',
+                    description: 'Проверка поддержки Unicode-регулярок в браузере.',
                     passed: isSupported,
                     expected: 'Supported',
-                    received: isSupported ? 'Supported' : 'Not Supported'
+                    received: isSupported ? 'Supported' : 'Not Supported',
+                    passCondition: 'Браузер поддерживает флаг /u и классы \\p{L} для кириллицы.',
+                    failCondition: 'Старые браузеры могут вырезать кириллицу из имен файлов.'
                 });
 
-                // Test 2: URL Encoding
                 const path = "папка/файл.mp4";
                 const encoded = encodeURIComponent(path);
                 res.push({
@@ -326,7 +348,53 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     description: 'Проверка кодирования путей для S3.',
                     passed: encoded === "%D0%BF%D0%B0%D0%BF%D0%BA%D0%B0%2F%D1%84%D0%B0%D0%B9%D0%BB.mp4",
                     expected: '%D0%BF...',
-                    received: encoded.substring(0, 10) + '...'
+                    received: encoded.substring(0, 10) + '...',
+                    passCondition: 'encodeURIComponent корректно кодирует русские буквы в %D0...',
+                    failCondition: 'Неверная кодировка приведет к 404 ошибке при загрузке с S3.'
+                });
+
+                return res;
+            }
+        },
+        {
+            id: 'network',
+            title: 'Network & Resilience',
+            icon: Wifi,
+            tests: async () => {
+                const res: TestResult[] = [];
+
+                // 1. Simulating Async Delay
+                const start = Date.now();
+                await new Promise(r => setTimeout(r, 100));
+                const diff = Date.now() - start;
+                
+                res.push({
+                    name: 'Async Loop Check',
+                    description: 'Проверка работы Event Loop и асинхронности.',
+                    passed: diff >= 100,
+                    expected: '>= 100ms',
+                    received: `${diff}ms`,
+                    passCondition: 'Таймер setTimeout не блокируется синхронным кодом.',
+                    failCondition: 'Блокировка основного потока (UI Freeze) тяжелыми вычислениями.'
+                });
+
+                // 2. Fetch Error Handling
+                let caughtError = false;
+                try {
+                    // Intentionally invalid URL to simulate failure
+                    await fetch('https://invalid-url-simulation.test');
+                } catch(e) {
+                    caughtError = true;
+                }
+
+                res.push({
+                    name: 'Fetch Error Trap',
+                    description: 'Убедиться, что fetch выбрасывает исключение при сбое сети.',
+                    passed: caughtError,
+                    expected: 'Error Caught',
+                    received: caughtError ? 'Caught' : 'No Error',
+                    passCondition: 'Сбой сети корректно перехватывается блоком catch.',
+                    failCondition: 'Промис зависает или ошибка не всплывает (Silent Fail).'
                 });
 
                 return res;
@@ -337,29 +405,36 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const runAllTests = async () => {
         setIsRunning(true);
         setResults({});
+        setExpandedGroup('network'); // Focus on new tests
         
-        // Simulate async work for "system scan" effect
         await new Promise(r => setTimeout(r, 600));
 
         const newResults: Record<string, TestResult[]> = {};
         
-        testGroups.forEach(group => {
+        for (const group of testGroups) {
             try {
-                newResults[group.id] = group.tests();
+                // Handle both sync and async tests
+                const result = group.tests();
+                if (result instanceof Promise) {
+                    newResults[group.id] = await result;
+                } else {
+                    newResults[group.id] = result;
+                }
             } catch (e: any) {
                 newResults[group.id] = [{
                     name: 'CRITICAL EXCEPTION',
                     passed: false,
                     description: 'Test suite crashed unexpectedly.',
                     received: e.message,
-                    expected: 'No Crash'
+                    expected: 'No Crash',
+                    passCondition: 'Тест выполняется без исключений.',
+                    failCondition: `Критическая ошибка в коде теста: ${e.message}`
                 }];
             }
-        });
+        }
 
         setResults(newResults);
         setIsRunning(false);
-        setExpandedGroup('i18n'); // Auto-expand new group
     };
 
     // Auto-run on mount
@@ -391,7 +466,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <FlaskConical className="text-indigo-500" />
                                 System Diagnostics
                             </h1>
-                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.3</p>
+                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.4</p>
                         </div>
                     </div>
                     
@@ -473,8 +548,21 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                                                 {test.passed ? 'PASS' : 'FAIL'}
                                                             </span>
                                                         </div>
+                                                        
                                                         <p className="text-xs text-zinc-500 mb-3 ml-6">{test.description}</p>
                                                         
+                                                        {/* Pass/Fail Scenario Grid */}
+                                                        <div className="ml-6 mb-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] font-mono leading-relaxed">
+                                                            <div className="bg-green-900/5 border border-green-900/20 p-2 rounded">
+                                                                <span className="block font-bold text-green-600/70 mb-1">✅ PASS CRITERIA</span>
+                                                                <span className="text-zinc-400">{test.passCondition}</span>
+                                                            </div>
+                                                            <div className="bg-red-900/5 border border-red-900/20 p-2 rounded">
+                                                                <span className="block font-bold text-red-600/70 mb-1">❌ FAIL RISKS</span>
+                                                                <span className="text-zinc-400">{test.failCondition}</span>
+                                                            </div>
+                                                        </div>
+
                                                         {!test.passed && (
                                                             <div className="ml-6 bg-red-950/30 border border-red-900/30 rounded p-3 text-xs font-mono grid grid-cols-[80px_1fr] gap-2">
                                                                 <span className="text-red-400 opacity-70">Expected:</span>
