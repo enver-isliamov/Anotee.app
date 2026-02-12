@@ -450,4 +450,397 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
                                     </div>
                                 </div>
                             ))}
-                            <button onClick={() => addFeature(planKey as any)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-
+                            <button onClick={() => addFeature(planKey as any)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
+                                <Plus size={14} /> Add Feature
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white font-sans p-6 md:p-8">
+            <div className="max-w-[1400px] mx-auto">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onBack} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                            <ArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                <Shield className="text-indigo-600" /> Admin Console
+                            </h1>
+                            <p className="text-xs text-zinc-500">System Management & Configuration</p>
+                        </div>
+                    </div>
+                    {/* TEST RUNNER BUTTON */}
+                    <div className="flex items-center gap-2">
+                        {onNavigate && (
+                            <button 
+                                onClick={() => onNavigate('TEST_RUNNER')}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm"
+                            >
+                                <FlaskConical size={16} />
+                                System Tests
+                            </button>
+                        )}
+                        <div className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-bold border border-green-200 dark:border-green-800">
+                            Super Admin
+                        </div>
+                    </div>
+                </div>
+
+                {/* TABS */}
+                <div className="flex border-b border-zinc-200 dark:border-zinc-800 mb-8 overflow-x-auto">
+                    {['users', 'features', 'payments', 'strategy'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab as any)}
+                            className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap capitalize ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-white'}`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+
+                {/* CONTENT */}
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    
+                    {/* USERS TAB */}
+                    {activeTab === 'users' && (
+                        <div>
+                            <div className="flex justify-between items-center mb-6">
+                                <div className="relative w-full max-w-sm">
+                                    <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search users..." 
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <button onClick={fetchUsers} className="p-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-700"><RefreshCw size={18} /></button>
+                            </div>
+
+                            {usersLoading ? (
+                                <div className="flex justify-center p-12 text-zinc-400">Loading users...</div>
+                            ) : (
+                                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-zinc-50 dark:bg-zinc-800 text-zinc-500 font-medium uppercase text-xs">
+                                            <tr>
+                                                <th className="px-6 py-3">User</th>
+                                                <th className="px-6 py-3">Plan</th>
+                                                <th className="px-6 py-3">Expires</th>
+                                                <th className="px-6 py-3">Auto-Renew</th>
+                                                <th className="px-6 py-3">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                            {filteredUsers.map(user => (
+                                                <tr key={user.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                                                    <td className="px-6 py-4 flex items-center gap-3">
+                                                        <img src={user.avatar} className="w-8 h-8 rounded-full" />
+                                                        <div>
+                                                            <div className="font-bold">{user.name}</div>
+                                                            <div className="text-xs text-zinc-500">{user.email}</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.plan === 'pro' || user.plan === 'lifetime' ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'}`}>
+                                                            {user.plan}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-zinc-500">
+                                                        {user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : '-'}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {user.isAutoRenew ? <CheckCircle size={16} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border border-zinc-300"></div>}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => setSelectedUser(user)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold">Manage</button>
+                                                            {user.plan !== 'free' && (
+                                                                <button onClick={() => handleRevokePro(user.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded text-xs font-bold">Revoke</button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* FEATURES TAB */}
+                    {activeTab === 'features' && (
+                        <div className="grid grid-cols-12 gap-8">
+                            {/* Sidebar */}
+                            <div className="col-span-12 md:col-span-3 lg:col-span-2 space-y-1">
+                                {SUB_TABS.map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setSettingsSubTab(tab.id)}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${settingsSubTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                                    >
+                                        <tab.icon size={18} /> {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Content */}
+                            <div className="col-span-12 md:col-span-9 lg:col-span-10">
+                                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-xl font-bold flex items-center gap-2">
+                                            {SUB_TABS.find(t => t.id === settingsSubTab)?.label} Settings
+                                        </h2>
+                                        <button 
+                                            onClick={handleSaveConfig} 
+                                            disabled={isSavingConfig}
+                                            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-green-500/20"
+                                        >
+                                            <Save size={18} /> {isSavingConfig ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        {CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS].map((key) => {
+                                            const rule = config[key as keyof AppConfig] as FeatureRule;
+                                            return (
+                                                <div key={key} className="bg-zinc-50 dark:bg-zinc-950/50 rounded-xl p-5 border border-zinc-100 dark:border-zinc-800/50 hover:border-indigo-500/30 transition-colors">
+                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                                        <div>
+                                                            <h3 className="font-bold text-zinc-800 dark:text-zinc-200 text-sm md:text-base">{FEATURE_DESCRIPTIONS[key as keyof AppConfig] || key}</h3>
+                                                            <code className="text-xs text-zinc-400 font-mono mt-1 block">{key}</code>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                                                            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                                                                <input type="checkbox" checked={rule.enabledForFree} onChange={(e) => handleConfigChange(key as any, 'enabledForFree', e.target.checked)} className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500" />
+                                                                <span className={rule.enabledForFree ? 'text-green-600' : 'text-zinc-400'}>FREE</span>
+                                                            </label>
+                                                            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700"></div>
+                                                            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                                                                <input type="checkbox" checked={rule.enabledForPro} onChange={(e) => handleConfigChange(key as any, 'enabledForPro', e.target.checked)} className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500" />
+                                                                <span className={rule.enabledForPro ? 'text-indigo-600' : 'text-zinc-400'}>PRO</span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* LIMITS INPUTS */}
+                                                    {(rule.limitFree !== undefined || rule.limitPro !== undefined) && (
+                                                        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                                                            <div>
+                                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Free Limit</label>
+                                                                <input 
+                                                                    type="number" 
+                                                                    value={rule.limitFree} 
+                                                                    onChange={(e) => handleConfigChange(key as any, 'limitFree', parseInt(e.target.value))}
+                                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-3 py-1.5 text-sm font-mono focus:border-indigo-500 outline-none"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Pro Limit</label>
+                                                                <input 
+                                                                    type="number" 
+                                                                    value={rule.limitPro} 
+                                                                    onChange={(e) => handleConfigChange(key as any, 'limitPro', parseInt(e.target.value))}
+                                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-3 py-1.5 text-sm font-mono focus:border-indigo-500 outline-none"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PAYMENTS TAB */}
+                    {activeTab === 'payments' && (
+                        <div>
+                            {/* Provider Config */}
+                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 mb-8 shadow-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-bold flex items-center gap-2">
+                                        <CreditCard className="text-indigo-500" /> Payment Provider
+                                    </h2>
+                                    <button onClick={handleSavePaymentConfig} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20">
+                                        <Save size={16} /> Save Keys
+                                    </button>
+                                </div>
+                                <div className="grid md:grid-cols-2 gap-8">
+                                    {/* Active Provider Selector */}
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-bold uppercase text-zinc-500 mb-2">Active Gateway</label>
+                                        <div className="flex gap-4">
+                                            <label className={`flex-1 border rounded-xl p-4 cursor-pointer transition-all ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800'}`}>
+                                                <input type="radio" name="provider" value="yookassa" checked={paymentConfig.activeProvider === 'yookassa'} onChange={() => setPaymentConfig(p => ({...p, activeProvider: 'yookassa'}))} className="sr-only"/>
+                                                <div className="font-bold mb-1">YooKassa (Autopay)</div>
+                                                <div className="text-xs text-zinc-500">Supports recurrent payments (subscriptions).</div>
+                                            </label>
+                                            <label className={`flex-1 border rounded-xl p-4 cursor-pointer transition-all ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800'}`}>
+                                                <input type="radio" name="provider" value="prodamus" checked={paymentConfig.activeProvider === 'prodamus'} onChange={() => setPaymentConfig(p => ({...p, activeProvider: 'prodamus'}))} className="sr-only"/>
+                                                <div className="font-bold mb-1">Prodamus</div>
+                                                <div className="text-xs text-zinc-500">Simple payment links. Good for global cards.</div>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* YooKassa Keys */}
+                                    <div className={`space-y-4 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/50 ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50' : ''}`}>
+                                        <h3 className="font-bold text-sm">YooKassa API</h3>
+                                        <div>
+                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Shop ID</label>
+                                            <input type="text" value={paymentConfig.yookassa.shopId} onChange={e => setPaymentConfig(p => ({...p, yookassa: {...p.yookassa, shopId: e.target.value}}))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Secret Key</label>
+                                            <input type="password" value={paymentConfig.yookassa.secretKey} onChange={e => setPaymentConfig(p => ({...p, yookassa: {...p.yookassa, secretKey: e.target.value}}))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
+                                        </div>
+                                    </div>
+
+                                    {/* Prodamus Keys */}
+                                    <div className={`space-y-4 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/50 ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50' : ''}`}>
+                                        <h3 className="font-bold text-sm">Prodamus</h3>
+                                        <div>
+                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Payment Page URL</label>
+                                            <input type="text" value={paymentConfig.prodamus.url} onChange={e => setPaymentConfig(p => ({...p, prodamus: {...p.prodamus, url: e.target.value}}))} placeholder="https://demo.payform.ru" className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Secret Key</label>
+                                            <input type="password" value={paymentConfig.prodamus.secretKey} onChange={e => setPaymentConfig(p => ({...p, prodamus: {...p.prodamus, secretKey: e.target.value}}))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Plan Builder (Drag & Drop) */}
+                            <div>
+                                <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                    <Layout className="text-indigo-500" /> Plan Builder
+                                </h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    {paymentConfig.planOrder.map((planKey, idx) => (
+                                        renderPlanEditor(planKey, idx)
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STRATEGY TAB (DASHBOARD) */}
+                    {activeTab === 'strategy' && (
+                        <div className="space-y-8">
+                            {/* Goals */}
+                            <div className="grid grid-cols-4 gap-6">
+                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Цель (Phase 1)</div>
+                                    <div className="text-3xl font-bold text-white mb-1">150</div>
+                                    <div className="text-sm text-zinc-400">Лицензий Lifetime</div>
+                                </div>
+                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Выручка</div>
+                                    <div className="text-3xl font-bold text-green-400 mb-1">435k ₽</div>
+                                    <div className="text-sm text-zinc-400">Target (150 * 2900)</div>
+                                </div>
+                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Churn Rate</div>
+                                    <div className="text-3xl font-bold text-indigo-400 mb-1">0%</div>
+                                    <div className="text-sm text-zinc-400">Lifetime = No Churn</div>
+                                </div>
+                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Runway</div>
+                                    <div className="text-3xl font-bold text-white mb-1">∞</div>
+                                    <div className="text-sm text-zinc-400">Self-Funded</div>
+                                </div>
+                            </div>
+
+                            {/* Roadmap Timeline */}
+                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8">
+                                <h3 className="font-bold text-lg mb-6">Execution Plan</h3>
+                                <div className="relative">
+                                    <div className="absolute top-1/2 left-0 right-0 h-1 bg-zinc-100 dark:bg-zinc-800 -translate-y-1/2 rounded-full"></div>
+                                    <div className="grid grid-cols-3 gap-4 relative z-10">
+                                        <div className="text-center">
+                                            <div className="w-4 h-4 bg-green-500 rounded-full mx-auto mb-4 border-4 border-white dark:border-zinc-900 box-content"></div>
+                                            <div className="font-bold text-sm">Month 1-3</div>
+                                            <div className="text-xs text-zinc-500 mt-1">Infrastructure & Core Features</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="w-4 h-4 bg-indigo-500 rounded-full mx-auto mb-4 border-4 border-white dark:border-zinc-900 box-content"></div>
+                                            <div className="font-bold text-sm">Month 4-6</div>
+                                            <div className="text-xs text-zinc-500 mt-1">Marketing & First 100 Sales</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="w-4 h-4 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-4 border-4 border-white dark:border-zinc-900 box-content"></div>
+                                            <div className="font-bold text-sm">Month 7+</div>
+                                            <div className="text-xs text-zinc-500 mt-1">SaaS Transition (Monthly)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Growth Hacking */}
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                                    <h3 className="font-bold mb-4 flex items-center gap-2"><Target size={18} className="text-red-500"/> Channels</h3>
+                                    <ul className="space-y-3 text-sm text-zinc-400">
+                                        <li className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> Telegram Communities (Filmmakers)</li>
+                                        <li className="flex items-center gap-2"><Circle size={14}/> Direct Sales (Studios)</li>
+                                        <li className="flex items-center gap-2"><Circle size={14}/> YouTube Integration (Reviews)</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                                    <h3 className="font-bold mb-4 flex items-center gap-2"><Lightbulb size={18} className="text-yellow-500"/> Features Pipeline</h3>
+                                    <ul className="space-y-3 text-sm text-zinc-400">
+                                        <li className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> DaVinci XML Export</li>
+                                        <li className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> Cloud S3 Integration</li>
+                                        <li className="flex items-center gap-2"><Circle size={14}/> AI Transcription V2 (Diarization)</li>
+                                        <li className="flex items-center gap-2"><Circle size={14}/> Mobile App (PWA+)</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* GRANT MODAL */}
+            {selectedUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl relative">
+                        <button onClick={() => setSelectedUser(null)} className="absolute top-4 right-4 text-zinc-400 hover:text-white"><X size={20} /></button>
+                        <h3 className="text-lg font-bold mb-4">Grant Pro Status</h3>
+                        <p className="text-sm text-zinc-500 mb-4">User: <strong>{selectedUser.name}</strong></p>
+                        
+                        <div className="space-y-3 mb-6">
+                            <label className="block text-xs font-bold uppercase text-zinc-500">Duration</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button onClick={() => setGrantDuration(30)} className={`py-2 rounded-lg text-xs font-bold border ${grantDuration === 30 ? 'bg-indigo-600 text-white border-indigo-600' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'}`}>30 Days</button>
+                                <button onClick={() => setGrantDuration(365)} className={`py-2 rounded-lg text-xs font-bold border ${grantDuration === 365 ? 'bg-indigo-600 text-white border-indigo-600' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'}`}>1 Year</button>
+                                <button onClick={() => setGrantDuration(0)} className={`py-2 rounded-lg text-xs font-bold border ${grantDuration === 0 ? 'bg-green-600 text-white border-green-600' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'}`}>Lifetime</button>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleGrantPro} 
+                            disabled={isGranting}
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                        >
+                            <Crown size={16} /> Grant Access
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
