@@ -93,6 +93,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   
+  // Refactored Share Modal: Tabs
+  const [shareTab, setShareTab] = useState<'invite' | 'public'>('public');
+  const [isTogglingAccess, setIsTogglingAccess] = useState(false);
+
   // Org Settings Modal
   const [isOrgSettingsOpen, setIsOrgSettingsOpen] = useState(false);
   
@@ -208,6 +212,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         return;
     }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
+    setShareTab('public'); // Default
     setIsShareModalOpen(true);
   };
 
@@ -244,17 +249,20 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   const togglePublicAccess = async () => {
+      setIsTogglingAccess(true);
       const newAccess = project.publicAccess === 'view' ? 'none' : 'view';
       if (!isMockMode) {
           try {
               await api.patchProject(project.id, { publicAccess: newAccess }, project._version || 0);
           } catch(e) {
               notify("Failed to update settings", "error");
+              setIsTogglingAccess(false);
               return;
           }
       }
       onUpdateProject({ ...project, publicAccess: newAccess });
       notify(newAccess === 'view' ? "Link access enabled" : "Link access disabled", "info");
+      setIsTogglingAccess(false);
   };
 
   const handleInviteUser = async () => {
@@ -312,8 +320,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
     let url = '';
     
     if (shareTarget?.type === 'project') {
-       // Invite Link: Explicitly add invite=true
-       url = `${origin}?projectId=${shareTarget.id}&invite=true`;
+       if (shareTab === 'invite') {
+           url = `${origin}?projectId=${shareTarget.id}&invite=true`;
+       } else {
+           url = `${origin}?projectId=${shareTarget.id}`;
+       }
     } else {
        // Review Link: Explicitly limit to asset
        url = `${origin}?projectId=${project.id}&assetId=${shareTarget?.id}`;
@@ -464,7 +475,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
           {/* PERSONAL PROJECT INDICATOR */}
           {!isRestrictedUser && !project.orgId && (
-             <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace">
+             <div 
+                id="tour-context-badge"
+                className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace"
+             >
                  <UserIcon size={12} />
                  <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
              </div>
@@ -633,7 +647,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </div>
       )}
       
-       {/* SHARE MODALS */}
+       {/* SHARE MODALS - UNIFIED */}
        {(isShareModalOpen || isParticipantsModalOpen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm shadow-2xl relative p-6">
@@ -646,7 +660,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                           {shareTarget.type === 'project' ? <UserPlus size={18} /> : <Eye size={18} />}
                       </div>
                       <h2 className="text-lg font-bold text-white">
-                          {shareTarget.type === 'project' ? "Invite Team" : "Share for Review"}
+                          Share "{shareTarget.name}"
                       </h2>
                   </div>
                   
@@ -659,71 +673,123 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       </div>
                   ) : (
                       <>
-                        {/* Access Type Explainer */}
-                        <div className={`mb-4 p-3 rounded-xl border flex items-start gap-3 ${shareTarget.type === 'project' ? 'bg-green-900/10 border-green-500/20' : 'bg-orange-900/10 border-orange-500/20'}`}>
-                            <div className={`shrink-0 mt-0.5 ${shareTarget.type === 'project' ? 'text-green-500' : 'text-orange-500'}`}>
-                                {shareTarget.type === 'project' ? <Globe size={16} /> : <EyeOff size={16} />}
-                            </div>
-                            <div>
-                                <div className={`text-xs font-bold uppercase mb-1 ${shareTarget.type === 'project' ? 'text-green-400' : 'text-orange-400'}`}>
-                                    {shareTarget.type === 'project' ? "Full Access (Invite)" : "Restricted Access (Review)"}
-                                </div>
-                                <p className="text-[11px] text-zinc-400 leading-relaxed">
-                                    {shareTarget.type === 'project' 
-                                        ? "User will be added to the team and can see ALL files in this project." 
-                                        : "User will see ONLY this specific file. Access to other assets is blocked."}
-                                </p>
-                            </div>
-                        </div>
-
-                        {shareTarget.type === 'project' && isProjectOwner && (
-                            <div className="mb-4 bg-zinc-800/50 p-3 rounded-xl border border-zinc-700 flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-zinc-300">
-                                    <Globe size={16} className={project.publicAccess === 'view' ? 'text-green-400' : 'text-zinc-500'} />
-                                    <div className="flex flex-col"><span className="text-xs font-bold text-white">Public Access</span><span className="text-[9px] text-zinc-500">Anyone with link can view</span></div>
-                                </div>
-                                <button onClick={togglePublicAccess} className={`w-10 h-5 rounded-full relative transition-colors ${project.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}><div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${project.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div></button>
+                        {/* UNIFIED TABS FOR PROJECT SHARE */}
+                        {shareTarget.type === 'project' && (
+                            <div className="flex p-1 bg-zinc-800 rounded-xl mb-6">
+                                <button 
+                                    onClick={() => setShareTab('public')}
+                                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${shareTab === 'public' ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                >
+                                    Client Review
+                                </button>
+                                <button 
+                                    onClick={() => setShareTab('invite')}
+                                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${shareTab === 'invite' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                >
+                                    Invite Team
+                                </button>
                             </div>
                         )}
 
-                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 mb-2">
-                            <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">
-                                {shareTarget.type === 'project' ? "Invite Link" : "Review Link"}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <input 
-                                    type="text" 
-                                    readOnly 
-                                    value={
-                                        shareTarget.type === 'project' 
-                                            ? `${window.location.origin}?projectId=${shareTarget.id}&invite=true` // Invite Link
-                                            : `${window.location.origin}?projectId=${project.id}&assetId=${shareTarget.id}` // Asset Review Link
-                                    } 
-                                    className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
-                                />
-                                <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-medium ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>{isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}</button>
-                            </div>
-                        </div>
-                        
-                        {/* Invite Collaborator Section */}
-                        {shareTarget.type === 'project' && (
-                            <div className="mt-4 border-t border-zinc-800 pt-4">
-                                <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2 flex items-center gap-2">
-                                    Invite Collaborator (Personal)
-                                    {!canInviteTeam && <span className="px-1.5 py-0.5 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-500/20 flex items-center gap-1"><Crown size={8} /> PRO</span>}
-                                </div>
-                                
-                                {canInviteTeam ? (
-                                    <div className="flex gap-2">
-                                        <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
-                                        <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                        {/* TAB 1: CLIENT REVIEW (PUBLIC LINK) */}
+                        {(shareTab === 'public' || shareTarget.type === 'asset') && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                                <div className={`p-3 rounded-xl border flex items-start gap-3 ${shareTarget.type === 'project' ? 'bg-blue-900/10 border-blue-500/20' : 'bg-orange-900/10 border-orange-500/20'}`}>
+                                    <Globe className={`shrink-0 mt-0.5 ${shareTarget.type === 'project' ? 'text-blue-400' : 'text-orange-400'}`} size={18} />
+                                    <div>
+                                        <h3 className={`text-xs font-bold mb-1 ${shareTarget.type === 'project' ? 'text-blue-300' : 'text-orange-300'}`}>
+                                            {shareTarget.type === 'project' ? "Public Access" : "Restricted Access"}
+                                        </h3>
+                                        <p className={`text-[10px] leading-relaxed ${shareTarget.type === 'project' ? 'text-blue-200/70' : 'text-orange-200/70'}`}>
+                                            {shareTarget.type === 'project' 
+                                                ? "Anyone with the link can view files. No sign-up required." 
+                                                : "User will see ONLY this specific file."}
+                                        </p>
                                     </div>
-                                ) : (
-                                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
-                                        <p className="text-[10px] text-zinc-500 mb-2">Invite specific people to your team to collaborate privately.</p>
-                                        <button className="w-full bg-zinc-800 text-zinc-400 text-xs font-bold py-1.5 rounded cursor-not-allowed opacity-50" disabled>Upgrade to Invite</button>
+                                </div>
+
+                                {shareTarget.type === 'project' && (
+                                    <div className="flex items-center justify-between py-2 border-b border-zinc-800">
+                                        <span className="text-sm text-zinc-300 font-medium">Enable Link Access</span>
+                                        <button 
+                                            onClick={togglePublicAccess}
+                                            disabled={isTogglingAccess}
+                                            className={`w-10 h-5 rounded-full relative transition-colors ${project.publicAccess === 'view' ? 'bg-green-500' : 'bg-zinc-600'}`}
+                                        >
+                                            <div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${project.publicAccess === 'view' ? 'left-6' : 'left-1'}`}></div>
+                                        </button>
                                     </div>
                                 )}
+
+                                {(project.publicAccess === 'view' || shareTarget.type === 'asset') && (
+                                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                                        <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Review Link</div>
+                                        <div className="flex items-center gap-2">
+                                            <input 
+                                                type="text" 
+                                                readOnly 
+                                                value={
+                                                    shareTarget.type === 'project' 
+                                                        ? `${window.location.origin}?projectId=${shareTarget.id}` 
+                                                        : `${window.location.origin}?projectId=${project.id}&assetId=${shareTarget.id}`
+                                                } 
+                                                className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
+                                            />
+                                            <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-bold ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                                                {isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* TAB 2: INVITE TEAM */}
+                        {shareTarget.type === 'project' && shareTab === 'invite' && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                <div className="bg-green-900/10 border border-green-500/20 p-3 rounded-xl flex gap-3">
+                                    <UserPlus className="text-green-400 shrink-0 mt-0.5" size={18} />
+                                    <div>
+                                        <h3 className="text-xs font-bold text-green-300 mb-1">Team Member</h3>
+                                        <p className="text-[10px] text-green-200/70 leading-relaxed">
+                                            Full access to edit, upload, and comment. User will be added to the project team.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                                    <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Invite Link</div>
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="text" 
+                                            readOnly 
+                                            value={`${window.location.origin}?projectId=${shareTarget.id}&invite=true`} 
+                                            className="bg-transparent flex-1 text-xs text-zinc-300 outline-none truncate font-mono" 
+                                        />
+                                        <button onClick={handleCopyLink} className={`px-3 py-1.5 rounded text-xs transition-all shrink-0 flex items-center gap-1 font-bold ${isCopied ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                                            {isCopied ? <Check size={12} /> : <Copy size={12} />}{isCopied ? t('common.copied') : t('common.copy')}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 border-t border-zinc-800 pt-4">
+                                    <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2 flex items-center gap-2">
+                                        Invite via Email
+                                        {!canInviteTeam && <span className="px-1.5 py-0.5 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-500/20 flex items-center gap-1"><Crown size={8} /> PRO</span>}
+                                    </div>
+                                    
+                                    {canInviteTeam ? (
+                                        <div className="flex gap-2">
+                                            <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Enter email..." className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white flex-1 outline-none focus:border-indigo-600" />
+                                            <button onClick={handleInviteUser} disabled={!inviteEmail} className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Add</button>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-center">
+                                            <p className="text-[10px] text-zinc-500 mb-2">Invite specific people to your team to collaborate privately.</p>
+                                            <button className="w-full bg-zinc-800 text-zinc-400 text-xs font-bold py-1.5 rounded cursor-not-allowed opacity-50" disabled>Upgrade to Invite</button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                       </>

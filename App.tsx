@@ -5,7 +5,7 @@ import { ProjectView } from './components/ProjectView';
 import { Player } from './components/Player';
 import { Login } from './components/Login';
 import { Profile } from './components/Profile';
-import { AdminPanel } from './components/AdminPanel'; // Import new component
+import { AdminPanel } from './components/AdminPanel';
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { LegalPage } from './components/LegalPages';
 import { LiveDemo } from './components/LiveDemo';
@@ -31,7 +31,7 @@ type ViewState =
   | { type: 'PROJECT_VIEW', projectId: string, restrictedAssetId?: string }
   | { type: 'PLAYER', assetId: string, projectId: string, restrictedAssetId?: string }
   | { type: 'PROFILE' }
-  | { type: 'ADMIN' } // NEW VIEW STATE
+  | { type: 'ADMIN' }
   | { type: 'WORKFLOW' }
   | { type: 'ABOUT' }
   | { type: 'PRICING' }
@@ -104,8 +104,9 @@ const TOUR_STEPS: Record<string, TourStep[]> = {
     ],
     PROJECT_VIEW: [
         { id: 'tour-upload-zone', title: '1. Загрузка видео', desc: 'Просто перетащите файл в эту зону. Мы автоматически создадим легкие прокси для быстрого просмотра.' },
-        { id: 'tour-assets-grid', title: '2. Ваши файлы', desc: 'Здесь отображаются все загруженные видео. Кликните, чтобы открыть плеер.' },
-        { id: 'tour-share-btn', title: '3. Приглашение', desc: 'Готово к показу? Отправьте ссылку клиенту или добавьте коллегу в команду.' }
+        { id: 'tour-context-badge', title: '2. Рабочее пространство', desc: 'Этот бейдж показывает, кому принадлежит проект. "Personal" — это ваш личный проект. Если здесь название компании — проект доступен всей организации.', position: 'bottom' },
+        { id: 'tour-assets-grid', title: '3. Ваши файлы', desc: 'Здесь отображаются все загруженные видео. Кликните, чтобы открыть плеер.' },
+        { id: 'tour-share-btn', title: '4. Приглашение', desc: 'Готово к показу? Отправьте публичную ссылку клиенту (для просмотра) или пригласите коллегу в команду (для редактирования).' }
     ],
     PLAYER: [
         { id: 'tour-version-selector', title: '1. Версии файла', desc: 'Загрузили новую версию монтажа? Переключайтесь между v1, v2, v3 здесь. История сохраняется.', position: 'bottom' },
@@ -137,7 +138,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   
-  // Timeout State for Diagnostics
   const [showTimeoutMsg, setShowTimeoutMsg] = useState(false);
 
   // Onboarding Visibility State
@@ -175,14 +175,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined, directAssetId || undefined);
   };
 
-  // --- SMART POLLING OPTIMIZATION ---
-  // Only poll frequently (15s) when in Player View to get new comments.
-  // In Dashboard, disable polling (save requests) and rely on Focus Revalidation.
   const pollingInterval = view.type === 'PLAYER' ? 15000 : 0;
 
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
       refreshInterval: pollingInterval, 
-      revalidateOnFocus: true, // Keep this ON to update when user comes back to tab
+      revalidateOnFocus: true,
       revalidateOnReconnect: true,
       dedupingInterval: 5000,
       keepPreviousData: true
@@ -275,7 +272,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         const aId = params.get('assetId');
         const path = window.location.pathname;
 
-        // Routing Logic
         if (path === '/panel' || path === '/admin') {
             setView({ type: 'ADMIN' });
         } else if (path === '/terms') {
@@ -295,7 +291,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         } else if (path === '/demo') {
             setView({ type: 'LIVE_DEMO' });
         } else if (pId && aId) {
-            setView({ type: 'PLAYER', projectId: pId, assetId: aId, restrictedAssetId: aId }); // Set Restricted Asset
+            setView({ type: 'PLAYER', projectId: pId, assetId: aId, restrictedAssetId: aId }); 
         } else if (pId) {
             setView({ type: 'PROJECT_VIEW', projectId: pId });
         } else {
@@ -579,8 +575,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  // --- RENDER ---
-
   if (!isLoaded) return (
         <div className="h-screen w-screen bg-zinc-950 flex flex-col items-center justify-center p-4 text-center">
             <Loader2 size={48} className="text-indigo-500 animate-spin mb-6" />
@@ -681,7 +675,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 restrictedAssetId={view.restrictedAssetId}
                 isMockMode={isMockMode}
                 onUploadAsset={handleUploadAsset} 
-                uploadTasks={uploadTasks} // NEW
+                uploadTasks={uploadTasks} 
             />
           </ErrorBoundary>
         )}
@@ -701,12 +695,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           </ErrorBoundary>
         )}
         
-        {/* Only show global UploadWidget if NOT in ProjectView */}
         {view.type !== 'PROJECT_VIEW' && (
             <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
         )}
         
-        {/* NEW TOUR GUIDE */}
         {tourTargetId && (
             <OnboardingWidget 
                 targetId={tourTargetId}
@@ -729,7 +721,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 };
 
-// ... Rest of file (AuthWrapper, App) unchanged ...
 const AuthWrapper: React.FC = () => {
     const { user, isLoaded, isSignedIn } = useUser();
     const { getToken, signOut } = useAuth();
