@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users, FlaskConical } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
 
 interface AdminUser {
@@ -57,7 +57,7 @@ const SUB_TABS = [
     { id: 'ui', label: 'Интерфейс', icon: Layout },
 ];
 
-export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: string) => void }> = ({ onBack, onNavigate }) => {
     const { getToken } = useAuth();
     const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy'>('users');
     const [settingsSubTab, setSettingsSubTab] = useState('general');
@@ -87,6 +87,10 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     // Drag and Drop Refs
     const dragItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
     const dragOverItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
+
+    // Stats Calculation
+    const totalUsers = users.length;
+    const proUsers = users.filter(u => u.plan === 'pro' || u.plan === 'lifetime').length;
 
     const fetchUsers = async () => {
         setUsersLoading(true);
@@ -451,19 +455,8 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 </div>
                             ))}
                             <button onClick={() => addFeature(planKey as any)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
-                                <Plus size={12} /> Add Feature
+                                <Plus size={14} /> Add Feature
                             </button>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-auto">
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>
-                            <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
-                        </div>
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Limit</label>
-                            <input type="text" placeholder="150 мест" value={plan.footerLimit || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerLimit', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-500"/>
                         </div>
                     </div>
                 </div>
@@ -471,83 +464,78 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         );
     };
 
-    // Helper to render a config row
-    const renderConfigRow = (key: string, rule: FeatureRule) => (
-        <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex items-start gap-3">
-                <div className={`p-2 rounded-lg shrink-0 mt-1 ${key.startsWith('ui_') ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
-                    {key.startsWith('ui_') ? <Layout size={18} /> : <Cpu size={18} />}
+    const renderConfigRow = (key: string, rule: FeatureRule) => {
+        return (
+            <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex flex-col gap-3">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h4 className="font-bold text-sm text-zinc-900 dark:text-white">
+                            {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || key}
+                        </h4>
+                        <p className="text-[10px] text-zinc-500 font-mono mt-0.5">{key}</p>
+                    </div>
                 </div>
-                <div>
-                    <div className="font-bold text-sm text-zinc-900 dark:text-white capitalize">{key.replace(/_/g, ' ')}</div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                        {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || "Системная настройка"}
+
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                    {/* Free Tier */}
+                    <div>
+                        <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Free Tier</div>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-zinc-600 dark:text-zinc-400">Enabled</span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={rule.enabledForFree}
+                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                        {rule.limitFree !== undefined && (
+                            <div>
+                                <label className="text-[10px] text-zinc-500 block mb-1">Limit</label>
+                                <input
+                                    type="number"
+                                    value={rule.limitFree}
+                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
+                                    className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs font-mono"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Pro Tier */}
+                    <div className="pl-4 border-l border-zinc-100 dark:border-zinc-800">
+                        <div className="text-[10px] uppercase font-bold text-indigo-500 mb-2">Pro Tier</div>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-zinc-600 dark:text-zinc-400">Enabled</span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={rule.enabledForPro}
+                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                        {rule.limitPro !== undefined && (
+                            <div>
+                                <label className="text-[10px] text-zinc-500 block mb-1">Limit</label>
+                                <input
+                                    type="number"
+                                    value={rule.limitPro}
+                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
+                                    className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs font-mono"
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 lg:gap-8 w-full lg:w-auto border-t lg:border-t-0 border-zinc-100 dark:border-zinc-800 pt-3 lg:pt-0">
-                {/* Limits Input (Only for max_projects) */}
-                {(key === 'max_projects') && (
-                    <div className="flex items-center gap-3 w-full sm:w-auto bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                        <div className="flex flex-col">
-                            <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Free Limit</label>
-                            <input 
-                                type="number" 
-                                value={rule.limitFree || 0}
-                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
-                                className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500 text-center"
-                            />
-                        </div>
-                        <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700"></div>
-                        <div className="flex flex-col">
-                            <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Pro Limit</label>
-                            <input 
-                                type="number" 
-                                value={rule.limitPro || 0}
-                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
-                                className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500 text-center"
-                            />
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex gap-4 w-full sm:w-auto justify-between sm:justify-start">
-                    <label className="flex items-center gap-2 cursor-pointer group select-none">
-                        <div className="relative">
-                            <input 
-                                type="checkbox" 
-                                checked={rule.enabledForFree} 
-                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
-                                className="peer sr-only"
-                            />
-                            <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
-                        </div>
-                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors">Free</span>
-                    </label>
-                    
-                    <label className="flex items-center gap-2 cursor-pointer group select-none">
-                        <div className="relative">
-                            <input 
-                                type="checkbox" 
-                                checked={rule.enabledForPro} 
-                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
-                                className="peer sr-only"
-                            />
-                            <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
-                        </div>
-                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors">Pro</span>
-                    </label>
-                </div>
-            </div>
-        </div>
-    );
-
-    // Stats
-    const totalUsers = users.length;
-    const proUsers = users.filter(u => u.plan === 'pro').length;
-
-    const activeConfigKeys = CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS] || [];
+        );
+    };
 
     return (
         <div className="w-full mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
@@ -563,6 +551,21 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <Shield size={24} className="text-indigo-600 dark:text-indigo-400"/> 
                                 Admin Dashboard
                             </h1>
+                        </div>
+                    </div>
+                    {/* TEST RUNNER BUTTON */}
+                    <div className="flex items-center gap-2">
+                        {onNavigate && (
+                            <button 
+                                onClick={() => onNavigate('TEST_RUNNER')}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm"
+                            >
+                                <FlaskConical size={16} />
+                                System Tests
+                            </button>
+                        )}
+                        <div className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-bold border border-green-200 dark:border-green-800">
+                            Super Admin
                         </div>
                     </div>
                 </div>
@@ -842,7 +845,7 @@ export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     <div className="space-y-3">
-                        {activeConfigKeys.map((key) => renderConfigRow(key, config[key as keyof AppConfig]))}
+                        {CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS].map((key) => renderConfigRow(key, config[key as keyof AppConfig]))}
                     </div>
 
                     <div className="mt-8 flex justify-end sticky bottom-6 z-10">
