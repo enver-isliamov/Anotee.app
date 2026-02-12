@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { generateEDL, generateResolveXML, generateCSV } from '../services/exportService';
 import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from '../services/utils';
-import { Comment, CommentStatus } from '../types';
-import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock } from 'lucide-react';
+import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
+import { MOCK_PROJECTS } from '../constants';
+import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database } from 'lucide-react';
 
 // --- TEST TYPES ---
 
@@ -235,6 +236,50 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
                 return res;
             }
+        },
+        {
+            id: 'integrity',
+            title: 'Data Integrity & Configs',
+            icon: Database,
+            tests: () => {
+                const res: TestResult[] = [];
+
+                // 1. Feature Flags Fallback
+                const hasDrive = DEFAULT_CONFIG.google_drive.enabledForPro;
+                const hasLimit = DEFAULT_CONFIG.max_projects.limitFree === 3;
+                res.push({
+                    name: 'Default Config Integrity',
+                    description: 'Проверка наличия критических флагов в дефолтном конфиге (Fallback).',
+                    passed: hasDrive && hasLimit,
+                    expected: 'Drive: true, Limit: 3',
+                    received: `Drive: ${hasDrive}, Limit: ${DEFAULT_CONFIG.max_projects.limitFree}`
+                });
+
+                // 2. Payment Config Structure
+                const hasPlans = !!DEFAULT_PAYMENT_CONFIG.plans.free && !!DEFAULT_PAYMENT_CONFIG.plans.lifetime;
+                const priceCheck = DEFAULT_PAYMENT_CONFIG.prices.lifetime > 0;
+                res.push({
+                    name: 'Payment Defaults',
+                    description: 'Валидация структуры планов и цен по умолчанию.',
+                    passed: hasPlans && priceCheck,
+                    expected: 'Plans exist, Price > 0',
+                    received: hasPlans ? 'OK' : 'Missing Plans'
+                });
+
+                // 3. Mock Data Structure
+                const mockProject = MOCK_PROJECTS[0];
+                const hasAssets = mockProject.assets.length > 0;
+                const hasVersions = mockProject.assets[0]?.versions.length > 0;
+                res.push({
+                    name: 'Mock Data Validity',
+                    description: 'Проверка целостности моковых данных для Demo режима.',
+                    passed: hasAssets && hasVersions,
+                    expected: 'Assets & Versions present',
+                    received: hasAssets ? 'OK' : 'Empty Assets'
+                });
+
+                return res;
+            }
         }
     ];
 
@@ -263,7 +308,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         setResults(newResults);
         setIsRunning(false);
-        setExpandedGroup('time'); // Open new group to show updates
+        setExpandedGroup('integrity'); // Open new group to show updates
     };
 
     // Auto-run on mount
@@ -295,7 +340,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <FlaskConical className="text-indigo-500" />
                                 System Diagnostics
                             </h1>
-                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.2</p>
+                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.3</p>
                         </div>
                     </div>
                     

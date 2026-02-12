@@ -40,6 +40,11 @@
 *   **ID Format Check:** Валидация формата ID (UUID v4 structure).
 *   **Color Determinism:** Проверка, что функция `stringToColor` всегда возвращает одинаковый цвет для одного и того же User ID (нет случайности).
 
+#### 5. Data Integrity & Configs (New)
+*   **Default Config Integrity:** Проверка наличия критических флагов (`google_drive`, `max_projects`) в случае сбоя загрузки с сервера.
+*   **Payment Defaults:** Валидация структуры тарифных планов (наличие Free и Lifetime, цены > 0).
+*   **Mock Data Validity:** Проверка целостности демо-данных (наличие ассетов и версий).
+
 ---
 
 ## 3. Интеграционное Тестирование (Backend API)
