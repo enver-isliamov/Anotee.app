@@ -405,7 +405,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const runAllTests = async () => {
         setIsRunning(true);
         setResults({});
-        setExpandedGroup('network'); // Focus on new tests
+        setExpandedGroup('network'); // Focus on new tests 
         
         await new Promise(r => setTimeout(r, 600));
 
