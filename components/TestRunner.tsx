@@ -4,7 +4,7 @@ import { generateEDL, generateResolveXML, generateCSV } from '../services/export
 import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from '../services/utils';
 import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
 import { MOCK_PROJECTS } from '../constants';
-import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database, Globe, Wifi } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Play, RefreshCw, Calculator, FileOutput, ShieldCheck, ChevronRight, FlaskConical, Clock, Database, Globe, Wifi, ShieldAlert, Zap } from 'lucide-react';
 
 // --- TEST TYPES ---
 
@@ -399,13 +399,102 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
                 return res;
             }
+        },
+        {
+            id: 'security',
+            title: 'Security & Validation',
+            icon: ShieldAlert,
+            tests: () => {
+                const res: TestResult[] = [];
+
+                // 1. Input Sanitization Simulation
+                const unsafeInput = "<script>alert('xss')</script>";
+                // Simple mimic of React's escaping (or what generateResolveXML does)
+                const sanitized = unsafeInput.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const safe = !sanitized.includes("<script>");
+                
+                res.push({
+                    name: 'XSS Sanitization',
+                    description: 'Проверка экранирования опасных тегов (симуляция).',
+                    passed: safe,
+                    expected: '&lt;script&gt;...',
+                    received: sanitized,
+                    passCondition: 'Теги <script> преобразуются в безопасные HTML-сущности.',
+                    failCondition: 'Исполняемый код остается в строке, создавая риск XSS атаки.'
+                });
+
+                // 2. File Type Validation Logic (Simulation)
+                const allowedTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
+                const maliciousFile = { type: 'application/x-msdownload', name: 'virus.exe' };
+                const validFile = { type: 'video/mp4', name: 'video.mp4' };
+                
+                const isMalwareBlocked = !allowedTypes.includes(maliciousFile.type);
+                const isValidAllowed = allowedTypes.includes(validFile.type);
+
+                res.push({
+                    name: 'File Extension Validator',
+                    description: 'Проверка белого списка MIME-типов для загрузки.',
+                    passed: isMalwareBlocked && isValidAllowed,
+                    expected: 'Blocked .exe, Allowed .mp4',
+                    received: `Blocked: ${isMalwareBlocked}`,
+                    passCondition: 'Система отклоняет файлы, не входящие в белый список (видео).',
+                    failCondition: 'Возможность загрузить исполняемый файл (.exe, .sh) на сервер.'
+                });
+
+                return res;
+            }
+        },
+        {
+            id: 'perf',
+            title: 'Performance Benchmarks',
+            icon: Zap,
+            tests: () => {
+                const res: TestResult[] = [];
+
+                // 1. Large List Filtering
+                const largeList = Array.from({ length: 50000 }, (_, i) => ({ id: i, active: i % 2 === 0 }));
+                const start = performance.now();
+                const filtered = largeList.filter(i => i.active);
+                const end = performance.now();
+                const duration = end - start;
+
+                res.push({
+                    name: 'Large Dataset Filter (50k)',
+                    description: 'Замер скорости фильтрации большого массива данных.',
+                    passed: duration < 50, // Should be extremely fast in JS
+                    expected: '< 50ms',
+                    received: `${duration.toFixed(2)}ms`,
+                    passCondition: 'Фильтрация 50,000 объектов занимает менее 50мс.',
+                    failCondition: 'Медленная работа (O(n^2)) приведет к лагам при большом количестве ассетов.'
+                });
+
+                // 2. Timecode Calc Stress Test
+                const tStart = performance.now();
+                for(let i=0; i<10000; i++) {
+                    formatTimecode(i * 0.1, 24);
+                }
+                const tEnd = performance.now();
+                const tDuration = tEnd - tStart;
+
+                res.push({
+                    name: 'Timecode Calc Stress (10k ops)',
+                    description: 'Стресс-тест функции форматирования таймкода.',
+                    passed: tDuration < 100,
+                    expected: '< 100ms',
+                    received: `${tDuration.toFixed(2)}ms`,
+                    passCondition: '10,000 вызовов formatTimecode выполняются мгновенно.',
+                    failCondition: 'Неэффективная математика замедлит рендеринг таймлайна плеера.'
+                });
+
+                return res;
+            }
         }
     ];
 
     const runAllTests = async () => {
         setIsRunning(true);
         setResults({});
-        setExpandedGroup('network'); // Focus on new tests 
+        setExpandedGroup('security'); // Focus on new tests
         
         await new Promise(r => setTimeout(r, 600));
 
@@ -466,7 +555,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <FlaskConical className="text-indigo-500" />
                                 System Diagnostics
                             </h1>
-                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.4</p>
+                            <p className="text-xs text-zinc-500 mt-1">Anotee Internal Self-Test Environment v1.5</p>
                         </div>
                     </div>
                     

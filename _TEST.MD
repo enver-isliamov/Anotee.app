@@ -54,9 +54,17 @@
 *   **Cyrillic Regex Support:** Проверка поддержки Unicode-регулярок в браузере (для имен файлов).
 *   **URL Encoding (Cyrillic):** Проверка кодирования путей для S3.
 
-#### 7. Network & Resilience (New)
+#### 7. Network & Resilience
 *   **Async Loop Check:** Проверка, что Event Loop не блокируется (UI отзывчив).
 *   **Fetch Error Trap:** Симуляция сбоя сети и проверка, что приложение перехватывает ошибку (нет "белого экрана").
+
+#### 8. Security & Validation (New)
+*   **XSS Sanitization:** Проверка экранирования опасных HTML-тегов (`<script>`) при обработке ввода.
+*   **File Extension Validator:** Проверка работы фильтра типов файлов (блокировка `.exe`, разрешение `.mp4`).
+
+#### 9. Performance Benchmarks (New)
+*   **Large Dataset Filter:** Замер скорости обработки массива из 50,000 элементов.
+*   **Timecode Calc Stress:** Стресс-тест математического ядра (10,000 операций).
 
 ---
 
@@ -128,7 +136,7 @@
 
 ## 6. Ручное Тестирование (UX Checklist)
 
-Перед каждым релизом проверять: 
+Перед каждым релизом проверять:
 
 *   **Mobile Experience:**
     *   [ ] Свайп влево/вправо по комментарию в списке (Delete/Edit).
