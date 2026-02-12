@@ -18,6 +18,8 @@ interface AppHeaderProps {
   className?: string;
 }
 
+const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
+
 export const AppHeader: React.FC<AppHeaderProps> = ({ 
     currentUser, 
     currentView, 
@@ -39,7 +41,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       }
   };
 
-  const isAdmin = currentUser?.isAdmin;
+  const isAdmin = currentUser?.email && ADMIN_EMAILS.includes(currentUser.email);
 
   const navItems = ['workflow', 'ai', 'pricing', 'about'];
 

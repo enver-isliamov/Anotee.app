@@ -14,6 +14,8 @@ interface ProfileProps {
   onNavigate?: (page: string) => void;
 }
 
+const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
+
 const S3_PRESETS: Record<string, Partial<S3Config>> = {
     yandex: {
         provider: 'yandex',
@@ -138,10 +140,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   // Check if auto-renew is active (payment method saved)
   const isAutoRenew = !!(user?.publicMetadata as any)?.yookassaPaymentMethodId;
 
-  // Check Admin Access via Role
-  const isAdmin = currentUser.isAdmin;
+  // Check Admin Access
+  const primaryEmail = user?.primaryEmailAddress?.emailAddress;
+  const isAdmin = primaryEmail && ADMIN_EMAILS.includes(primaryEmail);
 
-  // ... (Rest of component unchanged) ...
   // Load S3 Config on Mount
   useEffect(() => {
       const loadS3Config = async () => {
@@ -638,7 +640,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                     </div>
                 </div>
 
-                {/* COLUMN 2: EXTRAS (Unchanged) */}
+                {/* COLUMN 2: EXTRAS */}
                 <div className="space-y-6">
                     {/* Support Block */}
                     <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-pink-500/20 rounded-3xl p-6 relative overflow-hidden">
@@ -700,10 +702,69 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                 </div>
             )}
 
-            {/* PROVIDER HELP MODAL (Unchanged) */}
-            {/* ... */}
-            {/* CORS HELP MODAL (Unchanged) */}
-            {/* ... */}
+            {/* PROVIDER HELP MODAL */}
+            {showProviderHelp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                        <button onClick={() => setShowProviderHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
+                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">{currentProviderGuide.title}</h2>
+                        <p className="text-xs text-zinc-500 mb-4">Инструкция по получению ключей доступа</p>
+                        
+                        {currentProviderGuide.warning && (
+                            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                <p className="font-medium">{currentProviderGuide.warning}</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3 mb-6">
+                            {currentProviderGuide.steps.map((step, idx) => (
+                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">{idx + 1}</div>
+                                    <p>{step}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                            <a 
+                                href={currentProviderGuide.link} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-bold"
+                            >
+                                {currentProviderGuide.linkText} <ExternalLink size={12} />
+                            </a>
+                            <button onClick={() => setShowProviderHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Закрыть</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CORS HELP MODAL */}
+            {showCorsHelp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+                        <button onClick={() => setShowCorsHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
+                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">Настройка CORS</h2>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">Для того чтобы браузер мог загружать файлы в ваше хранилище и воспроизводить их, необходимо добавить эту конфигурацию в настройки вашего Bucket.</p>
+                        
+                        <div className="bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-auto max-h-64 relative group">
+                            <pre>{CORS_CONFIG_JSON}</pre>
+                            <button 
+                                onClick={() => copyToClipboard(CORS_CONFIG_JSON)}
+                                className="absolute top-2 right-2 p-2 bg-white dark:bg-zinc-800 rounded-lg shadow-sm text-zinc-500 hover:text-black dark:hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <RefreshCw size={14} />
+                            </button>
+                        </div>
+                        
+                        <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
+                            <button onClick={() => setShowCorsHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Понятно</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
   );
 };

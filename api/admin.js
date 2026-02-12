@@ -2,30 +2,11 @@
 import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
 
+// 🛑 UPDATE: Added your yandex email here
+const ADMIN_EMAILS = ['enverphoto@gmail.com', 'enver.isliamov@yandex.com'];
+
 export default async function handler(req, res) {
     const { action } = req.query;
-
-    // --- BOOTSTRAP ACTION (One-Time Setup) ---
-    // Usage: /api/admin?action=bootstrap&userId=USER_ID&secret=CLERK_SECRET_KEY
-    if (action === 'bootstrap') {
-        const { userId, secret } = req.query;
-        if (!userId || !secret) return res.status(400).json({ error: "Missing params" });
-        
-        // Strictly validate secret against server env
-        if (secret !== process.env.CLERK_SECRET_KEY) {
-            return res.status(403).json({ error: "Forbidden: Invalid secret" });
-        }
-
-        try {
-            const clerk = getClerkClient();
-            await clerk.users.updateUserMetadata(userId, {
-                publicMetadata: { role: 'admin' }
-            });
-            return res.status(200).json({ success: true, message: `User ${userId} is now Admin. Relogin to take effect.` });
-        } catch (e) {
-            return res.status(500).json({ error: e.message });
-        }
-    }
 
     // --- PUBLIC / HYBRID ENDPOINTS (Accessible to all, but restricted data for guests) ---
 
@@ -34,7 +15,7 @@ export default async function handler(req, res) {
         try {
             // Try to identify user, but don't crash if guest
             const user = await verifyUser(req); 
-            const isAdmin = user && user.isAdmin;
+            const isAdmin = user && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
 
             // Create table if not exists just in case
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
@@ -97,8 +78,8 @@ export default async function handler(req, res) {
     // --- STRICT ADMIN ACTIONS (Middleware Check) ---
     // Everything below this line REQUIRES admin access
     try {
-        const user = await verifyUser(req, true); // Force email fetch & metadata check
-        if (!user || !user.isAdmin) {
+        const user = await verifyUser(req, true); // Force email fetch
+        if (!user || !user.email || !ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) {
             return res.status(403).json({ error: "Forbidden: Admins only" });
         }
 
@@ -181,8 +162,7 @@ export default async function handler(req, res) {
                     plan: meta.plan || 'free',
                     expiresAt: meta.expiresAt,
                     isAutoRenew: !!meta.yookassaPaymentMethodId,
-                    lastActive: u.lastSignInAt,
-                    isAdmin: meta.role === 'admin'
+                    lastActive: u.lastSignInAt
                 };
             });
             return res.status(200).json({ users: data });
@@ -224,21 +204,6 @@ export default async function handler(req, res) {
                     plan: 'free',
                     status: 'inactive',
                     expiresAt: null
-                }
-            });
-            return res.status(200).json({ success: true });
-        }
-
-        // --- TOGGLE ADMIN ROLE ---
-        if (action === 'toggle_admin') {
-            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-            const { userId, makeAdmin } = req.body;
-            
-            if (userId === user.id) return res.status(400).json({ error: "Cannot modify own admin status" });
-
-            await clerk.users.updateUserMetadata(userId, {
-                publicMetadata: {
-                    role: makeAdmin ? 'admin' : undefined
                 }
             });
             return res.status(200).json({ success: true });
