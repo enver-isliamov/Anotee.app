@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users, FlaskConical } from 'lucide-react';
+import { Shield, RefreshCw, ArrowLeft, CheckCircle, Zap, Settings, Save, AlertTriangle, Search, Crown, Layout, Cpu, Download, Sparkles, Sliders, Globe, HardDrive, TrendingUp, Target, Lightbulb, ListTodo, Flag, BarChart3, CreditCard, ExternalLink, DollarSign, Edit3, Lock, Unlock, CheckCircle2, Circle, Plus, Trash2, X, GripVertical, Users } from 'lucide-react';
 import { FeatureRule, AppConfig, DEFAULT_CONFIG, PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../types';
 
 interface AdminUser {
@@ -57,7 +57,7 @@ const SUB_TABS = [
     { id: 'ui', label: 'Интерфейс', icon: Layout },
 ];
 
-export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: string) => void }> = ({ onBack, onNavigate }) => {
+export const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { getToken } = useAuth();
     const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy'>('users');
     const [settingsSubTab, setSettingsSubTab] = useState('general');
@@ -451,8 +451,19 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
                                 </div>
                             ))}
                             <button onClick={() => addFeature(planKey as any)} className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-xs font-bold hover:text-indigo-500 flex items-center justify-center gap-1">
-                                <Plus size={14} /> Add Feature
+                                <Plus size={12} /> Add Feature
                             </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-auto">
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Status</label>
+                            <input type="text" placeholder="Открыто" value={plan.footerStatus || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerStatus', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-green-600 font-bold"/>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Footer Limit</label>
+                            <input type="text" placeholder="150 мест" value={plan.footerLimit || ''} onChange={(e) => handlePlanChange(planKey as any, 'footerLimit', e.target.value)} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-500"/>
                         </div>
                     </div>
                 </div>
@@ -460,384 +471,562 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
         );
     };
 
-    return (
-        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white font-sans p-6 md:p-8">
-            <div className="max-w-[1400px] mx-auto">
-                <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors">
-                            <ArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <h1 className="text-2xl font-bold flex items-center gap-2">
-                                <Shield className="text-indigo-600" /> Admin Console
-                            </h1>
-                            <p className="text-xs text-zinc-500">System Management & Configuration</p>
-                        </div>
-                    </div>
-                    {/* TEST RUNNER BUTTON */}
-                    <div className="flex items-center gap-2">
-                        {onNavigate && (
-                            <button 
-                                onClick={() => onNavigate('TEST_RUNNER')}
-                                className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm"
-                            >
-                                <FlaskConical size={16} />
-                                System Tests
-                            </button>
-                        )}
-                        <div className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-bold border border-green-200 dark:border-green-800">
-                            Super Admin
-                        </div>
-                    </div>
+    // Helper to render a config row
+    const renderConfigRow = (key: string, rule: FeatureRule) => (
+        <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg shrink-0 mt-1 ${key.startsWith('ui_') ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
+                    {key.startsWith('ui_') ? <Layout size={18} /> : <Cpu size={18} />}
                 </div>
-
-                {/* TABS */}
-                <div className="flex border-b border-zinc-200 dark:border-zinc-800 mb-8 overflow-x-auto">
-                    {['users', 'features', 'payments', 'strategy'].map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab as any)}
-                            className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap capitalize ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-white'}`}
-                        >
-                            {tab}
-                        </button>
-                    ))}
-                </div>
-
-                {/* CONTENT */}
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    
-                    {/* USERS TAB */}
-                    {activeTab === 'users' && (
-                        <div>
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="relative w-full max-w-sm">
-                                    <Search className="absolute left-3 top-2.5 text-zinc-400" size={18} />
-                                    <input 
-                                        type="text" 
-                                        placeholder="Search users..." 
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <button onClick={fetchUsers} className="p-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-700"><RefreshCw size={18} /></button>
-                            </div>
-
-                            {usersLoading ? (
-                                <div className="flex justify-center p-12 text-zinc-400">Loading users...</div>
-                            ) : (
-                                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-zinc-50 dark:bg-zinc-800 text-zinc-500 font-medium uppercase text-xs">
-                                            <tr>
-                                                <th className="px-6 py-3">User</th>
-                                                <th className="px-6 py-3">Plan</th>
-                                                <th className="px-6 py-3">Expires</th>
-                                                <th className="px-6 py-3">Auto-Renew</th>
-                                                <th className="px-6 py-3">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                            {filteredUsers.map(user => (
-                                                <tr key={user.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                                                    <td className="px-6 py-4 flex items-center gap-3">
-                                                        <img src={user.avatar} className="w-8 h-8 rounded-full" />
-                                                        <div>
-                                                            <div className="font-bold">{user.name}</div>
-                                                            <div className="text-xs text-zinc-500">{user.email}</div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.plan === 'pro' || user.plan === 'lifetime' ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'}`}>
-                                                            {user.plan}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-zinc-500">
-                                                        {user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : '-'}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        {user.isAutoRenew ? <CheckCircle size={16} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border border-zinc-300"></div>}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => setSelectedUser(user)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold">Manage</button>
-                                                            {user.plan !== 'free' && (
-                                                                <button onClick={() => handleRevokePro(user.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded text-xs font-bold">Revoke</button>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* FEATURES TAB */}
-                    {activeTab === 'features' && (
-                        <div className="grid grid-cols-12 gap-8">
-                            {/* Sidebar */}
-                            <div className="col-span-12 md:col-span-3 lg:col-span-2 space-y-1">
-                                {SUB_TABS.map(tab => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => setSettingsSubTab(tab.id)}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${settingsSubTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                                    >
-                                        <tab.icon size={18} /> {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Content */}
-                            <div className="col-span-12 md:col-span-9 lg:col-span-10">
-                                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h2 className="text-xl font-bold flex items-center gap-2">
-                                            {SUB_TABS.find(t => t.id === settingsSubTab)?.label} Settings
-                                        </h2>
-                                        <button 
-                                            onClick={handleSaveConfig} 
-                                            disabled={isSavingConfig}
-                                            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-green-500/20"
-                                        >
-                                            <Save size={18} /> {isSavingConfig ? 'Saving...' : 'Save Changes'}
-                                        </button>
-                                    </div>
-
-                                    <div className="space-y-6">
-                                        {CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS].map((key) => {
-                                            const rule = config[key as keyof AppConfig] as FeatureRule;
-                                            return (
-                                                <div key={key} className="bg-zinc-50 dark:bg-zinc-950/50 rounded-xl p-5 border border-zinc-100 dark:border-zinc-800/50 hover:border-indigo-500/30 transition-colors">
-                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                                                        <div>
-                                                            <h3 className="font-bold text-zinc-800 dark:text-zinc-200 text-sm md:text-base">{FEATURE_DESCRIPTIONS[key as keyof AppConfig] || key}</h3>
-                                                            <code className="text-xs text-zinc-400 font-mono mt-1 block">{key}</code>
-                                                        </div>
-                                                        <div className="flex items-center gap-4 bg-white dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                                                            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                                                                <input type="checkbox" checked={rule.enabledForFree} onChange={(e) => handleConfigChange(key as any, 'enabledForFree', e.target.checked)} className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500" />
-                                                                <span className={rule.enabledForFree ? 'text-green-600' : 'text-zinc-400'}>FREE</span>
-                                                            </label>
-                                                            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700"></div>
-                                                            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                                                                <input type="checkbox" checked={rule.enabledForPro} onChange={(e) => handleConfigChange(key as any, 'enabledForPro', e.target.checked)} className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500" />
-                                                                <span className={rule.enabledForPro ? 'text-indigo-600' : 'text-zinc-400'}>PRO</span>
-                                                            </label>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    {/* LIMITS INPUTS */}
-                                                    {(rule.limitFree !== undefined || rule.limitPro !== undefined) && (
-                                                        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                                                            <div>
-                                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Free Limit</label>
-                                                                <input 
-                                                                    type="number" 
-                                                                    value={rule.limitFree} 
-                                                                    onChange={(e) => handleConfigChange(key as any, 'limitFree', parseInt(e.target.value))}
-                                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-3 py-1.5 text-sm font-mono focus:border-indigo-500 outline-none"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Pro Limit</label>
-                                                                <input 
-                                                                    type="number" 
-                                                                    value={rule.limitPro} 
-                                                                    onChange={(e) => handleConfigChange(key as any, 'limitPro', parseInt(e.target.value))}
-                                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-3 py-1.5 text-sm font-mono focus:border-indigo-500 outline-none"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* PAYMENTS TAB */}
-                    {activeTab === 'payments' && (
-                        <div>
-                            {/* Provider Config */}
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 mb-8 shadow-sm">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-bold flex items-center gap-2">
-                                        <CreditCard className="text-indigo-500" /> Payment Provider
-                                    </h2>
-                                    <button onClick={handleSavePaymentConfig} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20">
-                                        <Save size={16} /> Save Keys
-                                    </button>
-                                </div>
-                                <div className="grid md:grid-cols-2 gap-8">
-                                    {/* Active Provider Selector */}
-                                    <div className="col-span-2">
-                                        <label className="block text-xs font-bold uppercase text-zinc-500 mb-2">Active Gateway</label>
-                                        <div className="flex gap-4">
-                                            <label className={`flex-1 border rounded-xl p-4 cursor-pointer transition-all ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800'}`}>
-                                                <input type="radio" name="provider" value="yookassa" checked={paymentConfig.activeProvider === 'yookassa'} onChange={() => setPaymentConfig(p => ({...p, activeProvider: 'yookassa'}))} className="sr-only"/>
-                                                <div className="font-bold mb-1">YooKassa (Autopay)</div>
-                                                <div className="text-xs text-zinc-500">Supports recurrent payments (subscriptions).</div>
-                                            </label>
-                                            <label className={`flex-1 border rounded-xl p-4 cursor-pointer transition-all ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800'}`}>
-                                                <input type="radio" name="provider" value="prodamus" checked={paymentConfig.activeProvider === 'prodamus'} onChange={() => setPaymentConfig(p => ({...p, activeProvider: 'prodamus'}))} className="sr-only"/>
-                                                <div className="font-bold mb-1">Prodamus</div>
-                                                <div className="text-xs text-zinc-500">Simple payment links. Good for global cards.</div>
-                                            </label>
-                                        </div>
-                                    </div>
-
-                                    {/* YooKassa Keys */}
-                                    <div className={`space-y-4 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/50 ${paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50' : ''}`}>
-                                        <h3 className="font-bold text-sm">YooKassa API</h3>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Shop ID</label>
-                                            <input type="text" value={paymentConfig.yookassa.shopId} onChange={e => setPaymentConfig(p => ({...p, yookassa: {...p.yookassa, shopId: e.target.value}}))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Secret Key</label>
-                                            <input type="password" value={paymentConfig.yookassa.secretKey} onChange={e => setPaymentConfig(p => ({...p, yookassa: {...p.yookassa, secretKey: e.target.value}}))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
-                                        </div>
-                                    </div>
-
-                                    {/* Prodamus Keys */}
-                                    <div className={`space-y-4 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/50 ${paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50' : ''}`}>
-                                        <h3 className="font-bold text-sm">Prodamus</h3>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Payment Page URL</label>
-                                            <input type="text" value={paymentConfig.prodamus.url} onChange={e => setPaymentConfig(p => ({...p, prodamus: {...p.prodamus, url: e.target.value}}))} placeholder="https://demo.payform.ru" className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Secret Key</label>
-                                            <input type="password" value={paymentConfig.prodamus.secretKey} onChange={e => setPaymentConfig(p => ({...p, prodamus: {...p.prodamus, secretKey: e.target.value}}))} className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded px-3 py-2 text-sm font-mono"/>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Plan Builder (Drag & Drop) */}
-                            <div>
-                                <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                                    <Layout className="text-indigo-500" /> Plan Builder
-                                </h2>
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                                    {paymentConfig.planOrder.map((planKey, idx) => (
-                                        renderPlanEditor(planKey, idx)
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* STRATEGY TAB (DASHBOARD) */}
-                    {activeTab === 'strategy' && (
-                        <div className="space-y-8">
-                            {/* Goals */}
-                            <div className="grid grid-cols-4 gap-6">
-                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Цель (Phase 1)</div>
-                                    <div className="text-3xl font-bold text-white mb-1">150</div>
-                                    <div className="text-sm text-zinc-400">Лицензий Lifetime</div>
-                                </div>
-                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Выручка</div>
-                                    <div className="text-3xl font-bold text-green-400 mb-1">435k ₽</div>
-                                    <div className="text-sm text-zinc-400">Target (150 * 2900)</div>
-                                </div>
-                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Churn Rate</div>
-                                    <div className="text-3xl font-bold text-indigo-400 mb-1">0%</div>
-                                    <div className="text-sm text-zinc-400">Lifetime = No Churn</div>
-                                </div>
-                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                                    <div className="text-zinc-500 text-xs font-bold uppercase mb-2">Runway</div>
-                                    <div className="text-3xl font-bold text-white mb-1">∞</div>
-                                    <div className="text-sm text-zinc-400">Self-Funded</div>
-                                </div>
-                            </div>
-
-                            {/* Roadmap Timeline */}
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8">
-                                <h3 className="font-bold text-lg mb-6">Execution Plan</h3>
-                                <div className="relative">
-                                    <div className="absolute top-1/2 left-0 right-0 h-1 bg-zinc-100 dark:bg-zinc-800 -translate-y-1/2 rounded-full"></div>
-                                    <div className="grid grid-cols-3 gap-4 relative z-10">
-                                        <div className="text-center">
-                                            <div className="w-4 h-4 bg-green-500 rounded-full mx-auto mb-4 border-4 border-white dark:border-zinc-900 box-content"></div>
-                                            <div className="font-bold text-sm">Month 1-3</div>
-                                            <div className="text-xs text-zinc-500 mt-1">Infrastructure & Core Features</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div className="w-4 h-4 bg-indigo-500 rounded-full mx-auto mb-4 border-4 border-white dark:border-zinc-900 box-content"></div>
-                                            <div className="font-bold text-sm">Month 4-6</div>
-                                            <div className="text-xs text-zinc-500 mt-1">Marketing & First 100 Sales</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div className="w-4 h-4 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-4 border-4 border-white dark:border-zinc-900 box-content"></div>
-                                            <div className="font-bold text-sm">Month 7+</div>
-                                            <div className="text-xs text-zinc-500 mt-1">SaaS Transition (Monthly)</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Growth Hacking */}
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                                    <h3 className="font-bold mb-4 flex items-center gap-2"><Target size={18} className="text-red-500"/> Channels</h3>
-                                    <ul className="space-y-3 text-sm text-zinc-400">
-                                        <li className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> Telegram Communities (Filmmakers)</li>
-                                        <li className="flex items-center gap-2"><Circle size={14}/> Direct Sales (Studios)</li>
-                                        <li className="flex items-center gap-2"><Circle size={14}/> YouTube Integration (Reviews)</li>
-                                    </ul>
-                                </div>
-                                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-                                    <h3 className="font-bold mb-4 flex items-center gap-2"><Lightbulb size={18} className="text-yellow-500"/> Features Pipeline</h3>
-                                    <ul className="space-y-3 text-sm text-zinc-400">
-                                        <li className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> DaVinci XML Export</li>
-                                        <li className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> Cloud S3 Integration</li>
-                                        <li className="flex items-center gap-2"><Circle size={14}/> AI Transcription V2 (Diarization)</li>
-                                        <li className="flex items-center gap-2"><Circle size={14}/> Mobile App (PWA+)</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                <div>
+                    <div className="font-bold text-sm text-zinc-900 dark:text-white capitalize">{key.replace(/_/g, ' ')}</div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        {FEATURE_DESCRIPTIONS[key as keyof AppConfig] || "Системная настройка"}
+                    </div>
                 </div>
             </div>
 
-            {/* GRANT MODAL */}
-            {selectedUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl relative">
-                        <button onClick={() => setSelectedUser(null)} className="absolute top-4 right-4 text-zinc-400 hover:text-white"><X size={20} /></button>
-                        <h3 className="text-lg font-bold mb-4">Grant Pro Status</h3>
-                        <p className="text-sm text-zinc-500 mb-4">User: <strong>{selectedUser.name}</strong></p>
-                        
-                        <div className="space-y-3 mb-6">
-                            <label className="block text-xs font-bold uppercase text-zinc-500">Duration</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                <button onClick={() => setGrantDuration(30)} className={`py-2 rounded-lg text-xs font-bold border ${grantDuration === 30 ? 'bg-indigo-600 text-white border-indigo-600' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'}`}>30 Days</button>
-                                <button onClick={() => setGrantDuration(365)} className={`py-2 rounded-lg text-xs font-bold border ${grantDuration === 365 ? 'bg-indigo-600 text-white border-indigo-600' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'}`}>1 Year</button>
-                                <button onClick={() => setGrantDuration(0)} className={`py-2 rounded-lg text-xs font-bold border ${grantDuration === 0 ? 'bg-green-600 text-white border-green-600' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'}`}>Lifetime</button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 lg:gap-8 w-full lg:w-auto border-t lg:border-t-0 border-zinc-100 dark:border-zinc-800 pt-3 lg:pt-0">
+                {/* Limits Input (Only for max_projects) */}
+                {(key === 'max_projects') && (
+                    <div className="flex items-center gap-3 w-full sm:w-auto bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Free Limit</label>
+                            <input 
+                                type="number" 
+                                value={rule.limitFree || 0}
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
+                                className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500 text-center"
+                            />
+                        </div>
+                        <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700"></div>
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold uppercase text-zinc-400 mb-0.5">Pro Limit</label>
+                            <input 
+                                type="number" 
+                                value={rule.limitPro || 0}
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
+                                className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs outline-none focus:border-indigo-500 text-center"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex gap-4 w-full sm:w-auto justify-between sm:justify-start">
+                    <label className="flex items-center gap-2 cursor-pointer group select-none">
+                        <div className="relative">
+                            <input 
+                                type="checkbox" 
+                                checked={rule.enabledForFree} 
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
+                                className="peer sr-only"
+                            />
+                            <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                        </div>
+                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors">Free</span>
+                    </label>
+                    
+                    <label className="flex items-center gap-2 cursor-pointer group select-none">
+                        <div className="relative">
+                            <input 
+                                type="checkbox" 
+                                checked={rule.enabledForPro} 
+                                onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
+                                className="peer sr-only"
+                            />
+                            <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
+                        </div>
+                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors">Pro</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    );
+
+    // Stats
+    const totalUsers = users.length;
+    const proUsers = users.filter(u => u.plan === 'pro').length;
+
+    const activeConfigKeys = CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS] || [];
+
+    return (
+        <div className="w-full mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
+            {/* Header */}
+            <div className="flex flex-col gap-6 mb-8">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <button onClick={onBack} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                            <ArrowLeft size={20} className="text-zinc-600 dark:text-zinc-400"/>
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                <Shield size={24} className="text-indigo-600 dark:text-indigo-400"/> 
+                                Admin Dashboard
+                            </h1>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Main Tabs */}
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded-xl w-full max-w-2xl overflow-x-auto">
+                    <button 
+                        onClick={() => setActiveTab('users')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'users' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                    >
+                        <Crown size={16} /> Пользователи
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('features')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'features' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                    >
+                        <Settings size={16} /> Настройки
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('payments')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'payments' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                    >
+                        <CreditCard size={16} /> Интеграции
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('strategy')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'strategy' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                    >
+                        <TrendingUp size={16} /> Стратегия
+                    </button>
+                </div>
+            </div>
+
+            {/* TAB: STRATEGY (S.M.A.R.T.) */}
+            {activeTab === 'strategy' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8 w-full">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                            <Target size={120} />
+                        </div>
+                        <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                            <Flag className="text-indigo-400" /> Бизнес-цель (S.M.A.R.T.)
+                        </h2>
+                        <p className="text-indigo-200 text-sm max-w-2xl leading-relaxed">
+                            Стратегия выхода на монетизацию через модель <strong className="text-white">Founder's Club</strong> (быстрый капитал) с последующим переходом в <strong className="text-white">SaaS</strong> (рекуррентный доход).
+                        </p>
+                    </div>
+
+                    {/* SMART GRID */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* SPECIFIC */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-indigo-500/10 rounded-lg text-indigo-500"><Target size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-indigo-500 tracking-wider">Specific (Конкретика)</h3>
+                            </div>
+                            <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                                Продать 150 пожизненных лицензий (Founder's Club) для финансирования маркетинга, затем конвертировать 5% бесплатных пользователей в ежемесячную подписку Pro.
+                            </p>
+                        </div>
+
+                        {/* MEASURABLE */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-green-500/10 rounded-lg text-green-500"><BarChart3 size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-green-500 tracking-wider">Measurable (Измеримость)</h3>
+                            </div>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-1"><span>Выручка (фаза 1):</span><span className="font-mono font-bold text-white">435,000 ₽</span></div>
+                                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-1"><span>MRR (фаза 2):</span><span className="font-mono font-bold text-white">100,000 ₽/мес</span></div>
+                                <div className="flex justify-between"><span>Пользователей:</span><span className="font-mono font-bold text-white">1,000+</span></div>
                             </div>
                         </div>
 
+                        {/* ACHIEVABLE */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-500"><Lightbulb size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-blue-500 tracking-wider">Achievable (Достижимость)</h3>
+                            </div>
+                            <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                                Рынок фрилансеров-монтажеров в РФ огромен. Anotee предлагает уникальный функционал (экспорт в Resolve) за 2900₽ разово, что дешевле 1 месяца Frame.io.
+                            </p>
+                        </div>
+
+                        {/* RELEVANT */}
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl relative">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="p-1.5 bg-yellow-500/10 rounded-lg text-yellow-500"><Zap size={16} /></div>
+                                <h3 className="text-xs font-bold uppercase text-yellow-500 tracking-wider">Relevant (Актуальность)</h3>
+                            </div>
+                            <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                                Санкции усложнили оплату зарубежных сервисов. Anotee — локальное решение с серверами Vercel (быстрый доступ) и оплатой через ЮKassa.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* TIME-BOUND */}
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6">
+                        <div className="flex items-center gap-2 mb-6">
+                            <div className="p-1.5 bg-red-500/10 rounded-lg text-red-500"><ListTodo size={16} /></div>
+                            <h3 className="text-xs font-bold uppercase text-red-500 tracking-wider">Time-Bound (Сроки)</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-xl">
+                                <div className="text-[10px] text-zinc-500 mb-1">Месяц 1-3</div>
+                                <div className="text-sm font-bold text-white mb-2">Продажа Founders</div>
+                                <div className="text-xs text-zinc-500">Сбор фидбека, фикс багов.</div>
+                            </div>
+                            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-xl opacity-60">
+                                <div className="text-[10px] text-zinc-500 mb-1">Месяц 4-6</div>
+                                <div className="text-sm font-bold text-white mb-2">Запуск Подписки</div>
+                                <div className="text-xs text-zinc-500">Закрытие Lifetime продаж.</div>
+                            </div>
+                            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-xl opacity-40">
+                                <div className="text-[10px] text-zinc-500 mb-1">Месяц 7+</div>
+                                <div className="text-sm font-bold text-white mb-2">B2B Продажи</div>
+                                <div className="text-xs text-zinc-500">Продажа студиям (Team Plan).</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* TACTICAL PLAN */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                            <ListTodo className="text-green-500" size={20} /> Тактический план (Growth Hacking)
+                        </h3>
+                        <div className="space-y-1">
+                            {[
+                                { done: true, text: "Запуск MVP с функцией экспорта XML (УТП)" },
+                                { done: true, text: "Настройка ЮKassa и рекуррентных платежей" },
+                                { done: false, text: "Холодная рассылка по студиям (Telegram/Email) с предложением демо" },
+                                { done: false, text: "Публикация кейса на VC.ru: 'Как я заменил Frame.io за 2900р'" },
+                                { done: false, text: "SEO оптимизация лендинга под запросы 'frame.io аналог', 'видео ревью'" },
+                                { done: false, text: "Партнерство с киношколами (бесплатный доступ студентам -> лояльность)" },
+                            ].map((item, i) => (
+                                <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border border-transparent transition-colors ${item.done ? 'bg-green-900/10' : 'hover:bg-zinc-800'}`}>
+                                    {item.done ? (
+                                        <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                                    ) : (
+                                        <Circle size={18} className="text-zinc-600 shrink-0" />
+                                    )}
+                                    <span className={`text-sm ${item.done ? 'text-green-200 line-through decoration-green-800' : 'text-zinc-300'}`}>{item.text}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB: USERS */}
+            {activeTab === 'users' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {/* Compact Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl shadow-sm">
+                            <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Всего</div>
+                            <div className="text-3xl font-bold">{totalUsers}</div>
+                        </div>
+                        <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-4 rounded-xl shadow-sm">
+                            <div className="text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-1">Pro Users</div>
+                            <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{proUsers}</div>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl shadow-sm hidden md:block">
+                            <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Free Users</div>
+                            <div className="text-3xl font-bold text-zinc-400">{totalUsers - proUsers}</div>
+                        </div>
+                        <div className="col-span-2 md:col-span-1 flex items-center justify-center p-3">
+                             <button onClick={fetchUsers} className="w-full h-full flex items-center justify-center gap-2 px-4 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-sm font-bold transition-colors text-zinc-600 dark:text-zinc-300">
+                                <RefreshCw size={16} className={usersLoading ? "animate-spin" : ""} /> Обновить список
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="relative mb-6">
+                        <input 
+                            type="text" 
+                            placeholder="Поиск по имени или email..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-indigo-500 transition-colors shadow-sm"
+                        />
+                        <Search size={18} className="absolute left-3 top-3 text-zinc-400" />
+                    </div>
+
+                    {userError && <div className="p-4 bg-red-100 text-red-700 rounded-lg mb-4 text-xs">{userError}</div>}
+
+                    {/* DESKTOP TABLE VIEW */}
+                    <div className="hidden md:block bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
+                                    <tr>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Пользователь</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Статус</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Истекает</th>
+                                        <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs text-right">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                    {filteredUsers.map((user) => {
+                                        const isPro = user.plan === 'pro' || user.plan === 'lifetime';
+                                        const isLifetime = user.plan === 'lifetime';
+                                        const expiry = user.expiresAt ? new Date(user.expiresAt) : null;
+                                        
+                                        return (
+                                            <tr key={user.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                                <td className="px-6 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <img src={user.avatar} className="w-8 h-8 rounded-full bg-zinc-200 object-cover" alt="" />
+                                                        <div>
+                                                            <div className="font-bold text-zinc-900 dark:text-white text-xs md:text-sm">{user.name}</div>
+                                                            <div className="text-[10px] text-zinc-500">{user.email}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    {isPro ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-500/20">
+                                                            <Zap size={10} fill="currentColor" /> {isLifetime ? 'LIFETIME' : 'PRO'}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-zinc-500 text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">FREE</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
+                                                    {isLifetime ? <span className="text-green-500 font-bold">∞</span> : (expiry ? expiry.toLocaleDateString() : '-')}
+                                                </td>
+                                                <td className="px-6 py-3 text-right">
+                                                    {isPro ? (
+                                                        <button onClick={() => handleRevokePro(user.id)} className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors">Снять</button>
+                                                    ) : (
+                                                        <button onClick={() => setSelectedUser(user)} className="px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold hover:opacity-80 transition-opacity">
+                                                            Выдать
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB: FEATURES */}
+            {activeTab === 'features' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-500/20 p-3 rounded-xl mb-6 flex items-start gap-3">
+                        <AlertTriangle className="text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" size={16} />
+                        <div>
+                            <h3 className="text-xs font-bold text-yellow-800 dark:text-yellow-400">Глобальные флаги</h3>
+                            <p className="text-[10px] text-yellow-700/80 dark:text-yellow-500/80 leading-relaxed">
+                                Влияет на доступность функций и видимость UI для всех пользователей мгновенно.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-6">
+                        {SUB_TABS.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setSettingsSubTab(tab.id)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${settingsSubTab === tab.id 
+                                    ? 'bg-zinc-800 text-white border-zinc-700 shadow-md' 
+                                    : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
+                                }`}
+                            >
+                                <tab.icon size={14} />
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="space-y-3">
+                        {activeConfigKeys.map((key) => renderConfigRow(key, config[key as keyof AppConfig]))}
+                    </div>
+
+                    <div className="mt-8 flex justify-end sticky bottom-6 z-10">
                         <button 
-                            onClick={handleGrantPro} 
-                            disabled={isGranting}
-                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                            onClick={handleSaveConfig}
+                            disabled={isSavingConfig || configLoading}
+                            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-500/30 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
                         >
-                            <Crown size={16} /> Grant Access
+                            {isSavingConfig ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
+                            Сохранить изменения
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB: PAYMENTS */}
+            {activeTab === 'payments' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 w-full mx-auto pb-24">
+                    <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-6 rounded-2xl mb-8 text-center">
+                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Настройка Платежей</h2>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">Управление шлюзами и тарифными планами.</p>
+                    </div>
+
+                    {paymentLoading ? (
+                        <div className="flex justify-center p-12"><RefreshCw className="animate-spin text-zinc-400" /></div>
+                    ) : (
+                        <div className="flex flex-col gap-8">
+                            
+                            {/* BLOCK 1: GATEWAY SELECTION */}
+                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-6">
+                                    <CreditCard size={18}/> Выбор Шлюза (Gateway)
+                                </h3>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <button 
+                                        onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                        className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                    >
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'yookassa' ? 'bg-[#7B61FF]' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Yoo</div>
+                                        <div>
+                                            <div className="font-bold text-zinc-900 dark:text-white">ЮKassa</div>
+                                            <div className="text-xs text-zinc-500">Автоплатежи (Recurrent)</div>
+                                        </div>
+                                        {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                    </button>
+
+                                    <button 
+                                        onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                        className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                    >
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'prodamus' ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Pr</div>
+                                        <div>
+                                            <div className="font-bold text-zinc-900 dark:text-white">Prodamus</div>
+                                            <div className="text-xs text-zinc-500">Международные карты</div>
+                                        </div>
+                                        {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                    </button>
+                                </div>
+
+                                {/* Settings Fields */}
+                                <div className="bg-zinc-50 dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
+                                    {paymentConfig.activeProvider === 'yookassa' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={paymentConfig.yookassa.shopId} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="Enter Shop ID"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
+                                                <input 
+                                                    type="password" 
+                                                    value={paymentConfig.yookassa.secretKey} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="test_..."
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {paymentConfig.activeProvider === 'prodamus' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={paymentConfig.prodamus.url} 
+                                                        onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
+                                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                                        placeholder="https://yourschool.payform.ru"
+                                                    />
+                                                    <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
+                                                        <ExternalLink size={16} />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
+                                                <input 
+                                                    type="password" 
+                                                    value={paymentConfig.prodamus.secretKey} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="Secret key for signature"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* BLOCK 2: PLAN EDITOR (HORIZONTAL GRID) */}
+                            <div>
+                                <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-6">
+                                    <Edit3 size={18}/> Редактор Тарифов
+                                </h3>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    {paymentConfig.planOrder.map((planKey, index) => 
+                                        renderPlanEditor(planKey, index)
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="fixed bottom-6 right-6 z-50">
+                                <button 
+                                    onClick={handleSavePaymentConfig}
+                                    disabled={isSavingPayment}
+                                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full text-base font-bold shadow-2xl shadow-indigo-500/40 transition-all disabled:opacity-50 active:scale-95 border border-indigo-400/20"
+                                >
+                                    {isSavingPayment ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
+                                    Сохранить Настройки
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Grant Modal */}
+            {selectedUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
+                        <div className="flex items-center gap-3 mb-4 text-indigo-600 dark:text-indigo-400">
+                            <Crown size={24} />
+                            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Выдать Pro доступ</h2>
+                        </div>
+                        
+                        <div className="mb-6 bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center gap-3 mb-2">
+                                <img src={selectedUser.avatar} className="w-8 h-8 rounded-full" alt="" />
+                                <div className="min-w-0">
+                                    <div className="font-bold text-xs text-zinc-900 dark:text-white truncate">{selectedUser.name}</div>
+                                    <div className="text-[10px] text-zinc-500 truncate">{selectedUser.email}</div>
+                                </div>
+                            </div>
+                            
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1.5 mt-4">Срок действия</label>
+                            <select 
+                                value={grantDuration} 
+                                onChange={(e) => setGrantDuration(parseInt(e.target.value))}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500 transition-colors"
+                            >
+                                <option value={7}>7 Дней (Триал)</option>
+                                <option value={30}>1 Месяц</option>
+                                <option value={365}>1 Год</option>
+                                <option value={0}>Навсегда (Lifetime)</option>
+                            </select>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button onClick={() => setSelectedUser(null)} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">Отмена</button>
+                            <button onClick={handleGrantPro} disabled={isGranting} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all">
+                                {isGranting ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle size={14}/>} Подтвердить
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
