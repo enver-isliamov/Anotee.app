@@ -333,7 +333,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             id: clerkUser.id,
             name: clerkUser.fullName || clerkUser.firstName || 'User',
             avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
-            email: clerkUser.primaryEmailAddress?.emailAddress
+            email: clerkUser.primaryEmailAddress?.emailAddress,
+            isAdmin: (clerkUser.publicMetadata as any)?.role === 'admin'
         });
     } else {
         setCurrentUser(null);
