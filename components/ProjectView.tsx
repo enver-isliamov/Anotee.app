@@ -27,7 +27,7 @@ interface ProjectViewProps {
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
   onboardingActiveStep?: number;
   uploadTasks: UploadTask[];
-  onStartTour?: () => void; // Added prop
+  onStartTour?: () => void;
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks, onStartTour }) => {
@@ -342,14 +342,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       return t('pv.role.creator');
   };
 
-  // Handler for Org Invite click
-  const handleOrgInviteClick = () => {
-      // Close share modal if open
-      setIsShareModalOpen(false);
-      // Open Clerk Org Settings
-      setIsOrgSettingsOpen(true);
-  };
-
   // --- INLINE UPLOAD TILE COMPONENT ---
   const UploadZoneTile = () => {
       const [isDragOver, setIsDragOver] = useState(false);
@@ -469,58 +461,62 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               </button>
           )}
 
-          {/* TEAM AVATARS - Hidden for Restricted Users */}
+          {/* PROJECT CONTEXT BADGE */}
           {!isRestrictedUser && (
-            <div 
-              onClick={() => setIsParticipantsModalOpen(true)}
-              className="flex -space-x-2 cursor-pointer hover:opacity-80 transition-opacity ml-2"
-              title={t('pv.team')}
-            >
-              {displayTeam.slice(0, 3).map((member) => (
-                  <img key={member.id} src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border-2 border-zinc-950" />
-              ))}
-              <div className="w-8 h-8 rounded-full border-2 border-zinc-950 bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400">
-                {displayTeam.length > 3 ? `+${displayTeam.length - 3}` : '+'}
-              </div>
+              <>
+                {project.orgId && organization ? (
+                    <div 
+                        id="tour-context-badge"
+                        className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-zinc-800/50 rounded-md border border-zinc-700/50 text-zinc-300 cursor-help transition-colors hover:bg-zinc-800" 
+                        title={`Organization: ${organization.name}`}
+                    >
+                        <Building2 size={12} className="text-indigo-400"/>
+                        <span className="text-[10px] font-bold uppercase tracking-wider max-w-[100px] truncate">{organization.name}</span>
+                    </div>
+                ) : (
+                    <div 
+                        id="tour-context-badge"
+                        className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" 
+                        title="Personal Workspace"
+                    >
+                        <UserIcon size={12} />
+                        <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
+                    </div>
+                )}
+              </>
+          )}
+
+          {/* TEAM AVATARS + INVITE ACTION */}
+          {!isRestrictedUser && (
+            <div className="flex items-center gap-2 ml-1">
+                {/* Avatar Stack */}
+                <div 
+                    onClick={() => setIsParticipantsModalOpen(true)}
+                    className="flex -space-x-2 cursor-pointer hover:opacity-80 transition-opacity"
+                    title={t('pv.team')}
+                >
+                    {displayTeam.slice(0, 3).map((member) => (
+                        <img key={member.id} src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border-2 border-zinc-950 bg-zinc-800 object-cover" />
+                    ))}
+                    {displayTeam.length > 3 && (
+                        <div className="w-8 h-8 rounded-full border-2 border-zinc-950 bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-bold">
+                            +{displayTeam.length - 3}
+                        </div>
+                    )}
+                </div>
+
+                {/* Invite/Add Trigger - Unified */}
+                {!isLocked && (canInviteTeam || project.orgId) && (
+                    <button 
+                        id="tour-share-btn"
+                        onClick={handleShareProject}
+                        className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-colors shadow-lg shadow-indigo-900/20"
+                        title={project.orgId ? "Manage Access" : t('pv.invite')}
+                    >
+                        <UserPlus size={14} />
+                    </button>
+                )}
             </div>
-          )}
-
-          {/* PERSONAL PROJECT INDICATOR */}
-          {!isRestrictedUser && !project.orgId && (
-             <div 
-                id="tour-context-badge"
-                className="hidden md:flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-md border border-zinc-700 text-zinc-400 cursor-help" title="Personal Workspace"
-             >
-                 <UserIcon size={12} />
-                 <span className="text-[10px] font-medium uppercase tracking-wider">Personal</span>
-             </div>
-          )}
-
-          {!isLocked && !isRestrictedUser && (
-            <>
-              <div className="h-6 w-px bg-zinc-800 mx-1"></div>
-              {project.orgId ? (
-                  <button 
-                    onClick={handleOrgInviteClick}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-xs md:text-sm font-medium"
-                    title="Manage Organization Members"
-                  >
-                    <UserPlus size={16} />
-                    <span className="hidden md:inline">Manage Team</span>
-                  </button>
-              ) : (
-                  <button 
-                    id="tour-share-btn"
-                    onClick={handleShareProject}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-xs md:text-sm font-medium ${canInviteTeam ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-70'}`}
-                    title={canInviteTeam ? "Invite via Email" : "Invites are locked (Pro)"}
-                    disabled={!canInviteTeam}
-                  >
-                    <UserPlus size={16} />
-                    <span className="hidden md:inline">{t('pv.invite')}</span>
-                  </button>
-              )}
-            </>
           )}
         </div>
       </header>
