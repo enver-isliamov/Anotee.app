@@ -101,6 +101,51 @@ export const TEST_SUITE: TestGroup[] = [
         }
     },
     {
+        id: 'billing_integration',
+        title: 'Billing Integration',
+        icon: CreditCard,
+        description: 'Проверка эндпоинтов оплаты и вебхуков.',
+        tests: async () => {
+            const res: TestResult[] = [];
+
+            // 1. Payment Init Guard
+            try {
+                // Should return 401 without token, confirming the file loads and checks auth
+                const initRes = await fetch('/api/payment?action=init', { method: 'POST' });
+                res.push({
+                    name: 'Payment Init Endpoint',
+                    description: 'POST /api/payment?action=init (No Auth)',
+                    passed: initRes.status === 401,
+                    expected: '401 Unauthorized',
+                    received: `${initRes.status}`,
+                    passCondition: 'Эндпоинт существует и защищен.',
+                    failCondition: '404 (Файл не найден) или 500 (Ошибка кода).'
+                });
+            } catch (e: any) {
+                res.push({ name: 'Payment Init', passed: false, description: 'Fetch error', received: e.message, expected: '401', passCondition: '', failCondition: '' });
+            }
+
+            // 2. Webhook Sanity Check
+            try {
+                // Should return 400 because body is missing, but confirms it handles request
+                const hookRes = await fetch('/api/payment?action=webhook', { method: 'POST' });
+                res.push({
+                    name: 'Webhook Endpoint',
+                    description: 'POST /api/payment?action=webhook (Empty Body)',
+                    passed: hookRes.status === 400,
+                    expected: '400 Invalid Event',
+                    received: `${hookRes.status}`,
+                    passCondition: 'Вебхук обрабатывает запрос и валидирует данные.',
+                    failCondition: '500 (Ошибка импорта/синтаксиса) или 404.'
+                });
+            } catch (e: any) {
+                res.push({ name: 'Webhook Check', passed: false, description: 'Fetch error', received: e.message, expected: '400', passCondition: '', failCondition: '' });
+            }
+
+            return res;
+        }
+    },
+    {
         id: 'auth',
         title: 'Auth & Permissions',
         icon: Lock,
@@ -137,10 +182,8 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Валидация форматов, CORS и доступности CDN.',
         tests: async () => {
             const res: TestResult[] = [];
-            // Using a more reliable public test file to reduce false positives
             const sampleUrl = 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
-            // 1. Head Request Check
             try {
                 const head = await fetch(sampleUrl, { method: 'HEAD' });
                 const type = head.headers.get('content-type');
@@ -176,10 +219,8 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Логика генерации аватарок и цветов.',
         tests: () => {
             const res: TestResult[] = [];
-            
-            // Color Hashing
             const color1 = stringToColor('user_123');
-            const color2 = stringToColor('user_123'); // Should be deterministic
+            const color2 = stringToColor('user_123');
             const color3 = stringToColor('user_456');
 
             res.push({
@@ -202,8 +243,6 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Валидация типов файлов и конфигураций.',
         tests: () => {
             const res: TestResult[] = [];
-            
-            // MIME Type Check Logic
             const allowedTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
             const fileType = 'application/exe';
             const isAllowed = allowedTypes.includes(fileType);
@@ -228,8 +267,6 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Математическое ядро: таймкоды, кадры, округления.',
         tests: () => {
             const res: TestResult[] = [];
-            
-            // FPS Math
             const fps25 = 25;
             const framesTotal = Math.floor(1.5 * fps25);
             res.push({
@@ -242,7 +279,6 @@ export const TEST_SUITE: TestGroup[] = [
                 failCondition: 'Ошибка плавающей запятой.'
             });
 
-            // SMPTE
             const tc = formatTimecode(65.5, 25);
             res.push({
                 name: 'SMPTE Timecode',
@@ -265,9 +301,8 @@ export const TEST_SUITE: TestGroup[] = [
         tests: () => {
             const res: TestResult[] = [];
             
-            // Expiry Logic
-            const pastDate = Date.now() - (10 * 24 * 60 * 60 * 1000); // 10 days ago
-            const isExp = isExpired(pastDate, 7); // check if older than 7 days
+            const pastDate = Date.now() - (10 * 24 * 60 * 60 * 1000); 
+            const isExp = isExpired(pastDate, 7); 
             
             res.push({
                 name: 'Subscription Expiry Check',
@@ -279,9 +314,8 @@ export const TEST_SUITE: TestGroup[] = [
                 failCondition: 'Пользователь сохраняет доступ после истечения срока.'
             });
 
-            const futureDate = Date.now() + (5 * 24 * 60 * 60 * 1000); // 5 days future
-            const daysLeft = getDaysRemaining(pastDate, 7); // Created 10 days ago, valid for 7. Should be 0.
-            const daysLeftFuture = getDaysRemaining(Date.now(), 7); // Created now, valid 7. Should be 7.
+            const daysLeft = getDaysRemaining(pastDate, 7); 
+            const daysLeftFuture = getDaysRemaining(Date.now(), 7); 
 
             res.push({
                 name: 'Days Remaining Calc',
@@ -300,11 +334,9 @@ export const TEST_SUITE: TestGroup[] = [
         id: 'export',
         title: 'Export Engines',
         icon: FileOutput,
-        description: 'Генераторы файлов для монтажных программ (XML, EDL, CSV).',
+        description: 'Генераторы файлов для монтажных программ.',
         tests: () => {
             const res: TestResult[] = [];
-            
-            // EDL
             const edl = generateEDL('Test', 1, mockComments, 24);
             res.push({
                 name: 'EDL Header Generation',
@@ -316,7 +348,6 @@ export const TEST_SUITE: TestGroup[] = [
                 failCondition: 'Файл не откроется в DaVinci.'
             });
 
-            // XML Safety
             const unsafeXml = generateResolveXML('Test', 1, [{...mockComments[0], text: 'A & B < C'}], 24);
             res.push({
                 name: 'XML Escaping',
@@ -338,8 +369,6 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Проверка защиты от инъекций и валидации типов.',
         tests: () => {
             const res: TestResult[] = [];
-
-            // XSS Simulation
             const unsafeInput = "<script>alert('xss')</script>";
             const sanitized = unsafeInput.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             res.push({
@@ -362,9 +391,8 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Генерация ID и системные функции.',
         tests: () => {
             const res: TestResult[] = [];
-            
             const uuid = generateId();
-            const isValidUUID = uuid.length >= 32; // basic check
+            const isValidUUID = uuid.length >= 32; 
 
             res.push({
                 name: 'UUID Generation',
@@ -386,7 +414,6 @@ export const TEST_SUITE: TestGroup[] = [
         description: 'Стресс-тесты производительности в браузере.',
         tests: () => {
             const res: TestResult[] = [];
-            
             const start = performance.now();
             const arr = new Array(50000).fill(0).map((_, i) => i);
             const filtered = arr.filter(n => n % 2 === 0);

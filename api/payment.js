@@ -23,7 +23,7 @@ async function getPaymentConfig() {
             secretKey: process.env.YOOKASSA_SECRET_KEY
         },
         prodamus: {
-            url: '', // User must configure in Admin
+            url: '', 
             secretKey: ''
         }
     };
@@ -145,10 +145,10 @@ export default async function handler(req, res) {
             if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
             const clerk = getClerkClient();
+            // SAFE FETCH & MERGE
             const clerkUser = await clerk.users.getUser(user.userId);
             const currentMeta = clerkUser.publicMetadata || {};
 
-            // FIX: Use updateUser instead of updateUserMetadata
             await clerk.users.updateUser(user.userId, {
                 publicMetadata: {
                     ...currentMeta,
@@ -176,22 +176,34 @@ export default async function handler(req, res) {
             if (provider === 'yookassa') {
                 const event = req.body;
                 
-                // Logging for debugging (Check Vercel Logs)
-                console.log('YooKassa Event Type:', event?.type);
+                if (!event || !event.type) {
+                    console.warn("Invalid Yookassa Webhook Event");
+                    return res.status(400).send('Invalid event');
+                }
 
-                if (!event || !event.type) return res.status(400).send('Invalid event');
+                console.log('YooKassa Event:', event.type);
 
                 if (event.type === 'payment.succeeded') {
                     const payment = event.object;
                     const { userId, planType } = payment.metadata || {};
                     const paymentMethodId = payment.payment_method?.id;
 
-                    console.log(`Processing payment for User: ${userId}, Plan: ${planType}`);
+                    console.log(`Processing payment for User: ${userId}, Plan: ${planType}, Method: ${paymentMethodId}`);
 
                     if (userId) {
                         const clerk = getClerkClient();
                         
-                        let updates = { plan: 'pro', status: 'active' };
+                        // CRITICAL: Fetch existing user first to PRESERVE other metadata (like admin role)
+                        let currentMeta = {};
+                        try {
+                            const userObj = await clerk.users.getUser(userId);
+                            currentMeta = userObj.publicMetadata || {};
+                        } catch (fetchErr) {
+                            console.error(`Failed to fetch user ${userId} for update`, fetchErr);
+                            // Proceed with empty meta if fetch fails, better than crashing
+                        }
+
+                        let updates = { ...currentMeta, plan: 'pro', status: 'active' };
                         
                         // LIFETIME LOGIC
                         if (planType === 'lifetime' || (!planType && payment.amount.value >= 2000)) {
@@ -203,14 +215,14 @@ export default async function handler(req, res) {
                         else {
                              updates.plan = 'pro';
                              updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
-                             updates.yookassaPaymentMethodId = paymentMethodId || null;
+                             updates.yookassaPaymentMethodId = paymentMethodId || updates.yookassaPaymentMethodId;
                         }
 
-                        // FIX: Use updateUser instead of updateUserMetadata
+                        // SAFE UPDATE
                         await clerk.users.updateUser(userId, {
-                            publicMetadata: { ...updates }
+                            publicMetadata: updates
                         });
-                        console.log(`✅ Clerk updated successfully for ${userId}`);
+                        console.log(`✅ Clerk updated successfully for ${userId}. New Plan: ${updates.plan}`);
                     } else {
                         console.warn("⚠️ Payment succeeded but No User ID in metadata");
                     }
@@ -231,7 +243,16 @@ export default async function handler(req, res) {
                 if (paymentStatus === 'success' && userId) {
                     const clerk = getClerkClient();
                     
-                    let updates = { plan: 'pro', status: 'active' };
+                    // SAFE FETCH & MERGE
+                    let currentMeta = {};
+                    try {
+                        const userObj = await clerk.users.getUser(userId);
+                        currentMeta = userObj.publicMetadata || {};
+                    } catch (fetchErr) {
+                        console.error(`Failed to fetch user ${userId}`, fetchErr);
+                    }
+
+                    let updates = { ...currentMeta, plan: 'pro', status: 'active' };
 
                     if (planType === 'lifetime') {
                         updates.plan = 'lifetime';
@@ -239,13 +260,11 @@ export default async function handler(req, res) {
                     } else {
                         updates.plan = 'pro';
                         updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
-                        // Prodamus recurrent tokens logic would go here if supported via API
-                        // For now assuming manual renewal or simple integration
                     }
 
-                    // FIX: Use updateUser instead of updateUserMetadata
+                    // SAFE UPDATE
                     await clerk.users.updateUser(userId, {
-                        publicMetadata: { ...updates }
+                        publicMetadata: updates
                     });
                     console.log(`✅ Clerk updated successfully for ${userId}`);
                 }
@@ -254,9 +273,7 @@ export default async function handler(req, res) {
 
         } catch (error) {
             console.error('❌ Webhook Critical Error:', error);
-            // Even if we fail, we generally return 200 to payment provider to stop them retrying infinitely,
-            // unless it's a temporary error we want to retry.
-            // For now, let's return 500 to see it in logs as error.
+            // Return 500 so provider retries (except for logic errors which we logged)
             return res.status(500).send('Server Error');
         }
     }

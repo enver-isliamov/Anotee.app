@@ -5,15 +5,12 @@ import { verifyUser, getClerkClient } from './_auth.js';
 export default async function handler(req, res) {
     const { action } = req.query;
 
-    // --- PUBLIC / HYBRID ENDPOINTS (Accessible to all, but restricted data for guests) ---
+    // --- PUBLIC / HYBRID ENDPOINTS ---
 
-    // 1. Get Payment Config (Public for Pricing Page, Full for Admin)
+    // 1. Get Payment Config
     if (action === 'get_payment_config') {
         try {
-            // Try to identify user, but don't crash if guest
             const user = await verifyUser(req); 
-            
-            // Check admin status via Clerk Metadata if user exists
             let isAdmin = false;
             if (user && user.userId) {
                 try {
@@ -22,77 +19,60 @@ export default async function handler(req, res) {
                     const role = clerkUser.publicMetadata?.role;
                     isAdmin = role === 'admin' || role === 'superadmin';
                 } catch (e) {
-                    console.warn("Failed to verify admin status for config fetch", e);
+                    console.warn("Failed to verify admin status", e);
                 }
             }
 
-            // Create table if not exists just in case
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
-            
             const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'payment_config'`;
             const rawConfig = rows.length > 0 ? rows[0].value : {};
 
             if (isAdmin) {
-                // Return FULL config for Admin (including secrets for editing)
                 return res.status(200).json(rawConfig);
             } else {
-                // Return SANITIZED config for Guests/Users (Prices & Features only)
-                // Strip sensitive keys to prevent leak
                 const safeConfig = {
                     ...rawConfig,
-                    yookassa: { 
-                        shopId: rawConfig.yookassa?.shopId,
-                        // secretKey intentionally removed
-                    },
-                    prodamus: { 
-                        url: rawConfig.prodamus?.url,
-                        // secretKey intentionally removed
-                    }
+                    yookassa: { shopId: rawConfig.yookassa?.shopId },
+                    prodamus: { url: rawConfig.prodamus?.url }
                 };
                 return res.status(200).json(safeConfig);
             }
         } catch (e) {
             console.error("Payment Config Error:", e);
-            return res.status(200).json({}); // Fallback to defaults on error
+            return res.status(200).json({});
         }
     }
 
-    // 2. Get App Config (Feature Flags)
+    // 2. Get App Config
     if (action === 'get_config') {
         try {
-            // Allow anyone to read feature flags (needed for limits check)
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
             const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'feature_flags'`;
             return res.status(200).json(rows.length > 0 ? rows[0].value : {});
         } catch (e) {
-            console.error(e);
             return res.status(200).json({}); 
         }
     }
 
-    // 3. Get App Version (Public)
+    // 3. Get App Version
     if (action === 'get_version') {
         try {
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
             const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'app_version'`;
             return res.status(200).json(rows.length > 0 ? rows[0].value : null);
         } catch (e) {
-            console.error(e);
             return res.status(200).json(null);
         }
     }
 
-    // --- STRICT ADMIN ACTIONS (Middleware Check) ---
-    // Everything below this line REQUIRES admin access
+    // --- STRICT ADMIN ACTIONS ---
     try {
-        const user = await verifyUser(req); // No need to force email anymore
+        const user = await verifyUser(req); 
         if (!user) {
             return res.status(401).json({ error: "Unauthorized" });
         }
 
         const clerk = getClerkClient();
-        
-        // CRITICAL: Fetch fresh user data from Clerk to check Metadata Role
         const clerkUser = await clerk.users.getUser(user.userId);
         const role = clerkUser.publicMetadata?.role;
         const isSuperAdmin = role === 'admin' || role === 'superadmin';
@@ -105,20 +85,14 @@ export default async function handler(req, res) {
         if (action === 'setup') {
             const providedSecret = req.query.secret;
             const expectedSecret = process.env.CLERK_SECRET_KEY;
-
-            if (!expectedSecret || providedSecret !== expectedSecret) {
-                return res.status(403).json({ error: "Forbidden" });
-            }
+            if (!expectedSecret || providedSecret !== expectedSecret) return res.status(403).json({ error: "Forbidden" });
 
             try {
                 await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
                 await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
                 await sql`CREATE INDEX IF NOT EXISTS idx_owner_id ON projects (owner_id);`;
                 await sql`CREATE INDEX IF NOT EXISTS idx_org_id ON projects (org_id);`;
-                
-                // NEW: System Settings Table
                 await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
-                
                 return res.status(200).json({ success: true, message: "DB Setup Complete" });
             } catch (e) {
                 return res.status(500).json({ error: e.message });
@@ -128,7 +102,6 @@ export default async function handler(req, res) {
         // --- MIGRATE DATA ---
         if (action === 'migrate') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
             const BATCH_SIZE = 50;
             let offset = 0;
             let updatedCount = 0;
@@ -138,18 +111,14 @@ export default async function handler(req, res) {
             while (hasMore) {
                 const { rows } = await sql`SELECT id, owner_id, data FROM projects ORDER BY created_at DESC LIMIT ${BATCH_SIZE} OFFSET ${offset};`;
                 if (rows.length === 0) { hasMore = false; break; }
-
                 for (const row of rows) {
                     let project = row.data;
                     let currentOwnerId = row.owner_id;
-                    
-                    // Logic to migrate ownership based on email match
                     if (currentOwnerId === user.email && user.email) {
                         currentOwnerId = user.id;
                         project.ownerId = user.id;
                         claimedCount++;
                     }
-
                     try {
                         await sql`UPDATE projects SET owner_id = ${currentOwnerId}, data = ${JSON.stringify(project)}::jsonb, org_id = ${project.orgId || null}, updated_at = ${Date.now()} WHERE id = ${project.id};`;
                         updatedCount++;
@@ -158,19 +127,16 @@ export default async function handler(req, res) {
                 offset += BATCH_SIZE;
                 if (offset > 5000) hasMore = false; 
             }
-
             return res.status(200).json({ success: true, updatedProjects: updatedCount, claimedOwnerships: claimedCount });
         }
 
         // --- LIST USERS ---
         if (action === 'users') {
             if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-            
             const usersList = await clerk.users.getUserList({ limit: 100, orderBy: '-created_at' });
             const data = usersList.data.map(u => {
                 const meta = u.publicMetadata || {};
                 const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
-                const uRole = meta.role;
                 return {
                     id: u.id,
                     name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
@@ -180,7 +146,7 @@ export default async function handler(req, res) {
                     expiresAt: meta.expiresAt,
                     isAutoRenew: !!meta.yookassaPaymentMethodId,
                     lastActive: u.lastSignInAt,
-                    isAdmin: uRole === 'admin' || uRole === 'superadmin'
+                    isAdmin: meta.role === 'admin' || meta.role === 'superadmin'
                 };
             });
             return res.status(200).json({ users: data });
@@ -189,7 +155,6 @@ export default async function handler(req, res) {
         // --- GRANT PRO ---
         if (action === 'grant_pro') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-            
             const { userId, days } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
 
@@ -200,16 +165,19 @@ export default async function handler(req, res) {
                 expiresAt = new Date('2099-12-31').getTime();
             }
 
-            // FIX: Use updateUser instead of updateUserMetadata
+            // Safe Merge
+            const targetUser = await clerk.users.getUser(userId);
+            const currentMeta = targetUser.publicMetadata || {};
+
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
+                    ...currentMeta,
                     plan: 'pro',
                     status: 'active',
                     expiresAt: expiresAt,
                     yookassaPaymentMethodId: null
                 }
             });
-
             return res.status(200).json({ success: true, message: `Pro granted to ${userId}` });
         }
 
@@ -218,9 +186,13 @@ export default async function handler(req, res) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId } = req.body;
             
-            // FIX: Use updateUser instead of updateUserMetadata
+            // Safe Merge
+            const targetUser = await clerk.users.getUser(userId);
+            const currentMeta = targetUser.publicMetadata || {};
+
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
+                    ...currentMeta,
                     plan: 'free',
                     status: 'inactive',
                     expiresAt: null
@@ -233,68 +205,37 @@ export default async function handler(req, res) {
         if (action === 'toggle_admin') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId, makeAdmin } = req.body;
-            
-            // Prevent changing own role to avoid lockout
-            if (userId === user.userId) {
-                return res.status(400).json({ error: "Cannot change own admin status via API" });
-            }
+            if (userId === user.userId) return res.status(400).json({ error: "Cannot change own admin status" });
 
-            // FIX: Use updateUser instead of updateUserMetadata
+            // Safe Merge
+            const targetUser = await clerk.users.getUser(userId);
+            const currentMeta = targetUser.publicMetadata || {};
+
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
+                    ...currentMeta,
                     role: makeAdmin ? 'admin' : 'user'
                 }
             });
             return res.status(200).json({ success: true });
         }
 
-        // --- UPDATE FEATURE FLAGS ---
+        // --- UPDATE CONFIGS ---
         if (action === 'update_config') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-            const config = req.body;
-            
-            await sql`
-                INSERT INTO system_settings (key, value) 
-                VALUES ('feature_flags', ${JSON.stringify(config)}::jsonb)
-                ON CONFLICT (key) 
-                DO UPDATE SET value = ${JSON.stringify(config)}::jsonb;
-            `;
+            await sql`INSERT INTO system_settings (key, value) VALUES ('feature_flags', ${JSON.stringify(req.body)}::jsonb) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(req.body)}::jsonb;`;
             return res.status(200).json({ success: true });
         }
 
-        // --- UPDATE PAYMENT CONFIG ---
         if (action === 'update_payment_config') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-            const config = req.body;
-            
-            if (!config || !['yookassa', 'prodamus'].includes(config.activeProvider)) {
-                return res.status(400).json({ error: "Invalid payment config" });
-            }
-
-            await sql`
-                INSERT INTO system_settings (key, value) 
-                VALUES ('payment_config', ${JSON.stringify(config)}::jsonb)
-                ON CONFLICT (key) 
-                DO UPDATE SET value = ${JSON.stringify(config)}::jsonb;
-            `;
+            await sql`INSERT INTO system_settings (key, value) VALUES ('payment_config', ${JSON.stringify(req.body)}::jsonb) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(req.body)}::jsonb;`;
             return res.status(200).json({ success: true });
         }
 
-        // --- UPDATE APP VERSION ---
         if (action === 'update_version') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-            const { version } = req.body;
-            
-            if (!version || typeof version !== 'string') {
-                return res.status(400).json({ error: "Version string required" });
-            }
-
-            await sql`
-                INSERT INTO system_settings (key, value) 
-                VALUES ('app_version', ${JSON.stringify({ version })}::jsonb)
-                ON CONFLICT (key) 
-                DO UPDATE SET value = ${JSON.stringify({ version })}::jsonb;
-            `;
+            await sql`INSERT INTO system_settings (key, value) VALUES ('app_version', ${JSON.stringify(req.body)}::jsonb) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(req.body)}::jsonb;`;
             return res.status(200).json({ success: true });
         }
 
