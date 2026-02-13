@@ -1,6 +1,4 @@
 
-import fetch from 'node-fetch';
-
 export default async function handler(req, res) {
     const { url } = req.query;
 
@@ -28,6 +26,7 @@ export default async function handler(req, res) {
     const safeUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
 
     try {
+        // Native fetch in Node 18+ does not need import
         const response = await fetch(safeUrl);
         
         if (!response.ok) {
@@ -46,7 +45,14 @@ export default async function handler(req, res) {
         if (contentLength) res.setHeader('Content-Length', contentLength);
 
         // Pipe the response body to the client
-        response.body.pipe(res);
+        // Node's native fetch body is a ReadableStream, we need to convert/pipe it
+        if (response.body && typeof response.body.pipe === 'function') {
+             response.body.pipe(res);
+        } else {
+             // Fallback for newer Node streams if .pipe isn't direct
+             const arrayBuffer = await response.arrayBuffer();
+             res.send(Buffer.from(arrayBuffer));
+        }
         
     } catch (e) {
         console.error("Audio Proxy Error:", e);
