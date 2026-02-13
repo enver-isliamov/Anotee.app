@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2 } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2, Star } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
 import { useDrive } from '../services/driveContext';
+import { useAppConfig } from '../hooks/useAppConfig';
 
 interface ProfileProps {
   currentUser: User;
@@ -105,6 +106,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const { isPro, expiresAt, checkStatus } = useSubscription();
   const { user } = useUser();
   const { isDriveReady, checkDriveConnection } = useDrive();
+  const { config } = useAppConfig();
   
   // States for S3
   const [activeStorageTab, setActiveStorageTab] = useState<'google' | 's3'>('google');
@@ -127,6 +129,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showCorsHelp, setShowCorsHelp] = useState(false);
   const [showProviderHelp, setShowProviderHelp] = useState(false);
+  const [showCnameHelp, setShowCnameHelp] = useState(false);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -141,6 +144,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   // Check Admin Access
   const role = (user?.publicMetadata as any)?.role;
   const isAdmin = role === 'admin' || role === 'superadmin';
+
+  // Feature Flag for White Label
+  const canUseWhiteLabel = isPro ? config.s3_custom_domain.enabledForPro : config.s3_custom_domain.enabledForFree;
 
   // Load S3 Config on Mount
   useEffect(() => {
@@ -371,7 +377,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* COLUMN 1: STORAGE SETTINGS (NEW) */}
+                {/* COLUMN 1: STORAGE SETTINGS */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* Main Subscription Card */}
                     <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
@@ -429,7 +435,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                         </div>
                     </div>
 
-                    {/* STORAGE CONFIGURATION (NEW) */}
+                    {/* STORAGE CONFIGURATION */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300">
@@ -539,26 +545,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                 </div>
                                             </div>
                                             
-                                            {/* PUBLIC URL / CDN INPUT */}
-                                            <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5 flex justify-between">
-                                                    <span>Public URL / CDN (Optional)</span>
-                                                    <span className="text-zinc-600 font-normal normal-case">For Custom Domains</span>
-                                                </label>
-                                                <div className="relative">
-                                                    <LinkIcon size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                                    <input 
-                                                        value={s3Config.publicUrl || ''} 
-                                                        onChange={(e) => setS3Config(p => ({...p, publicUrl: e.target.value}))}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
-                                                        placeholder="https://cdn.mysite.com"
-                                                    />
-                                                </div>
-                                                <p className="text-[10px] text-zinc-600 mt-1">
-                                                    Если указано, плеер будет использовать этот домен вместо Endpoint. Полезно для Cloudflare.
-                                                </p>
-                                            </div>
-
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
                                                 <div className="relative">
@@ -636,6 +622,54 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                             </>
                         )}
                     </div>
+
+                    {/* WHITE LABEL / CDN BLOCK */}
+                    {activeStorageTab === 's3' && canUseWhiteLabel && (
+                        <div className="bg-gradient-to-r from-violet-900/20 to-indigo-900/20 border border-violet-500/20 p-6 rounded-3xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-violet-500/20 rounded-lg text-violet-400">
+                                        <Star size={20} fill="currentColor" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                            White Label CDN <span className="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded border border-violet-500/30">PRO</span>
+                                        </h3>
+                                        <p className="text-xs text-zinc-400">Используйте свой домен для ссылок на видео.</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setShowCnameHelp(true)}
+                                    className="text-xs text-violet-400 hover:text-white underline decoration-dashed flex items-center gap-1"
+                                >
+                                    <HelpCircle size={12} /> Как настроить?
+                                </button>
+                            </div>
+
+                            <div className="relative">
+                                <LinkIcon size={14} className="absolute left-3 top-3.5 text-violet-400" />
+                                <input 
+                                    value={s3Config.publicUrl || ''} 
+                                    onChange={(e) => setS3Config(p => ({...p, publicUrl: e.target.value}))}
+                                    className="w-full bg-black/40 border border-violet-500/30 rounded-xl pl-9 pr-3 py-3 text-sm text-white focus:border-violet-500 outline-none font-mono placeholder-zinc-600 transition-colors" 
+                                    placeholder="https://cdn.mysite.com"
+                                />
+                            </div>
+                            <p className="text-[10px] text-zinc-500 mt-2 pl-1">
+                                Оставьте пустым, чтобы использовать стандартный Endpoint провайдера.
+                            </p>
+                            
+                            <div className="mt-4 flex justify-end">
+                                <button 
+                                    onClick={handleSaveS3}
+                                    disabled={isSavingS3}
+                                    className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-violet-900/20"
+                                >
+                                    Сохранить White Label
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* COLUMN 2: EXTRAS */}
@@ -759,6 +793,65 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                         
                         <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
                             <button onClick={() => setShowCorsHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Понятно</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CNAME HELP MODAL */}
+            {showCnameHelp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+                        <button onClick={() => setShowCnameHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
+                        
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-violet-100 dark:bg-violet-900/20 rounded-lg text-violet-600 dark:text-violet-400">
+                                <Globe size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Настройка своего домена</h2>
+                                <p className="text-xs text-zinc-500">Как подключить красивые ссылки (White Label)</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 mb-6">
+                            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                <p className="font-bold">ВАЖНО: Имя вашего бакета (Bucket Name) должно в точности совпадать с именем домена.</p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">1</div>
+                                    <div>
+                                        <p className="font-bold mb-1">Создайте бакет</p>
+                                        <p className="text-xs text-zinc-500">В Yandex Cloud или Cloudflare создайте бакет с именем, например: <code>cdn.mysite.com</code></p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">2</div>
+                                    <div>
+                                        <p className="font-bold mb-1">Настройте DNS (CNAME)</p>
+                                        <p className="text-xs text-zinc-500">У регистратора домена добавьте запись:</p>
+                                        <div className="mt-1 bg-zinc-100 dark:bg-zinc-950 p-2 rounded border border-zinc-200 dark:border-zinc-800 font-mono text-[10px]">
+                                            TYPE: CNAME<br/>
+                                            NAME: cdn<br/>
+                                            VALUE: {s3Config.provider === 'yandex' ? 'website.yandexcloud.net' : 'custom.domain.r2.dev (см. доку)'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">3</div>
+                                    <div>
+                                        <p className="font-bold mb-1">Заполните форму</p>
+                                        <p className="text-xs text-zinc-500">В поле "White Label URL" введите: <code>https://cdn.mysite.com</code></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                            <button onClick={() => setShowCnameHelp(false)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-colors">Всё понятно</button>
                         </div>
                     </div>
                 </div>

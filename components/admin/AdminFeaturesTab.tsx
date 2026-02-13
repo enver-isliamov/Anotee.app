@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { AppConfig, DEFAULT_CONFIG, FeatureRule } from '../../types';
 import { useAppVersion } from '../../hooks/useAppVersion';
-import { RefreshCw, Save, AlertTriangle, Sliders, Users, Download, Sparkles, Layout, Tag } from 'lucide-react';
+import { RefreshCw, Save, AlertTriangle, Sliders, Users, Download, Sparkles, Layout, Tag, Globe } from 'lucide-react';
 
 const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
     // General
@@ -22,6 +22,7 @@ const FEATURE_DESCRIPTIONS: Record<keyof AppConfig, string> = {
     google_drive: "Google Drive Интеграция",
     ai_transcription: "AI Транскрибация (Whisper)",
     high_res_proxies: "4K Прокси / Оригиналы",
+    s3_custom_domain: "White Label (Custom Domain / CDN)",
     
     // UI Elements
     ui_upsell_banner: "Баннер 'Купить Pro' (Дашборд)",
@@ -35,7 +36,7 @@ const CONFIG_GROUPS = {
     general: ['max_projects', 'project_locking', 'version_comparison'],
     sharing: ['sharing_project', 'sharing_public_link'],
     export: ['export_xml', 'export_csv', 'local_file_link'],
-    ai: ['ai_transcription', 'high_res_proxies', 'google_drive'],
+    cloud: ['google_drive', 'high_res_proxies', 's3_custom_domain', 'ai_transcription'],
     ui: ['ui_upsell_banner', 'ui_roadmap_block', 'ui_help_button', 'ui_footer', 'ui_drive_connect']
 };
 
@@ -43,7 +44,7 @@ const SUB_TABS = [
     { id: 'general', label: 'Основные', icon: Sliders },
     { id: 'sharing', label: 'Доступ и Шеринг', icon: Users },
     { id: 'export', label: 'Экспорт', icon: Download },
-    { id: 'ai', label: 'AI и Облако', icon: Sparkles },
+    { id: 'cloud', label: 'AI и Облако', icon: Sparkles },
     { id: 'ui', label: 'Интерфейс', icon: Layout },
 ];
 

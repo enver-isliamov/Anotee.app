@@ -128,6 +128,9 @@ export interface AppConfig {
     high_res_proxies: FeatureRule;
     project_locking: FeatureRule;
     version_comparison: FeatureRule;
+    
+    // S3 & White Label
+    s3_custom_domain: FeatureRule;
 
     // UI Control Flags
     ui_upsell_banner: FeatureRule;
@@ -153,6 +156,9 @@ export const DEFAULT_CONFIG: AppConfig = {
     high_res_proxies: { enabledForFree: false, enabledForPro: true },
     project_locking: { enabledForFree: false, enabledForPro: true },
     version_comparison: { enabledForFree: true, enabledForPro: true },
+    
+    // White Label
+    s3_custom_domain: { enabledForFree: false, enabledForPro: true },
 
     // UI Defaults
     ui_upsell_banner: { enabledForFree: true, enabledForPro: false },
