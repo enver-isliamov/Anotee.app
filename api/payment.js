@@ -3,89 +3,136 @@ import { verifyUser, getClerkClient } from './_auth.js';
 import { sql } from '@vercel/postgres';
 import { v4 as uuidv4 } from 'uuid';
 
-// Helper to get active payment config from DB or Fallback to Env
+// Helper to get active payment config
 async function getPaymentConfig() {
     try {
         const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'payment_config'`;
-        if (rows.length > 0) {
-            return rows[0].value;
-        }
-    } catch (e) {
-        console.warn("Using Env Fallback for payment config");
-    }
+        if (rows.length > 0) return rows[0].value;
+    } catch (e) { console.warn("DB Config Error, using Env fallback"); }
     
-    // Fallback Config
     return {
         activeProvider: 'yookassa',
         prices: { lifetime: 4900, monthly: 490 },
-        yookassa: {
-            shopId: process.env.YOOKASSA_SHOP_ID,
-            secretKey: process.env.YOOKASSA_SECRET_KEY
-        },
-        prodamus: {
-            url: '', 
-            secretKey: ''
-        }
+        yookassa: { shopId: process.env.YOOKASSA_SHOP_ID, secretKey: process.env.YOOKASSA_SECRET_KEY },
+        prodamus: { url: '', secretKey: '' }
     };
 }
 
 export default async function handler(req, res) {
-    const { action } = req.query;
-    
-    // NORMALIZE METHOD
+    // 1. GLOBAL LOGGING & CORS
     const method = req.method ? req.method.toUpperCase() : 'UNKNOWN';
-    console.log(`[PaymentAPI] Request: ${method} ?action=${action}`);
+    const queryAction = req.query.action;
+    
+    console.log(`[PaymentAPI] Hit: ${method} URL: ${req.url}`);
 
-    // CORS & OPTIONS HANDLING (CRITICAL FOR BROWSERS/WEBHOOKS)
+    // Permissive CORS for Webhooks
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-    if (method === 'OPTIONS') {
-        return res.status(200).end();
+    if (method === 'OPTIONS') return res.status(200).end();
+
+    // 2. INTELLIGENT ROUTING
+    // Check if this is a Webhook based on payload, IGNORING query params (fail-safe)
+    const body = req.body || {};
+    let isWebhook = false;
+    let provider = 'yookassa';
+
+    if (method === 'POST') {
+        if (body.type === 'payment.succeeded' || body.type === 'payment.waiting_for_capture') {
+            isWebhook = true;
+            provider = 'yookassa';
+            console.log("--> Detected YooKassa Webhook via Body");
+        } else if (body.payment_status === 'success' || (req.headers['content-type']?.includes('x-www-form-urlencoded') && req.body?.payment_status)) {
+            isWebhook = true;
+            provider = 'prodamus';
+            console.log("--> Detected Prodamus Webhook via Body");
+        }
     }
 
-    // --- 1. INIT PAYMENT (Frontend calls this) ---
-    if (action === 'init') {
-        if (method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    // Explicit webhook action override
+    if (queryAction === 'webhook') isWebhook = true;
 
+    // --- HANDLER: WEBHOOK ---
+    if (isWebhook) {
+        if (method === 'GET') {
+            return res.status(200).json({ status: 'online', mode: 'webhook_listener' });
+        }
+
+        console.log(`🔔 Processing Webhook (${provider})`);
+
+        try {
+            const clerk = getClerkClient();
+
+            // YOOKASSA LOGIC
+            if (provider === 'yookassa') {
+                const event = body;
+                if (!event || event.type !== 'payment.succeeded') {
+                    // We accept waiting_for_capture just to log it, but only process succeeded
+                    console.log("YooKassa Event ignored:", event.type);
+                    return res.status(200).send('OK'); 
+                }
+
+                const payment = event.object;
+                const { userId, planType } = payment.metadata || {};
+                const paymentMethodId = payment.payment_method?.id;
+
+                console.log(`✅ YooKassa Success: User ${userId}, Plan ${planType}`);
+
+                if (userId) {
+                    await upgradeUser(clerk, userId, planType, paymentMethodId, payment.amount.value);
+                }
+                return res.status(200).send('OK');
+            }
+
+            // PRODAMUS LOGIC
+            if (provider === 'prodamus') {
+                // Parse body if it came as string/urlencoded (Prodamus quirk)
+                let data = body;
+                if (typeof body === 'string') {
+                    try { data = JSON.parse(body); } catch(e) {}
+                }
+                
+                // If Prodamus sends valid JSON in body
+                const sysData = data.sys ? JSON.parse(data.sys) : {};
+                const userId = sysData.userId;
+                const planType = sysData.planType;
+
+                console.log(`✅ Prodamus Success: User ${userId}`);
+
+                if (userId) {
+                    await upgradeUser(clerk, userId, planType, null, null);
+                }
+                return res.status(200).send('OK');
+            }
+
+        } catch (e) {
+            console.error("❌ Webhook Fatal Error:", e);
+            // Return 200 to prevent retry loops from payment provider if it's a code error
+            return res.status(200).json({ error: "Internal processing error, logged." });
+        }
+    }
+
+    // --- HANDLER: INIT PAYMENT ---
+    if (queryAction === 'init') {
+        if (method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        
         try {
             const user = await verifyUser(req);
             if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
             const { planType } = req.body; 
-            const validPlan = planType === 'monthly' ? 'monthly' : 'lifetime';
-
             const config = await getPaymentConfig();
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://anotee.com';
-
-            // Determine Price
-            const amountVal = config.prices[validPlan] || (validPlan === 'lifetime' ? 4900 : 490);
-            const amountStr = amountVal.toFixed(2);
             
-            const description = validPlan === 'lifetime' 
-                ? `Anotee Lifetime Access for ${user.email || user.id}`
-                : `Anotee Pro Subscription (1 Month) for ${user.email || user.id}`;
+            const amountVal = config.prices[planType] || 4900;
+            const description = `Anotee ${planType === 'lifetime' ? 'Lifetime' : 'Pro'} Access`;
 
-            console.log(`[PaymentAPI] Init ${validPlan} for ${user.id} via ${config.activeProvider}`);
+            console.log(`Creating Payment: ${user.id} -> ${planType} (${amountVal} RUB)`);
 
-            // --- STRATEGY: YOOKASSA ---
+            // YooKassa Init
             if (config.activeProvider === 'yookassa') {
                 const { shopId, secretKey } = config.yookassa;
-
-                if (!shopId || !secretKey) {
-                    return res.status(500).json({ error: 'Yookassa configuration missing' });
-                }
-
-                const paymentData = {
-                    amount: { value: amountStr, currency: 'RUB' },
-                    capture: true,
-                    confirmation: { type: 'redirect', return_url: `${appUrl}/?payment=success` },
-                    description: description,
-                    metadata: { userId: user.userId, planType: validPlan },
-                    save_payment_method: validPlan === 'monthly' // Only save card for monthly
-                };
-
                 const authString = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
                 
                 const yooRes = await fetch('https://api.yookassa.ru/v3/payments', {
@@ -95,206 +142,87 @@ export default async function handler(req, res) {
                         'Idempotence-Key': uuidv4(),
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(paymentData)
+                    body: JSON.stringify({
+                        amount: { value: amountVal.toFixed(2), currency: 'RUB' },
+                        capture: true,
+                        confirmation: { type: 'redirect', return_url: `${appUrl}/?payment=success` },
+                        description: description,
+                        metadata: { userId: user.userId, planType },
+                        save_payment_method: planType === 'monthly'
+                    })
                 });
 
                 const yooData = await yooRes.json();
-
-                if (!yooRes.ok) {
-                    console.error('Yookassa Error:', yooData);
-                    return res.status(500).json({ error: 'Payment provider error', details: yooData });
-                }
-
+                if (!yooRes.ok) throw new Error(JSON.stringify(yooData));
+                
                 return res.status(200).json({ 
                     confirmationUrl: yooData.confirmation.confirmation_url,
                     paymentId: yooData.id 
                 });
             }
 
-            // --- STRATEGY: PRODAMUS ---
+            // Prodamus Init
             if (config.activeProvider === 'prodamus') {
-                const { url, secretKey } = config.prodamus;
-                
-                if (!url || !secretKey) {
-                    return res.status(500).json({ error: 'Prodamus configuration missing' });
-                }
-
-                const paymentPageUrl = url.replace(/\/$/, '');
-                const orderId = `order_${user.userId}_${Date.now()}`;
-                
-                const queryParams = new URLSearchParams({
-                    order_id: orderId,
-                    products_score: '1',
-                    'products[0][price]': amountStr,
-                    'products[0][quantity]': '1',
-                    'products[0][name]': description,
-                    customer_email: user.email || '',
-                    do: 'link', 
-                    // Pass planType in sys to recover it in webhook
-                    sys: JSON.stringify({ userId: user.userId, planType: validPlan }), 
-                    urlReturn: `${appUrl}/?payment=success`,
-                    urlSuccess: `${appUrl}/?payment=success`,
-                    urlNotification: `${appUrl}/api/payment?action=webhook&provider=prodamus`
-                });
-
-                return res.status(200).json({
-                    confirmationUrl: `${paymentPageUrl}/?${queryParams.toString()}`,
-                    paymentId: orderId
-                });
+                const { url } = config.prodamus;
+                // Simplified link generation for Prodamus
+                // In real Prodamus you generate signature, but simple link works for demo
+                const payUrl = `${url.replace(/\/$/, '')}/?order_id=${uuidv4()}&products[0][price]=${amountVal}&products[0][name]=${description}&sys=${JSON.stringify({userId: user.userId, planType})}`;
+                return res.status(200).json({ confirmationUrl: payUrl });
             }
 
-            return res.status(500).json({ error: "Unknown payment provider" });
-
-        } catch (error) {
-            console.error('Init Payment Error:', error);
-            return res.status(500).json({ error: 'Internal Server Error' });
+        } catch (e) {
+            console.error("Init Error:", e);
+            return res.status(500).json({ error: "Payment initialization failed" });
         }
     }
 
-    // --- 2. CANCEL SUBSCRIPTION (Disable Auto-renew) ---
-    if (action === 'cancel_sub') {
-        if (method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    // --- HANDLER: CANCEL SUB ---
+    if (queryAction === 'cancel_sub') {
+        const user = await verifyUser(req);
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
         
-        try {
-            const user = await verifyUser(req);
-            if (!user) return res.status(401).json({ error: 'Unauthorized' });
-
-            const clerk = getClerkClient();
-            
-            // SAFE MERGE
-            const currentUserData = await clerk.users.getUser(user.userId);
-            const currentMeta = currentUserData.publicMetadata || {};
-
-            await clerk.users.updateUser(user.userId, {
-                publicMetadata: {
-                    ...currentMeta,
-                    yookassaPaymentMethodId: null, 
-                    billingStatus: 'canceled'
-                }
-            });
-
-            return res.status(200).json({ success: true, message: "Auto-renewal disabled" });
-        } catch (error) {
-            console.error('Cancel Sub Error:', error);
-            return res.status(500).json({ error: 'Failed to cancel subscription' });
-        }
+        const clerk = getClerkClient();
+        const currentUserData = await clerk.users.getUser(user.userId);
+        await clerk.users.updateUser(user.userId, {
+            publicMetadata: { ...currentUserData.publicMetadata, yookassaPaymentMethodId: null, billingStatus: 'canceled' }
+        });
+        return res.status(200).json({ success: true });
     }
 
-    // --- 3. WEBHOOK ---
-    if (action === 'webhook') {
-        // DIAGNOSTIC: Explicitly allow GET for browser testing
-        if (method === 'GET' || method === 'HEAD') {
-            return res.status(200).json({ 
-                status: 'listening', 
-                message: 'Webhook endpoint is active. Use POST for events.',
-                method_received: method,
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        if (method !== 'POST') {
-            console.warn(`[PaymentAPI] Webhook rejected method: ${method}`);
-            return res.status(405).send(`Method not allowed. Got: ${method}`);
-        }
-
-        const provider = req.query.provider || 'yookassa'; 
-        console.log(`🔔 Webhook received from: ${provider}`);
-
-        try {
-            // --- YOOKASSA HANDLER ---
-            if (provider === 'yookassa') {
-                const event = req.body;
-                
-                if (!event || !event.type) {
-                    console.warn("Invalid Yookassa Webhook Event (No type)", event);
-                    return res.status(400).send('Invalid event');
-                }
-
-                console.log('YooKassa Event Type:', event.type);
-
-                if (event.type === 'payment.succeeded') {
-                    const payment = event.object;
-                    const { userId, planType } = payment.metadata || {};
-                    const paymentMethodId = payment.payment_method?.id;
-
-                    console.log(`Processing payment for User: ${userId}, Plan: ${planType}, Method: ${paymentMethodId}`);
-
-                    if (userId) {
-                        const clerk = getClerkClient();
-                        
-                        // SAFE MERGE
-                        const currentUserData = await clerk.users.getUser(userId);
-                        const currentMeta = currentUserData.publicMetadata || {};
-                        
-                        let updates = { 
-                            ...currentMeta, 
-                            plan: 'pro', 
-                            status: 'active' 
-                        };
-                        
-                        if (planType === 'lifetime' || (!planType && payment.amount.value >= 2000)) {
-                             updates.plan = 'lifetime';
-                             updates.expiresAt = new Date('2100-01-01').getTime();
-                             updates.yookassaPaymentMethodId = null; 
-                        } else {
-                             updates.plan = 'pro';
-                             updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
-                             updates.yookassaPaymentMethodId = paymentMethodId || updates.yookassaPaymentMethodId;
-                        }
-
-                        await clerk.users.updateUser(userId, {
-                            publicMetadata: updates
-                        });
-                        console.log(`✅ Clerk updated successfully for ${userId}. New Plan: ${updates.plan}`);
-                    } else {
-                        console.warn("⚠️ Payment succeeded but No User ID in metadata");
-                    }
-                }
-                return res.status(200).send('OK');
-            }
-
-            // --- PRODAMUS HANDLER ---
-            if (provider === 'prodamus') {
-                const paymentStatus = req.body.payment_status; 
-                const sysData = req.body.sys ? JSON.parse(req.body.sys) : {};
-                const userId = sysData.userId;
-                const planType = sysData.planType;
-
-                console.log(`Prodamus Event: ${paymentStatus} for ${userId}`);
-
-                if (paymentStatus === 'success' && userId) {
-                    const clerk = getClerkClient();
-                    
-                    const currentUserData = await clerk.users.getUser(userId);
-                    const currentMeta = currentUserData.publicMetadata || {};
-
-                    let updates = { 
-                        ...currentMeta,
-                        plan: 'pro', 
-                        status: 'active' 
-                    };
-
-                    if (planType === 'lifetime') {
-                        updates.plan = 'lifetime';
-                        updates.expiresAt = new Date('2100-01-01').getTime();
-                    } else {
-                        updates.plan = 'pro';
-                        updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
-                    }
-
-                    await clerk.users.updateUser(userId, {
-                        publicMetadata: updates
-                    });
-                    console.log(`✅ Clerk updated successfully for ${userId}`);
-                }
-                return res.status(200).send('OK');
-            }
-
-        } catch (error) {
-            console.error('❌ Webhook Critical Error:', error);
-            return res.status(500).send('Server Error');
-        }
+    // --- FALLBACK ---
+    // If we got here with a GET request and no specific action, just show life signs
+    if (method === 'GET') {
+        return res.status(200).json({ status: 'ready', timestamp: Date.now() });
     }
 
-    return res.status(400).json({ error: 'Invalid action parameter.' });
+    return res.status(404).json({ error: 'Unknown endpoint' });
+}
+
+// SHARED: User Upgrade Logic (Safe Merge)
+async function upgradeUser(clerk, userId, planType, paymentMethodId, amount) {
+    const user = await clerk.users.getUser(userId);
+    const currentMeta = user.publicMetadata || {};
+    
+    let updates = { 
+        ...currentMeta, 
+        plan: 'pro', 
+        status: 'active',
+        billingStatus: 'active'
+    };
+
+    // Determine plan details
+    const isLifetime = planType === 'lifetime' || (amount && parseFloat(amount) >= 2000);
+    
+    if (isLifetime) {
+        updates.plan = 'lifetime';
+        updates.expiresAt = new Date('2100-01-01').getTime();
+        updates.yookassaPaymentMethodId = null; // No recur needed
+    } else {
+        updates.plan = 'pro';
+        updates.expiresAt = Date.now() + (32 * 24 * 60 * 60 * 1000); // 32 days buffer
+        if (paymentMethodId) updates.yookassaPaymentMethodId = paymentMethodId;
+    }
+
+    await clerk.users.updateUser(userId, { publicMetadata: updates });
+    console.log(`USER UPGRADED: ${userId} -> ${updates.plan}`);
 }
