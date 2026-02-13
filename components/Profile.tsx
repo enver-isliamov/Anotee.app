@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2, Star, Edit2, Lock } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2, Star, Edit2, Lock, LayoutTemplate } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -490,28 +490,42 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                     </div>
                                 ) : (
                                     <div className="space-y-6 animate-in fade-in">
-                                        <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 flex gap-2">
-                                            <Info size={16} className="shrink-0 mt-0.5" />
-                                            <p>Вы можете подключить своё объектное хранилище (S3). Это обеспечит максимальную скорость воспроизведения и полный контроль над файлами.</p>
+                                        
+                                        {/* PROVIDER SELECTOR GRID */}
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            {[
+                                                { id: 'yandex', label: 'Yandex', icon: 'Y', color: 'bg-red-500' },
+                                                { id: 'cloudflare', label: 'R2', icon: 'C', color: 'bg-orange-500' },
+                                                { id: 'selectel', label: 'Selectel', icon: 'S', color: 'bg-blue-500' },
+                                                { id: 'custom', label: 'Custom', icon: '?', color: 'bg-zinc-600' },
+                                            ].map((provider) => (
+                                                <button
+                                                    key={provider.id}
+                                                    onClick={() => handleS3PresetChange(provider.id)}
+                                                    className={`relative p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group ${s3Config.provider === provider.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}
+                                                >
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shadow-lg ${provider.color} ${s3Config.provider !== provider.id ? 'opacity-70 group-hover:opacity-100' : ''}`}>
+                                                        {provider.icon}
+                                                    </div>
+                                                    <span className={`text-xs font-bold ${s3Config.provider === provider.id ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+                                                        {provider.label}
+                                                    </span>
+                                                    {s3Config.provider === provider.id && (
+                                                        <div className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                                                    )}
+                                                </button>
+                                            ))}
                                         </div>
 
-                                        {/* Presets */}
-                                        <div>
-                                            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Провайдер</label>
-                                            <div className="flex gap-2 flex-wrap">
-                                                {['yandex', 'selectel', 'cloudflare', 'custom'].map(p => (
-                                                    <button 
-                                                        key={p}
-                                                        onClick={() => handleS3PresetChange(p)}
-                                                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold capitalize transition-all ${s3Config.provider === p ? 'bg-white text-black border-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}
-                                                    >
-                                                        {p}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
+                                        {/* Dynamic Form Area (Fixed height helps reduce jump, but animate-in handles visual flow) */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
+                                            
+                                            {s3Config.provider === 'cloudflare' && (
+                                                <div className="col-span-2 text-[10px] text-orange-400 bg-orange-900/10 border border-orange-900/30 p-2 rounded flex items-center gap-2">
+                                                    <Zap size={12} /> Рекомендуем для бесплатного исходящего трафика.
+                                                </div>
+                                            )}
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Endpoint URL</label>
                                                 <div className="relative">
@@ -519,7 +533,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                     <input 
                                                         value={s3Config.endpoint} 
                                                         onChange={(e) => setS3Config(p => ({...p, endpoint: e.target.value}))}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono transition-colors" 
                                                         placeholder="https://storage.yandexcloud.net"
                                                     />
                                                 </div>
@@ -531,7 +545,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                     <input 
                                                         value={s3Config.bucket} 
                                                         onChange={(e) => setS3Config(p => ({...p, bucket: e.target.value}))}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
+                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
                                                         placeholder="my-videos"
                                                     />
                                                 </div>
@@ -543,7 +557,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                     <input 
                                                         value={s3Config.region} 
                                                         onChange={(e) => setS3Config(p => ({...p, region: e.target.value}))}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
+                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none" 
                                                         placeholder="ru-central1"
                                                     />
                                                 </div>
@@ -556,7 +570,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                     <input 
                                                         value={s3Config.accessKeyId} 
                                                         onChange={(e) => setS3Config(p => ({...p, accessKeyId: e.target.value}))}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
                                                         placeholder="YCAJE..."
                                                     />
                                                 </div>
@@ -576,7 +590,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                                 data-lpignore="true" // Ignore LastPass
                                                                 value={s3Config.secretAccessKey === '********' ? '' : s3Config.secretAccessKey} 
                                                                 onChange={(e) => setS3Config(p => ({...p, secretAccessKey: e.target.value}))}
-                                                                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
                                                                 placeholder="Введите новый Secret Key"
                                                                 autoFocus
                                                             />
@@ -593,7 +607,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg p-2 pl-9">
+                                                        <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg p-2 pl-9">
                                                             {s3Config.secretAccessKey === '********' ? (
                                                                 <div className="flex items-center gap-2 text-xs font-bold text-green-500 bg-green-900/20 px-2 py-1 rounded border border-green-900/50">
                                                                     <Check size={12} /> Ключ установлен
@@ -657,7 +671,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                             <button 
                                                 onClick={handleSaveS3}
                                                 disabled={isSavingS3 || isTestingS3}
-                                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+                                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-500/20"
                                             >
                                                 {isSavingS3 ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                                                 {s3Saved ? 'Сохранено' : 'Сохранить настройки'}
@@ -669,50 +683,81 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                         )}
                     </div>
 
-                    {/* WHITE LABEL / CDN BLOCK */}
+                    {/* WHITE LABEL / CDN BLOCK (Redesigned) */}
                     {activeStorageTab === 's3' && canUseWhiteLabel && (
-                        <div className="bg-gradient-to-r from-violet-900/20 to-indigo-900/20 border border-violet-500/20 p-6 rounded-3xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-violet-500/20 rounded-lg text-violet-400">
-                                        <Star size={20} fill="currentColor" />
+                        <div className="relative group overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/50 via-fuchsia-500/50 to-indigo-500/50 shadow-2xl">
+                            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 opacity-10 blur-xl group-hover:opacity-20 transition-opacity duration-500"></div>
+                            
+                            <div className="relative bg-zinc-950 rounded-[23px] p-6 h-full overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4">
+                                    <Crown size={120} className="text-violet-500/5 rotate-12" />
+                                </div>
+
+                                <div className="flex items-start justify-between mb-6 relative z-10">
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-3 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl text-white shadow-lg shadow-violet-500/20">
+                                            <LayoutTemplate size={24} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                                White Label CDN
+                                            </h3>
+                                            <p className="text-xs text-violet-200/70">Ваш личный домен для раздачи контента</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                            White Label CDN <span className="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded border border-violet-500/30">PRO</span>
-                                        </h3>
-                                        <p className="text-xs text-zinc-400">Используйте свой домен для ссылок на видео.</p>
+                                    <span className="text-[10px] font-bold bg-violet-500/10 text-violet-300 px-2 py-1 rounded border border-violet-500/20 uppercase tracking-widest">
+                                        Premium
+                                    </span>
+                                </div>
+
+                                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                                    <div className="space-y-4">
+                                        <div className="relative">
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase mb-2 block">Ваш Домен</label>
+                                            <div className="relative">
+                                                <Globe size={16} className="absolute left-3 top-3.5 text-violet-400" />
+                                                <input 
+                                                    value={s3Config.publicUrl || ''} 
+                                                    onChange={(e) => setS3Config(p => ({...p, publicUrl: e.target.value}))}
+                                                    className="w-full bg-zinc-900/50 border border-violet-500/30 rounded-xl pl-10 pr-3 py-3 text-sm text-white focus:border-violet-500 outline-none font-mono placeholder-zinc-600 transition-colors shadow-inner" 
+                                                    placeholder="https://cdn.mysite.com"
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        <button 
+                                            onClick={() => setShowCnameHelp(true)}
+                                            className="text-xs text-violet-400 hover:text-white flex items-center gap-1.5 transition-colors group/link"
+                                        >
+                                            <HelpCircle size={14} className="group-hover/link:scale-110 transition-transform" />
+                                            Как настроить CNAME запись?
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col justify-center">
+                                        <div className="text-[10px] text-zinc-500 mb-2 uppercase font-bold text-center">Как видят клиенты</div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2 text-xs text-zinc-600 line-through decoration-red-500/50 opacity-50">
+                                                <XCircle size={12} className="text-red-500" />
+                                                storage.yandexcloud.net/...
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-green-400 font-bold bg-green-900/10 px-2 py-1 rounded border border-green-500/20">
+                                                <CheckCircle2 size={12} />
+                                                {s3Config.publicUrl ? s3Config.publicUrl.replace('https://', '') : 'cdn.yourbrand.com'}/video.mp4
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => setShowCnameHelp(true)}
-                                    className="text-xs text-violet-400 hover:text-white underline decoration-dashed flex items-center gap-1"
-                                >
-                                    <HelpCircle size={12} /> Как настроить?
-                                </button>
-                            </div>
-
-                            <div className="relative">
-                                <LinkIcon size={14} className="absolute left-3 top-3.5 text-violet-400" />
-                                <input 
-                                    value={s3Config.publicUrl || ''} 
-                                    onChange={(e) => setS3Config(p => ({...p, publicUrl: e.target.value}))}
-                                    className="w-full bg-black/40 border border-violet-500/30 rounded-xl pl-9 pr-3 py-3 text-sm text-white focus:border-violet-500 outline-none font-mono placeholder-zinc-600 transition-colors" 
-                                    placeholder="https://cdn.mysite.com"
-                                />
-                            </div>
-                            <p className="text-[10px] text-zinc-500 mt-2 pl-1">
-                                Оставьте пустым, чтобы использовать стандартный Endpoint провайдера.
-                            </p>
-                            
-                            <div className="mt-4 flex justify-end">
-                                <button 
-                                    onClick={handleSaveS3}
-                                    disabled={isSavingS3}
-                                    className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-violet-900/20"
-                                >
-                                    Сохранить White Label
-                                </button>
+                                
+                                <div className="flex justify-end pt-4 border-t border-white/5">
+                                    <button 
+                                        onClick={handleSaveS3}
+                                        disabled={isSavingS3}
+                                        className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-violet-900/30 active:scale-95"
+                                    >
+                                        Сохранить настройки бренда
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
