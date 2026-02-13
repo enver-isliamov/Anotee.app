@@ -16,7 +16,7 @@
     "@clerk/clerk-react": "^5.0.0",
     "@huggingface/transformers": "^3.0.0",
     "@vercel/blob": "^0.22.1",
-    "@vercel/postgres": "^0.8.0",
+    "@vercel/postgres": "^0.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "lucide-react": "^0.469.0",
