@@ -148,8 +148,8 @@ export default async function handler(req, res) {
             const clerkUser = await clerk.users.getUser(user.userId);
             const currentMeta = clerkUser.publicMetadata || {};
 
-            // Remove payment method but keep plan
-            await clerk.users.updateUserMetadata(user.userId, {
+            // FIX: Use updateUser instead of updateUserMetadata
+            await clerk.users.updateUser(user.userId, {
                 publicMetadata: {
                     ...currentMeta,
                     yookassaPaymentMethodId: null, // Disable auto-charge
@@ -169,11 +169,16 @@ export default async function handler(req, res) {
         if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
         const provider = req.query.provider || 'yookassa'; 
+        console.log(`🔔 Webhook received from: ${provider}`);
 
         try {
             // --- YOOKASSA HANDLER ---
             if (provider === 'yookassa') {
                 const event = req.body;
+                
+                // Logging for debugging (Check Vercel Logs)
+                console.log('YooKassa Event Type:', event?.type);
+
                 if (!event || !event.type) return res.status(400).send('Invalid event');
 
                 if (event.type === 'payment.succeeded') {
@@ -181,8 +186,9 @@ export default async function handler(req, res) {
                     const { userId, planType } = payment.metadata || {};
                     const paymentMethodId = payment.payment_method?.id;
 
+                    console.log(`Processing payment for User: ${userId}, Plan: ${planType}`);
+
                     if (userId) {
-                        console.log(`✅ YooKassa: Success for ${userId}, Plan: ${planType}`);
                         const clerk = getClerkClient();
                         
                         let updates = { plan: 'pro', status: 'active' };
@@ -200,9 +206,13 @@ export default async function handler(req, res) {
                              updates.yookassaPaymentMethodId = paymentMethodId || null;
                         }
 
-                        await clerk.users.updateUserMetadata(userId, {
+                        // FIX: Use updateUser instead of updateUserMetadata
+                        await clerk.users.updateUser(userId, {
                             publicMetadata: { ...updates }
                         });
+                        console.log(`✅ Clerk updated successfully for ${userId}`);
+                    } else {
+                        console.warn("⚠️ Payment succeeded but No User ID in metadata");
                     }
                 }
                 return res.status(200).send('OK');
@@ -216,8 +226,9 @@ export default async function handler(req, res) {
                 const userId = sysData.userId;
                 const planType = sysData.planType;
 
+                console.log(`Prodamus Event: ${paymentStatus} for ${userId}`);
+
                 if (paymentStatus === 'success' && userId) {
-                    console.log(`✅ Prodamus: Success for ${userId}, Plan: ${planType}`);
                     const clerk = getClerkClient();
                     
                     let updates = { plan: 'pro', status: 'active' };
@@ -232,15 +243,20 @@ export default async function handler(req, res) {
                         // For now assuming manual renewal or simple integration
                     }
 
-                    await clerk.users.updateUserMetadata(userId, {
+                    // FIX: Use updateUser instead of updateUserMetadata
+                    await clerk.users.updateUser(userId, {
                         publicMetadata: { ...updates }
                     });
+                    console.log(`✅ Clerk updated successfully for ${userId}`);
                 }
                 return res.status(200).send('OK');
             }
 
         } catch (error) {
-            console.error('Webhook Error:', error);
+            console.error('❌ Webhook Critical Error:', error);
+            // Even if we fail, we generally return 200 to payment provider to stop them retrying infinitely,
+            // unless it's a temporary error we want to retry.
+            // For now, let's return 500 to see it in logs as error.
             return res.status(500).send('Server Error');
         }
     }

@@ -75,8 +75,6 @@ export default async function handler(req, res) {
         try {
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
             const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'app_version'`;
-            // Value stored as JSONB, so it might be wrapped in quotes or an object. 
-            // We store it as { version: "vX.X" } to be safe with JSONB
             return res.status(200).json(rows.length > 0 ? rows[0].value : null);
         } catch (e) {
             console.error(e);
@@ -202,7 +200,8 @@ export default async function handler(req, res) {
                 expiresAt = new Date('2099-12-31').getTime();
             }
 
-            await clerk.users.updateUserMetadata(userId, {
+            // FIX: Use updateUser instead of updateUserMetadata
+            await clerk.users.updateUser(userId, {
                 publicMetadata: {
                     plan: 'pro',
                     status: 'active',
@@ -219,7 +218,8 @@ export default async function handler(req, res) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId } = req.body;
             
-            await clerk.users.updateUserMetadata(userId, {
+            // FIX: Use updateUser instead of updateUserMetadata
+            await clerk.users.updateUser(userId, {
                 publicMetadata: {
                     plan: 'free',
                     status: 'inactive',
@@ -239,7 +239,8 @@ export default async function handler(req, res) {
                 return res.status(400).json({ error: "Cannot change own admin status via API" });
             }
 
-            await clerk.users.updateUserMetadata(userId, {
+            // FIX: Use updateUser instead of updateUserMetadata
+            await clerk.users.updateUser(userId, {
                 publicMetadata: {
                     role: makeAdmin ? 'admin' : 'user'
                 }
