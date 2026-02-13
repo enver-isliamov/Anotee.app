@@ -58,7 +58,8 @@ export default async function handler(req, res) {
 
                 if (payment.status === 'succeeded') {
                     const newExpiry = Date.now() + (30 * 24 * 60 * 60 * 1000);
-                    await clerk.users.updateUserMetadata(user.id, {
+                    // FIX: Use updateUser instead of updateUserMetadata
+                    await clerk.users.updateUser(user.id, {
                         publicMetadata: { ...user.publicMetadata, expiresAt: newExpiry }
                     });
                     results.push({ userId: user.id, status: 'renewed' });

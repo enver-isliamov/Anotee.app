@@ -2,13 +2,156 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../../types';
-import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save } from 'lucide-react';
+import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check, Lock, Unlock, Hash, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
+
+// --- HELPER COMPONENTS ---
+
+const LockedConfigInput = ({ 
+    label, 
+    value, 
+    onChange, 
+    placeholder, 
+    icon: Icon,
+    type = "text"
+}: { 
+    label: string, 
+    value: string, 
+    onChange: (val: string) => void, 
+    placeholder?: string,
+    icon: any,
+    type?: string
+}) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [isEditing]);
+
+    return (
+        <div className="w-full">
+            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">{label}</label>
+            <div className="relative group">
+                <div className={`absolute left-3 top-2.5 transition-colors ${isEditing ? 'text-indigo-500' : 'text-zinc-400'}`}>
+                    <Icon size={16} />
+                </div>
+                <input
+                    ref={inputRef}
+                    type={type}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    readOnly={!isEditing}
+                    placeholder={placeholder}
+                    className={`w-full rounded-xl py-2.5 pl-10 pr-10 text-sm font-mono outline-none border transition-all ${
+                        isEditing 
+                            ? 'bg-white dark:bg-black border-indigo-500 text-zinc-900 dark:text-zinc-100 shadow-[0_0_0_2px_rgba(99,102,241,0.1)]' 
+                            : 'bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 cursor-default opacity-80'
+                    }`}
+                />
+                <button 
+                    onClick={() => setIsEditing(!isEditing)}
+                    className={`absolute right-2 top-2 p-1 rounded-lg transition-all ${
+                        isEditing 
+                            ? 'text-white bg-indigo-500 hover:bg-indigo-600 shadow-sm' 
+                            : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                    }`}
+                    title={isEditing ? "Done" : "Edit"}
+                >
+                    {isEditing ? <Check size={14} /> : <Edit2 size={14} />}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const LockedSecretInput = ({ 
+    label, 
+    value, 
+    onChange, 
+    placeholder 
+}: { 
+    label: string, 
+    value: string, 
+    onChange: (val: string) => void, 
+    placeholder?: string 
+}) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [showSecret, setShowSecret] = useState(false);
+    
+    // Mask logic
+    const isSet = value && value !== '' && value !== '********';
+    const displayValue = isEditing ? value : (value ? '••••••••••••••••••••••••' : '');
+
+    const handleToggle = () => {
+        if (!isEditing) {
+            // Enter edit mode: Clear if it was masked default '********' to allow fresh entry
+            if (value === '********') onChange('');
+            setIsEditing(true);
+        } else {
+            // Save/Lock
+            setIsEditing(false);
+            setShowSecret(false);
+        }
+    };
+
+    return (
+        <div className="w-full">
+             <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">{label}</label>
+             <div className="relative group">
+                <div className={`absolute left-3 top-2.5 transition-colors ${isEditing ? 'text-indigo-500' : 'text-zinc-400'}`}>
+                    <Key size={16} />
+                </div>
+                <input
+                    type={isEditing && showSecret ? "text" : "password"}
+                    value={displayValue}
+                    onChange={(e) => onChange(e.target.value)}
+                    readOnly={!isEditing}
+                    placeholder={isEditing ? placeholder : (value ? "Configured" : "Not Configured")}
+                    className={`w-full rounded-xl py-2.5 pl-10 pr-20 text-sm font-mono outline-none border transition-all ${
+                        isEditing 
+                            ? 'bg-white dark:bg-black border-indigo-500 text-zinc-900 dark:text-zinc-100 shadow-[0_0_0_2px_rgba(99,102,241,0.1)]' 
+                            : 'bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 cursor-default opacity-80'
+                    }`}
+                />
+                
+                <div className="absolute right-2 top-2 flex gap-1">
+                    {isEditing && (
+                        <button 
+                            onClick={() => setShowSecret(!showSecret)}
+                            className="p-1 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                        >
+                            {showSecret ? <EyeOff size={14}/> : <Eye size={14}/>}
+                        </button>
+                    )}
+                    <button 
+                        onClick={handleToggle}
+                        className={`p-1 rounded-lg transition-all ${
+                            isEditing 
+                                ? 'text-white bg-indigo-500 hover:bg-indigo-600 shadow-sm' 
+                                : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                        }`}
+                        title={isEditing ? "Done" : "Change Secret"}
+                    >
+                        {isEditing ? <Check size={14} /> : <Edit2 size={14} />}
+                    </button>
+                </div>
+             </div>
+        </div>
+    )
+}
+
+// --- MAIN COMPONENT ---
 
 export const AdminPaymentsTab: React.FC = () => {
     const { getToken } = useAuth();
     const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [isSavingPayment, setIsSavingPayment] = useState(false);
+
+    // UI States
+    const [isEditingGateway, setIsEditingGateway] = useState(false);
 
     // Drag and Drop Refs
     const dragItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
@@ -82,6 +225,7 @@ export const AdminPaymentsTab: React.FC = () => {
                 body: JSON.stringify(paymentConfig)
             });
             alert("Настройки интеграций сохранены!");
+            setIsEditingGateway(false); // Lock gateway selection after save
         } catch (e) {
             alert("Не удалось сохранить настройки платежей");
         } finally {
@@ -271,14 +415,35 @@ export const AdminPaymentsTab: React.FC = () => {
                     
                     {/* BLOCK 1: GATEWAY SELECTION */}
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
-                        <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-6">
-                            <CreditCard size={18}/> Выбор Шлюза (Gateway)
-                        </h3>
+                        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-6">
+                            <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                                <CreditCard size={18}/> Выбор Шлюза (Gateway)
+                            </h3>
+                            <button 
+                                onClick={() => setIsEditingGateway(!isEditingGateway)} 
+                                className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold ${isEditingGateway ? 'bg-indigo-600 text-white shadow-lg' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+                            >
+                                {isEditingGateway ? (
+                                    <> <Check size={14} /> Готово </>
+                                ) : (
+                                    <> <Edit2 size={14} /> Изменить </>
+                                )}
+                            </button>
+                        </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <button 
-                                onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
-                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                onClick={() => isEditingGateway && setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                disabled={!isEditingGateway}
+                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group 
+                                    ${paymentConfig.activeProvider === 'yookassa' 
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                                        : 'border-zinc-200 dark:border-zinc-800'
+                                    }
+                                    ${!isEditingGateway && paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 grayscale cursor-default' : ''}
+                                    ${!isEditingGateway && paymentConfig.activeProvider === 'yookassa' ? 'cursor-default' : ''}
+                                    ${isEditingGateway ? 'hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer' : ''}
+                                `}
                             >
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'yookassa' ? 'bg-[#7B61FF]' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Yoo</div>
                                 <div>
@@ -286,11 +451,21 @@ export const AdminPaymentsTab: React.FC = () => {
                                     <div className="text-xs text-zinc-500">Автоплатежи (Recurrent)</div>
                                 </div>
                                 {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                {!isEditingGateway && paymentConfig.activeProvider !== 'yookassa' && <div className="absolute top-4 right-4 text-zinc-300"><Lock size={16} /></div>}
                             </button>
 
                             <button 
-                                onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
-                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                onClick={() => isEditingGateway && setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                disabled={!isEditingGateway}
+                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group 
+                                    ${paymentConfig.activeProvider === 'prodamus' 
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                                        : 'border-zinc-200 dark:border-zinc-800'
+                                    }
+                                    ${!isEditingGateway && paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 grayscale cursor-default' : ''}
+                                    ${!isEditingGateway && paymentConfig.activeProvider === 'prodamus' ? 'cursor-default' : ''}
+                                    ${isEditingGateway ? 'hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer' : ''}
+                                `}
                             >
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'prodamus' ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Pr</div>
                                 <div>
@@ -298,63 +473,45 @@ export const AdminPaymentsTab: React.FC = () => {
                                     <div className="text-xs text-zinc-500">Международные карты</div>
                                 </div>
                                 {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                {!isEditingGateway && paymentConfig.activeProvider !== 'prodamus' && <div className="absolute top-4 right-4 text-zinc-300"><Lock size={16} /></div>}
                             </button>
                         </div>
 
                         {/* Settings Fields */}
-                        <div className="bg-zinc-50 dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
+                        <div className="bg-zinc-50 dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800 animate-in fade-in">
                             {paymentConfig.activeProvider === 'yookassa' && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Shop ID</label>
-                                        <input 
-                                            type="text" 
-                                            value={paymentConfig.yookassa.shopId} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: e.target.value}}))}
-                                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Enter Shop ID"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.yookassa.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
-                                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="test_..."
-                                        />
-                                    </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <LockedConfigInput 
+                                        label="Shop ID" 
+                                        value={paymentConfig.yookassa.shopId} 
+                                        onChange={(val) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, shopId: val}}))}
+                                        placeholder="Enter Shop ID"
+                                        icon={Hash}
+                                    />
+                                    <LockedSecretInput
+                                        label="Secret Key"
+                                        value={paymentConfig.yookassa.secretKey}
+                                        onChange={(val) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: val}}))}
+                                        placeholder="Enter New Secret Key"
+                                    />
                                 </div>
                             )}
 
                             {paymentConfig.activeProvider === 'prodamus' && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Payment Page URL</label>
-                                        <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                value={paymentConfig.prodamus.url} 
-                                                onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: e.target.value}}))}
-                                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
-                                                placeholder="https://yourschool.payform.ru"
-                                            />
-                                            <a href={paymentConfig.prodamus.url} target="_blank" rel="noreferrer" className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:text-indigo-500 text-zinc-500 flex items-center justify-center">
-                                                <ExternalLink size={16} />
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.prodamus.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
-                                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Secret key for signature"
-                                        />
-                                    </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <LockedConfigInput 
+                                        label="Payment Page URL" 
+                                        value={paymentConfig.prodamus.url} 
+                                        onChange={(val) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, url: val}}))}
+                                        placeholder="https://yourschool.payform.ru"
+                                        icon={LinkIcon}
+                                    />
+                                    <LockedSecretInput
+                                        label="Secret Key (Signing)"
+                                        value={paymentConfig.prodamus.secretKey}
+                                        onChange={(val) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: val}}))}
+                                        placeholder="Enter Signing Secret"
+                                    />
                                 </div>
                             )}
                         </div>
