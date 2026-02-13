@@ -165,13 +165,13 @@ export default async function handler(req, res) {
                 expiresAt = new Date('2099-12-31').getTime();
             }
 
-            // Safe Merge
+            // SAFE MERGE
             const targetUser = await clerk.users.getUser(userId);
             const currentMeta = targetUser.publicMetadata || {};
 
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
-                    ...currentMeta,
+                    ...currentMeta, // PRESERVE EXISTING DATA
                     plan: 'pro',
                     status: 'active',
                     expiresAt: expiresAt,
@@ -186,13 +186,13 @@ export default async function handler(req, res) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId } = req.body;
             
-            // Safe Merge
+            // SAFE MERGE
             const targetUser = await clerk.users.getUser(userId);
             const currentMeta = targetUser.publicMetadata || {};
 
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
-                    ...currentMeta,
+                    ...currentMeta, // PRESERVE
                     plan: 'free',
                     status: 'inactive',
                     expiresAt: null
@@ -207,7 +207,7 @@ export default async function handler(req, res) {
             const { userId, makeAdmin } = req.body;
             if (userId === user.userId) return res.status(400).json({ error: "Cannot change own admin status" });
 
-            // Safe Merge
+            // SAFE MERGE
             const targetUser = await clerk.users.getUser(userId);
             const currentMeta = targetUser.publicMetadata || {};
 
