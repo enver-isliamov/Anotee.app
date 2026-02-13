@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { AppConfig, DEFAULT_CONFIG, FeatureRule } from '../../types';
 import { useAppVersion } from '../../hooks/useAppVersion';
-import { RefreshCw, Save, AlertTriangle, Sliders, Users, Download, Sparkles, Layout, Tag, Database, Lock, SplitSquareHorizontal, HardDrive, FileJson, FileSpreadsheet, Monitor, Globe, Image, Mic, MessageSquare, HelpCircle, Link as LinkIcon, Power } from 'lucide-react';
+import { RefreshCw, Save, AlertTriangle, Sliders, Users, Download, Sparkles, Layout, Database, Lock, SplitSquareHorizontal, HardDrive, FileJson, FileSpreadsheet, Monitor, Globe, Mic, HelpCircle, Link as LinkIcon, Power, Check, X, Infinity, Tag } from 'lucide-react';
 
 interface FeatureMeta {
     title: string;
@@ -16,111 +16,111 @@ const FEATURE_METADATA: Record<keyof AppConfig, FeatureMeta> = {
     // General
     max_projects: {
         title: "Лимиты проектов",
-        description: "Ограничение на количество активных личных проектов, которые может создать пользователь.",
-        location: "Дашборд / API",
+        description: "Количество активных личных проектов.",
+        location: "Core",
         icon: Database
     },
     project_locking: {
-        title: "Блокировка Проекта (NDA)",
-        description: "Возможность закрывать проект от изменений и шеринга (Lock Mode).",
-        location: "Карточка проекта",
+        title: "Блокировка (NDA)",
+        description: "Запрет изменений и шеринга проекта.",
+        location: "Проект",
         icon: Lock
     },
     version_comparison: {
         title: "Сравнение версий",
-        description: "Режим Side-by-Side для одновременного просмотра двух версий видео.",
-        location: "Плеер (Header)",
+        description: "Режим Side-by-Side плеера.",
+        location: "Плеер",
         icon: SplitSquareHorizontal
     },
     local_file_link: {
-        title: "Локальный файл (Offline)",
-        description: "Возможность привязать локальный файл с диска для просмотра без интернета.",
-        location: "Плеер (Header)",
+        title: "Локальный файл",
+        description: "Просмотр офлайн без загрузки в облако.",
+        location: "Плеер",
         icon: HardDrive
     },
 
     // Sharing
     sharing_project: {
         title: "Приглашение в команду",
-        description: "Отправка инвайтов по email для добавления редакторов в проект.",
-        location: "Модальное окно Share",
+        description: "Добавление редакторов по email.",
+        location: "Share Modal",
         icon: Users
     },
     sharing_public_link: {
         title: "Публичные ссылки",
-        description: "Генерация ссылок для просмотра без регистрации (Client Review).",
-        location: "Модальное окно Share",
+        description: "Просмотр без регистрации (Review Link).",
+        location: "Share Modal",
         icon: Globe
     },
 
     // Export
     export_xml: {
-        title: "Экспорт в DaVinci Resolve",
-        description: "Скачивание маркеров в формате .xml (FCP7 XML).",
-        location: "Плеер (Меню Экспорта)",
+        title: "Экспорт Resolve (XML)",
+        description: "Скачивание цветных маркеров .xml.",
+        location: "Экспорт",
         icon: FileJson
     },
     export_csv: {
-        title: "Экспорт в Premiere Pro",
-        description: "Скачивание списка комментариев в табличном формате .csv.",
-        location: "Плеер (Меню Экспорта)",
+        title: "Экспорт Premiere (CSV)",
+        description: "Скачивание таблицы маркеров .csv.",
+        location: "Экспорт",
         icon: FileSpreadsheet
     },
 
     // Cloud & AI
     google_drive: {
-        title: "Google Drive Интеграция",
-        description: "Возможность подключить личный Google Диск для хранения исходников.",
-        location: "Профиль / Загрузка",
+        title: "Google Drive",
+        description: "Интеграция личного диска.",
+        location: "Профиль",
         icon: HardDrive
     },
     high_res_proxies: {
         title: "4K / Оригиналы",
-        description: "Разрешить просмотр и хранение файлов высокого разрешения.",
+        description: "Хранение исходников высокого качества.",
         location: "Плеер",
         icon: Monitor
     },
     s3_custom_domain: {
         title: "White Label (CDN)",
-        description: "Подключение своего домена для раздачи файлов через S3.",
-        location: "Профиль (Настройки S3)",
+        description: "Свой домен для раздачи файлов.",
+        location: "S3 Config",
         icon: Globe
     },
     ai_transcription: {
         title: "AI Транскрибация",
-        description: "Автоматический перевод речи в текст (Whisper) прямо в браузере.",
-        location: "Плеер (Сайдбар)",
+        description: "Перевод речи в текст (Whisper).",
+        location: "Плеер",
         icon: Mic
     },
 
     // UI Elements
     ui_upsell_banner: {
         title: "Баннер 'Купить Pro'",
-        description: "Рекламный блок с призывом обновиться до платной версии.",
-        location: "Дашборд (Низ)",
+        description: "Рекламный блок в дашборде.",
+        location: "Дашборд",
         icon: Sparkles
     },
     ui_roadmap_block: {
-        title: "Блок Тарифов (Roadmap)",
-        description: "Секция с карточками тарифов и кнопками покупки.",
-        location: "Профиль / Страница Цен",
+        title: "Блок Тарифов",
+        description: "Секция цен и покупки.",
+        location: "Профиль",
         icon: Layout
     },
     ui_help_button: {
-        title: "Кнопка 'Тур/Помощь'",
-        description: "Иконка знака вопроса для запуска онбординг-тура.",
-        location: "Хедер (Верхнее меню)",
+        title: "Кнопка 'Тур'",
+        description: "Запуск онбординга.",
+        location: "Хедер",
         icon: HelpCircle
     },
     ui_footer: {
-        title: "Футер приложения",
-        description: "Нижняя часть сайта с ссылками на оферту и политику.",
-        location: "Все страницы",
+        title: "Футер",
+        description: "Подвал сайта.",
+        location: "Global",
         icon: Layout
     },
     ui_drive_connect: {
-        title: "Кнопка 'Подключить Drive'",
-        description: "Призыв к действию для подключения Google Drive.",
+        title: "Кнопка Drive",
+        description: "Призыв подключить диск.",
         location: "Профиль",
         icon: LinkIcon
     }
@@ -230,111 +230,98 @@ export const AdminFeaturesTab: React.FC = () => {
         }));
     };
 
-    const renderConfigRow = (key: string, rule: FeatureRule) => {
+    const renderConfigCard = (key: string, rule: FeatureRule) => {
         const meta = FEATURE_METADATA[key as keyof AppConfig] || { 
             title: key, 
-            description: "No description available", 
+            description: "No description", 
             location: "Unknown", 
             icon: Power 
         };
         const Icon = meta.icon;
 
         return (
-            <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+            <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm flex flex-col h-full hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
                 
-                {/* Header Section */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                    <div className="flex items-start gap-4">
-                        <div className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-600 dark:text-zinc-400">
-                            <Icon size={20} />
+                {/* Header */}
+                <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-400">
+                            <Icon size={18} />
                         </div>
                         <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-bold text-base text-zinc-900 dark:text-white">
-                                    {meta.title}
-                                </h4>
-                                <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
-                                    {key}
-                                </span>
-                            </div>
-                            <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xl">
-                                {meta.description}
-                            </p>
+                            <h4 className="font-bold text-sm text-zinc-900 dark:text-white leading-tight">{meta.title}</h4>
+                            <span className="text-[10px] text-zinc-400 font-mono bg-zinc-50 dark:bg-zinc-950 px-1.5 rounded">{meta.location}</span>
                         </div>
-                    </div>
-                    <div className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-indigo-100 dark:border-indigo-500/20 whitespace-nowrap">
-                        📍 {meta.location}
                     </div>
                 </div>
+                
+                <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-4 flex-1 leading-snug">
+                    {meta.description}
+                </p>
 
-                {/* Controls Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-8 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                {/* Toggles Grid */}
+                <div className="grid grid-cols-2 gap-2 mt-auto">
                     
-                    {/* Free Tier Column */}
-                    <div className="space-y-3 pb-4 md:pb-0 border-b md:border-b-0 border-zinc-100 dark:border-zinc-800">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 rounded-full bg-zinc-400"></div>
-                            <span className="text-xs font-bold uppercase text-zinc-500">Free Tier</span>
+                    {/* FREE TIER TOGGLE */}
+                    <div 
+                        onClick={() => handleConfigChange(key as keyof AppConfig, 'enabledForFree', !rule.enabledForFree)}
+                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none ${
+                            rule.enabledForFree 
+                                ? 'bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600' 
+                                : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-100 dark:border-zinc-900 opacity-60 grayscale'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[10px] font-bold uppercase ${rule.enabledForFree ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400'}`}>Free</span>
+                            {rule.enabledForFree ? <Check size={12} className="text-zinc-600 dark:text-zinc-400"/> : <X size={12} className="text-zinc-300"/>}
                         </div>
                         
-                        <div className="flex items-center justify-between bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Доступно</span>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={rule.enabledForFree}
-                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForFree', e.target.checked)}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-zinc-600"></div>
-                            </label>
-                        </div>
-
-                        {rule.limitFree !== undefined && (
-                            <div className="flex items-center gap-3">
-                                <label className="text-xs font-medium text-zinc-500 shrink-0 w-16">Лимит:</label>
-                                <input
+                        {rule.limitFree !== undefined ? (
+                            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                                <input 
                                     type="number"
+                                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 text-xs font-mono text-center outline-none focus:border-zinc-400"
                                     value={rule.limitFree}
                                     onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
-                                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-zinc-400 dark:focus:border-zinc-600 transition-colors"
                                 />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1 mt-1 text-[10px] text-zinc-400">
+                                <Infinity size={12} /> Unlimited
                             </div>
                         )}
                     </div>
 
-                    {/* Pro Tier Column */}
-                    <div className="space-y-3 md:pl-8 md:border-l border-zinc-100 dark:border-zinc-800 pt-4 md:pt-0">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-                            <span className="text-xs font-bold uppercase text-indigo-500">Pro Tier</span>
+                    {/* PRO TIER TOGGLE */}
+                    <div 
+                        onClick={() => handleConfigChange(key as keyof AppConfig, 'enabledForPro', !rule.enabledForPro)}
+                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none ${
+                            rule.enabledForPro 
+                                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/30' 
+                                : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-100 dark:border-zinc-900 opacity-60 grayscale'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[10px] font-bold uppercase ${rule.enabledForPro ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-400'}`}>Pro</span>
+                            {rule.enabledForPro ? <Check size={12} className="text-indigo-500"/> : <X size={12} className="text-zinc-300"/>}
                         </div>
 
-                        <div className="flex items-center justify-between bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-500/20">
-                            <span className="text-sm font-medium text-indigo-900 dark:text-indigo-100">Доступно</span>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={rule.enabledForPro}
-                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'enabledForPro', e.target.checked)}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
-                            </label>
-                        </div>
-
-                        {rule.limitPro !== undefined && (
-                            <div className="flex items-center gap-3">
-                                <label className="text-xs font-medium text-indigo-500 shrink-0 w-16">Лимит:</label>
-                                <input
+                        {rule.limitPro !== undefined ? (
+                            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                                <input 
                                     type="number"
+                                    className="w-full bg-white dark:bg-black border border-indigo-100 dark:border-indigo-900/50 rounded px-1.5 py-0.5 text-xs font-mono text-center outline-none focus:border-indigo-500 text-indigo-900 dark:text-indigo-100"
                                     value={rule.limitPro}
                                     onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
-                                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500 transition-colors"
                                 />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1 mt-1 text-[10px] text-indigo-400/70">
+                                <Infinity size={12} /> Unlimited
                             </div>
                         )}
                     </div>
+
                 </div>
             </div>
         );
@@ -371,17 +358,7 @@ export const AdminFeaturesTab: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-500/20 p-4 rounded-xl mb-8 flex items-start gap-3">
-                <AlertTriangle className="text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" size={20} />
-                <div>
-                    <h3 className="text-sm font-bold text-amber-800 dark:text-amber-400">Глобальные флаги (Feature Flags)</h3>
-                    <p className="text-xs text-amber-700/80 dark:text-amber-500/80 leading-relaxed mt-1">
-                        Эти настройки применяются мгновенно ко всем пользователям системы. Используйте их для включения/выключения функционала или изменения лимитов без повторного деплоя кода.
-                    </p>
-                </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 mb-8 sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md py-4 z-10 -mx-4 px-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="flex flex-wrap gap-2 mb-6 sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md py-4 z-10 -mx-4 px-4 border-b border-zinc-100 dark:border-zinc-800">
                 {SUB_TABS.map(tab => (
                     <button
                         key={tab.id}
@@ -397,8 +374,8 @@ export const AdminFeaturesTab: React.FC = () => {
                 ))}
             </div>
 
-            <div className="space-y-4">
-                {CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS].map((key) => renderConfigRow(key, config[key as keyof AppConfig]))}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS].map((key) => renderConfigCard(key, config[key as keyof AppConfig]))}
             </div>
 
             <div className="mt-12 flex justify-end sticky bottom-6 z-20 pointer-events-none">
