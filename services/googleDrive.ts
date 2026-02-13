@@ -7,6 +7,12 @@ const APP_FOLDER_NAME = 'Anotee.App';
 // We rely on the app to inject a method to get a fresh token from Clerk/Server
 let tokenGetter: (() => Promise<string | null>) | null = null;
 
+export interface DriveQuota {
+    limit: number;
+    usage: number;
+    usageInDrive: number;
+}
+
 export const GoogleDriveService = {
   
   /**
@@ -34,6 +40,35 @@ export const GoogleDriveService = {
 
   isAuthenticated: (): boolean => {
     return !!tokenGetter;
+  },
+
+  /**
+   * Fetches storage quota (Used / Total) from Google Drive
+   */
+  getStorageQuota: async (): Promise<DriveQuota | null> => {
+      const accessToken = await GoogleDriveService.getToken();
+      if (!accessToken) return null;
+
+      try {
+          const res = await fetch('https://www.googleapis.com/drive/v3/about?fields=storageQuota', {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          
+          if (!res.ok) return null;
+          
+          const data = await res.json();
+          if (data && data.storageQuota) {
+              return {
+                  limit: parseInt(data.storageQuota.limit || '0', 10),
+                  usage: parseInt(data.storageQuota.usage || '0', 10),
+                  usageInDrive: parseInt(data.storageQuota.usageInDrive || '0', 10)
+              };
+          }
+          return null;
+      } catch (e) {
+          console.warn("Failed to fetch Drive quota", e);
+          return null;
+      }
   },
 
   checkFileStatus: async (fileId: string): Promise<'ok' | 'trashed' | 'missing'> => {
@@ -278,20 +313,6 @@ export const GoogleDriveService = {
      });
   },
 
-  /**
-   * Generates a stream URL. 
-   * 
-   * !!! CRITICAL ARCHITECTURE DECISION !!!
-   * We MUST use the legacy `drive.google.com/uc?export=download` format.
-   * 
-   * DO NOT switch to `googleapis.com/drive/v3/files/...` with Authorization headers.
-   * The API endpoint has strict CORS policies that block HTML5 <video> 'Range' requests,
-   * causing playback failures or inability to scrub video (Partial Content 206).
-   * 
-   * The `uc` link works reliably as long as the file permissions are set to Public/Anyone.
-   * 
-   * @locked Do not change this logic without explicit user approval.
-   */
   getAuthenticatedStreamUrl: async (fileId: string): Promise<string> => {
       return GoogleDriveService.getVideoStreamUrlLegacy(fileId);
   },

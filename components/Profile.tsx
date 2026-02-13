@@ -143,7 +143,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
-  const [isEditingEndpoint, setIsEditingEndpoint] = useState(false);
+  
+  // Lock States for Inputs
+  const [editingFields, setEditingFields] = useState({
+      endpoint: false,
+      bucket: false,
+      region: false,
+      accessKey: false
+  });
   
   const [isTestingS3, setIsTestingS3] = useState(false);
   const [isConfiguringCors, setIsConfiguringCors] = useState(false);
@@ -165,6 +172,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const role = (user?.publicMetadata as any)?.role;
   const isAdmin = role === 'admin' || role === 'superadmin';
   const canUseWhiteLabel = isPro ? config.s3_custom_domain.enabledForPro : config.s3_custom_domain.enabledForFree;
+
+  const toggleEdit = (field: keyof typeof editingFields) => {
+      setEditingFields(prev => ({ ...prev, [field]: !prev[field] }));
+  };
 
   // Load Config
   useEffect(() => {
@@ -221,7 +232,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
       setSelectedTab(newTab);
       setTestResult(null);
-      setIsEditingEndpoint(false);
+      setEditingFields({ endpoint: false, bucket: false, region: false, accessKey: false });
       setShowAccessKey(false);
       setShowSecretKey(false);
 
@@ -433,6 +444,41 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       );
   };
 
+  const LockedInput = ({ 
+      label, value, onChange, placeholder, icon, isEditing, onToggleEdit, type = "text", showToggle = false, onShowToggle 
+  }: any) => {
+      return (
+          <div>
+              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">{label}</label>
+              <div className="relative group">
+                  <div className="absolute left-3 top-3 text-zinc-600">{icon}</div>
+                  <input 
+                      type={type}
+                      value={value} 
+                      readOnly={!isEditing}
+                      onChange={onChange}
+                      className={`w-full bg-zinc-900 border rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 outline-none font-mono transition-colors placeholder-zinc-700 ${isEditing ? 'border-indigo-500 focus:bg-black' : 'border-zinc-800 cursor-default opacity-80'}`}
+                      placeholder={placeholder}
+                  />
+                  <div className="absolute right-2 top-2 flex gap-1">
+                      {showToggle && (
+                          <button onClick={onShowToggle} className="p-1 rounded hover:bg-zinc-800 text-zinc-600 hover:text-white transition-colors">
+                              {type === "text" ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                      )}
+                      <button 
+                          onClick={onToggleEdit} 
+                          className={`p-1 rounded hover:bg-zinc-800 transition-colors ${isEditing ? 'text-indigo-400' : 'text-zinc-600 hover:text-white'}`}
+                          title={isEditing ? "Lock Editing" : "Edit Field"}
+                      >
+                          {isEditing ? <Check size={14} /> : <Edit2 size={14} />}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
             {/* Header */}
@@ -541,26 +587,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 </button>
                                             </div>
 
-                                            {/* ENDPOINT with EDIT LOCK */}
+                                            {/* ENDPOINT */}
                                             <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Endpoint URL</label>
-                                                <div className="relative group">
-                                                    <Globe size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                                    <input 
-                                                        value={s3Form.endpoint} 
-                                                        readOnly={!isEditingEndpoint}
-                                                        onChange={(e) => setS3Form(p => ({...p, endpoint: e.target.value}))}
-                                                        className={`w-full bg-zinc-900 border rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 outline-none font-mono transition-colors placeholder-zinc-700 ${isEditingEndpoint ? 'border-indigo-500 focus:bg-black' : 'border-zinc-800 cursor-default opacity-80'}`}
-                                                        placeholder="https://storage.yandexcloud.net"
-                                                    />
-                                                    <button 
-                                                        onClick={() => setIsEditingEndpoint(!isEditingEndpoint)} 
-                                                        className={`absolute right-2 top-2 p-1 rounded hover:bg-zinc-800 transition-colors ${isEditingEndpoint ? 'text-indigo-400' : 'text-zinc-600 hover:text-white'}`}
-                                                        title={isEditingEndpoint ? "Lock Editing" : "Edit Endpoint"}
-                                                    >
-                                                        {isEditingEndpoint ? <Check size={14} /> : <Edit2 size={14} />}
-                                                    </button>
-                                                </div>
+                                                <LockedInput 
+                                                    label="Endpoint URL"
+                                                    value={s3Form.endpoint}
+                                                    onChange={(e: any) => setS3Form(p => ({...p, endpoint: e.target.value}))}
+                                                    isEditing={editingFields.endpoint}
+                                                    onToggleEdit={() => toggleEdit('endpoint')}
+                                                    icon={<Globe size={14} />}
+                                                    placeholder="https://storage.yandexcloud.net"
+                                                />
                                                 {selectedTab === 'cloudflare' && (
                                                     <p className="text-[9px] text-zinc-500 mt-1 pl-2">
                                                         Пример: <code>https://&lt;ACCOUNT_ID&gt;.r2.cloudflarestorage.com</code> (без бакета!)
@@ -568,51 +605,49 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 )}
                                             </div>
                                             
+                                            {/* BUCKET */}
                                             <div>
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Bucket Name</label>
-                                                <div className="relative">
-                                                    <Database size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                                    <input 
-                                                        value={s3Form.bucket} 
-                                                        onChange={(e) => setS3Form(p => ({...p, bucket: e.target.value}))}
-                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none placeholder-zinc-700" 
-                                                        placeholder="my-bucket"
-                                                    />
-                                                </div>
+                                                <LockedInput 
+                                                    label="Bucket Name"
+                                                    value={s3Form.bucket}
+                                                    onChange={(e: any) => setS3Form(p => ({...p, bucket: e.target.value}))}
+                                                    isEditing={editingFields.bucket}
+                                                    onToggleEdit={() => toggleEdit('bucket')}
+                                                    icon={<Database size={14} />}
+                                                    placeholder="my-bucket"
+                                                />
                                             </div>
                                             
+                                            {/* REGION */}
                                             <div>
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Region</label>
-                                                <div className="relative">
-                                                    <Cloud size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                                    <input 
-                                                        value={s3Form.region} 
-                                                        onChange={(e) => setS3Form(p => ({...p, region: e.target.value}))}
-                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none placeholder-zinc-700" 
-                                                        placeholder="us-east-1"
-                                                    />
-                                                </div>
+                                                <LockedInput 
+                                                    label="Region"
+                                                    value={s3Form.region}
+                                                    onChange={(e: any) => setS3Form(p => ({...p, region: e.target.value}))}
+                                                    isEditing={editingFields.region}
+                                                    onToggleEdit={() => toggleEdit('region')}
+                                                    icon={<Cloud size={14} />}
+                                                    placeholder="us-east-1"
+                                                />
                                             </div>
                                             
-                                            {/* Access Key */}
+                                            {/* ACCESS KEY */}
                                             <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
-                                                <div className="relative group">
-                                                    <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                                    <input 
-                                                        type={showAccessKey ? "text" : "password"}
-                                                        value={s3Form.accessKeyId} 
-                                                        onChange={(e) => setS3Form(p => ({...p, accessKeyId: e.target.value}))}
-                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
-                                                        placeholder="ACCESS_KEY"
-                                                    />
-                                                    <button onClick={() => setShowAccessKey(!showAccessKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
-                                                        {showAccessKey ? <EyeOff size={14} /> : <Eye size={14} />} 
-                                                    </button>
-                                                </div>
+                                                <LockedInput 
+                                                    label="Access Key ID"
+                                                    value={s3Form.accessKeyId}
+                                                    onChange={(e: any) => setS3Form(p => ({...p, accessKeyId: e.target.value}))}
+                                                    isEditing={editingFields.accessKey}
+                                                    onToggleEdit={() => toggleEdit('accessKey')}
+                                                    icon={<Key size={14} />}
+                                                    placeholder="ACCESS_KEY"
+                                                    type={showAccessKey ? "text" : "password"}
+                                                    showToggle={true}
+                                                    onShowToggle={() => setShowAccessKey(!showAccessKey)}
+                                                />
                                             </div>
 
-                                            {/* Secret Key (Smart UI) */}
+                                            {/* Secret Key (Smart UI - Keep existing logic as it's distinct) */}
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
                                                 <div className="relative group">

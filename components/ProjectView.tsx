@@ -6,7 +6,7 @@ import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
-import { GoogleDriveService } from '../services/googleDrive';
+import { GoogleDriveService, DriveQuota } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, OrganizationProfile, useAuth } from '@clerk/clerk-react';
 import { useDrive } from '../services/driveContext';
@@ -86,6 +86,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   
   // Use Context
   const { isDriveReady } = useDrive();
+  const [driveQuota, setDriveQuota] = useState<DriveQuota | null>(null);
+  const [isS3Configured, setIsS3Configured] = useState(false);
+  const [loadingStorage, setLoadingStorage] = useState(false);
   
   // Share / Team View State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -113,12 +116,49 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   // Find active uploads for this project
   const activeUpload = uploadTasks.find(t => t.projectName === project.name);
 
+  // --- STORAGE STATS EFFECT ---
+  useEffect(() => {
+      const fetchStorageInfo = async () => {
+          if (isMockMode) return;
+          setLoadingStorage(true);
+          try {
+              // 1. Check Drive Quota (if connected)
+              if (isDriveReady) {
+                  const quota = await GoogleDriveService.getStorageQuota();
+                  setDriveQuota(quota);
+              }
+
+              // 2. Check S3 Config (for Project Owner)
+              // We infer S3 existence by checking config endpoint for current user (if owner) 
+              // or relying on previous successful uploads.
+              // A robust way: backend check. For now, simple check:
+              const token = await getToken();
+              if (token) {
+                  const res = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` } });
+                  if (res.ok) {
+                      const data = await res.json();
+                      if (data && data.isActive) setIsS3Configured(true);
+                  }
+              }
+          } catch (e) {
+              console.warn("Failed to load storage info");
+          } finally {
+              setLoadingStorage(false);
+          }
+      };
+      
+      // Only fetch if we have editing rights
+      if (canEditProject) {
+          fetchStorageInfo();
+      }
+  }, [isDriveReady, canEditProject, isMockMode, getToken]);
+
   // --- HANDLERS ---
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      if (!isMockMode && !isDriveReady) {
-          notify("Google Drive is not connected. Upload disabled.", "error");
+      if (!isMockMode && !isDriveReady && !isS3Configured) {
+          notify("No storage connected. Please connect Google Drive or configure S3.", "error");
           return;
       }
       onUploadAsset(e.target.files[0], project.id, true);
@@ -128,8 +168,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleVersionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && uploadingVersionFor) {
-        if (!isMockMode && !isDriveReady) {
-            notify("Google Drive is not connected. Upload disabled.", "error");
+        if (!isMockMode && !isDriveReady && !isS3Configured) {
+            notify("No storage connected. Upload disabled.", "error");
             return;
         }
         onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor);
@@ -172,7 +212,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                 'Authorization': `Bearer ${token}`,
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({ keys: s3Keys })
+                            body: JSON.stringify({ keys: s3Keys, projectId: project.id })
                         });
                     } catch (e) {
                         console.error("Failed to delete from S3", e);
@@ -233,8 +273,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
   const handleAddVersionClick = (e: React.MouseEvent, assetId: string) => {
       e.stopPropagation();
-      if (!isMockMode && !isDriveReady) {
-          notify("Connect Drive to upload new versions", "warning");
+      if (!isMockMode && !isDriveReady && !isS3Configured) {
+          notify("Connect Storage to upload new versions", "warning");
           return;
       }
       setUploadingVersionFor(assetId);
@@ -365,8 +405,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           setIsDragOver(false);
 
           if (!canEditProject || isLocked) return;
-          if (!isMockMode && !isDriveReady) {
-              notify("Google Drive is not connected. Upload disabled.", "error");
+          if (!isMockMode && !isDriveReady && !isS3Configured) {
+              notify("No storage connected. Upload disabled.", "error");
               return;
           }
 
@@ -382,8 +422,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
       const handleClick = () => {
           if (!canEditProject || isLocked) return;
-          if (!isMockMode && !isDriveReady) {
-              notify("Google Drive is not connected. Upload disabled.", "error");
+          if (!isMockMode && !isDriveReady && !isS3Configured) {
+              notify("No storage connected. Upload disabled.", "error");
               return;
           }
           fileInputRef.current?.click();
@@ -426,6 +466,69 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                   </>
               )}
           </div>
+      );
+  };
+
+  // --- STORAGE INDICATOR COMPONENT ---
+  const StorageIndicator = () => {
+      if (isMockMode) {
+          return (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-900/30 text-purple-400 border border-purple-800">
+                <Cloud size={14} />
+                <span className="hidden md:inline">Local Mode</span>
+            </div>
+          );
+      }
+
+      if (isS3Configured) {
+          return (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-900/30 text-indigo-400 border border-indigo-800" title="Files stored in your S3 Bucket">
+                <Server size={14} />
+                <span className="hidden md:inline">S3 Active</span>
+            </div>
+          );
+      }
+
+      if (isDriveReady && driveQuota) {
+          const usedGB = (driveQuota.usage / 1024 / 1024 / 1024).toFixed(1);
+          const totalGB = (driveQuota.limit / 1024 / 1024 / 1024).toFixed(0);
+          const percent = Math.min(100, Math.round((driveQuota.usage / driveQuota.limit) * 100));
+          
+          let colorClass = 'bg-blue-900/30 text-blue-400 border-blue-800';
+          if (percent > 90) colorClass = 'bg-red-900/30 text-red-400 border-red-800';
+
+          return (
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${colorClass}`} title={`Used: ${usedGB}GB of ${totalGB}GB`}>
+                <HardDrive size={14} />
+                <div className="hidden md:flex flex-col min-w-[80px]">
+                    <div className="flex justify-between text-[9px] mb-0.5 opacity-80">
+                        <span>Drive</span>
+                        <span>{percent}%</span>
+                    </div>
+                    <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-current opacity-80" style={{ width: `${percent}%` }}></div>
+                    </div>
+                </div>
+                <span className="md:hidden">Drive</span>
+            </div>
+          );
+      }
+
+      if (isDriveReady) {
+          // Loading quota or just connected without quota fetch
+          return (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900/30 text-blue-400 border border-blue-800">
+                {loadingStorage ? <Loader2 size={14} className="animate-spin"/> : <HardDrive size={14} />}
+                <span className="hidden md:inline">Drive Ready</span>
+            </div>
+          );
+      }
+
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-900/20 text-red-400 border border-red-800" title="Please connect Google Drive in Profile">
+            <AlertCircle size={14} />
+            <span className="hidden md:inline">No Storage</span>
+        </div>
       );
   };
 
@@ -543,24 +646,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 
                 {canEditProject && !isLocked && (
                     <div className="flex items-center gap-2">
-                    <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileSelect} disabled={!isMockMode && !isDriveReady}/>
-                    <input type="file" ref={versionInputRef} className="hidden" accept="video/*" onChange={handleVersionFileSelect} disabled={!isMockMode && !isDriveReady}/>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileSelect} disabled={!isMockMode && !isDriveReady && !isS3Configured}/>
+                    <input type="file" ref={versionInputRef} className="hidden" accept="video/*" onChange={handleVersionFileSelect} disabled={!isMockMode && !isDriveReady && !isS3Configured}/>
                     
-                    {/* Storage Status Indicator - Only visible in Prod */}
-                    {!isMockMode && (
-                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${isDriveReady ? 'bg-blue-900/30 text-blue-400 border-blue-800' : 'bg-red-900/20 text-red-400 border-red-800'}`} title={isDriveReady ? "Google Drive Connected" : "Please connect Google Drive in Profile"}>
-                            {isDriveReady ? <HardDrive size={14} /> : <AlertCircle size={14} />}
-                            <span className="hidden md:inline">{isDriveReady ? "Drive Ready" : "Drive Disconnected"}</span>
-                        </div>
-                    )}
-
-                    {/* Mock Mode Indicator */}
-                    {isMockMode && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-900/30 text-purple-400 border border-purple-800">
-                            <Cloud size={14} />
-                            <span className="hidden md:inline">Local Mode</span>
-                        </div>
-                    )}
+                    <StorageIndicator />
                     </div>
                 )}
             </div>
