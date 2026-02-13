@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -71,15 +72,15 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     cloudflare: {
         title: 'Cloudflare R2',
         steps: [
-            'Зайдите в R2 Overview. Справа в колонке "Account Details" скопируйте "Account ID".',
-            'Ваш Endpoint: https://<AccountID>.r2.cloudflarestorage.com',
-            'Там же справа нажмите ссылку "Manage R2 API Tokens".',
-            'Нажмите "Create API token". Выберите шаблон: "Admin Read & Write".',
-            'Нажмите "Create API Token" внизу. Скопируйте "Access Key ID" и "Secret Access Key" из появившегося окна.'
+            '1. Зайдите в R2 Overview. Справа "Account Details" -> Скопируйте "Account ID".',
+            '2. Ваш Endpoint должен выглядеть так: https://<AccountID>.r2.cloudflarestorage.com (БЕЗ имени бакета!).',
+            '3. Справа нажмите "Manage R2 API Tokens" -> "Create API token".',
+            '4. Permissions: выберите "Admin Read & Write".',
+            '5. Нажмите "Create". Скопируйте "Access Key ID" и "Secret Access Key".'
         ],
         link: 'https://dash.cloudflare.com/?to=/:account/r2',
         linkText: 'Открыть Cloudflare R2',
-        warning: 'В поле Endpoint вставляйте ссылку БЕЗ имени бакета в конце.'
+        warning: 'В поле Endpoint вставляйте URL аккаунта, а не бакета. Бакет указывается отдельно.'
     },
     selectel: {
         title: 'Selectel Storage',
@@ -132,13 +133,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       publicUrl: ''
   });
 
+  // 4. CACHE (Remember inputs when switching tabs)
+  const [inputCache, setInputCache] = useState<Record<string, S3Config>>({});
+
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
   
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
-  const [editSecretMode, setEditSecretMode] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [isEditingEndpoint, setIsEditingEndpoint] = useState(false);
   
   const [isTestingS3, setIsTestingS3] = useState(false);
   const [isConfiguringCors, setIsConfiguringCors] = useState(false);
@@ -185,8 +190,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       // Set Active Provider
                       if (data.provider && data.endpoint) {
                           setActiveProvider(data.provider);
-                          setSelectedTab(data.provider); // Auto-select active tab on load
+                          setSelectedTab(data.provider);
                           setS3Form(loadedConfig);
+                          // Initialize cache for active provider
+                          setInputCache(prev => ({ ...prev, [data.provider]: loadedConfig }));
                       } else {
                           setActiveProvider('google');
                           setSelectedTab('google');
@@ -205,51 +212,63 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       loadS3Config();
   }, [getToken]);
 
-  // Tab Switching Logic
+  // Tab Switching Logic with Caching
   const handleTabSwitch = (newTab: ExtendedProvider) => {
+      // 1. Save current work to cache
+      if (selectedTab !== 'google') {
+          setInputCache(prev => ({ ...prev, [selectedTab]: s3Form }));
+      }
+
       setSelectedTab(newTab);
       setTestResult(null);
-      setEditSecretMode(false);
+      setIsEditingEndpoint(false);
       setShowAccessKey(false);
+      setShowSecretKey(false);
 
-      // If switching to the ACTIVE provider, reload saved config from memory (conceptually)
-      // Since we don't store "savedConfig" separately in state currently, we just load presets if it's NOT the active one.
-      // Ideally, we'd fetch or keep `savedConfig` in a ref. 
-      // For simplicity: If switching to a new S3 provider, load presets. 
-      // If switching back to the one we were just editing (and it matched active), we might lose unsaved edits. 
-      // This is acceptable behavior for "Disabling unsaved warning".
-      
       if (newTab !== 'google') {
-          // If we are viewing the provider that is currently active/saved, we ideally want to show its data.
-          // Since `s3Form` is our only state, and we might have overwritten it when viewing another tab...
-          // We rely on the user to re-enter data if they switch away without saving. 
-          // But to be nice, if they click the *Active* provider tab, we could re-fetch? 
-          // Or just load defaults. 
-          
-          const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'];
-          setS3Form(prev => ({
-              ...prev,
-              ...preset,
-              provider: newTab as any,
-              // Clear sensitive fields for security when switching contexts contextually
-              accessKeyId: activeProvider === newTab ? prev.accessKeyId : '', 
-              secretAccessKey: activeProvider === newTab ? prev.secretAccessKey : '',
-              bucket: activeProvider === newTab ? prev.bucket : '',
-              publicUrl: activeProvider === newTab ? prev.publicUrl : ''
-          }));
+          // 2. Try to restore from cache
+          if (inputCache[newTab]) {
+              setS3Form(inputCache[newTab]);
+          } 
+          // 3. Or load Active Config if it matches this tab (fresh load from server basically)
+          else if (activeProvider === newTab && activeProvider !== 'custom') {
+              // We already loaded active config into s3Form on mount, so if we haven't cached edits, 
+              // we might want to revert to server state? Or keep current s3Form?
+              // The initial load sets s3Form. If we switched away and back without editing, inputCache handles it.
+              // If we switch to a tab we haven't visited yet:
+              
+              // Load preset defaults
+              const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'];
+              setS3Form({
+                  provider: newTab as any,
+                  bucket: '',
+                  region: preset.region || '',
+                  endpoint: preset.endpoint || '',
+                  accessKeyId: '',
+                  secretAccessKey: '', // Reset secret for security when starting fresh on new tab
+                  publicUrl: ''
+              });
+          }
+          // 4. Default Preset
+          else {
+              const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'];
+              setS3Form({
+                  provider: newTab as any,
+                  bucket: '',
+                  region: preset.region || '',
+                  endpoint: preset.endpoint || '',
+                  accessKeyId: '',
+                  secretAccessKey: '',
+                  publicUrl: ''
+              });
+          }
       }
   };
 
   const handleSaveAndActivate = async () => {
       if (selectedTab === 'google') {
-          // Google doesn't need "Saving" in DB, it relies on OAuth token state.
-          // Effectively, clearing the S3 config or flagging it inactive would be the "Save".
-          // For now, we assume if user wants Google, they just don't use S3.
-          // But to be explicit, maybe we should have an API call to "Deactivate S3"?
-          // Let's assume selecting Google and clicking "Connect" effectively wipes S3 preference? 
-          // Or we just rely on the UI state. 
           alert("Для активации Google Drive убедитесь, что он подключен (кнопка выше). Настройки S3 не будут использоваться.");
-          setActiveProvider('google'); // Optimistic UI update
+          setActiveProvider('google'); 
           return;
       }
 
@@ -268,8 +287,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           if (!res.ok) throw new Error("Failed to save");
           
           setS3Saved(true);
-          setEditSecretMode(false);
-          setActiveProvider(selectedTab); // Update active state
+          // Update active provider state
+          setActiveProvider(selectedTab);
+          
+          // Update cache with confirmed saved data
+          setInputCache(prev => ({ ...prev, [selectedTab]: s3Form }));
+          
           setTimeout(() => setS3Saved(false), 3000);
       } catch (e) {
           alert("Ошибка сохранения настроек. Проверьте соединение.");
@@ -279,22 +302,16 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   };
 
   const handleTestConnection = async () => {
-      // Auto-save logic removed to avoid confusion. Now explicitly tests CURRENT FORM data? 
-      // Actually backend tests SAVED data. So we must save first.
       await handleSaveAndActivate(); 
-      
       setIsTestingS3(true);
       setTestResult(null);
-      
       try {
           const token = await getToken();
           const res = await fetch('/api/storage?action=test', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` }
           });
-          
           const data = await res.json();
-          
           if (res.ok && data.success) {
               setTestResult({ success: true, message: `Успешно! Доступ к бакету '${data.bucket}' есть.` });
           } else {
@@ -308,12 +325,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   };
 
   const handleAutoCors = async () => {
-      // Must save first
       await handleSaveAndActivate(); 
-      
       setIsConfiguringCors(true);
       setTestResult(null);
-
       try {
           const token = await getToken();
           const res = await fetch('/api/storage?action=configure_cors', {
@@ -324,9 +338,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               },
               body: JSON.stringify({}) 
           });
-          
           const data = await res.json();
-          
           if (res.ok && data.success) {
               setTestResult({ success: true, message: "CORS успешно настроен! Загрузка должна работать." });
           } else {
@@ -339,7 +351,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       }
   };
 
-  // ... (Other handlers unchanged: handleMigrate, handleCancel, etc) ...
+  // ... (Legacy handlers: migrate, cancel, donate, copy) ...
   const handleMigrate = async () => {
       setMigrationStatus('loading');
       setErrorMessage('');
@@ -395,11 +407,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const hasMigrated = (currentUser as any).unsafeMetadata?.migrated === true;
   const currentProviderGuide = PROVIDER_GUIDES[s3Form.provider] || PROVIDER_GUIDES['aws'];
 
-  // Card Rendering Helper
   const ProviderCard = ({ id, label, icon, color }: { id: ExtendedProvider, label: string, icon: any, color: string }) => {
       const isActive = activeProvider === id;
       const isSelected = selectedTab === id;
-      
       return (
           <button
               onClick={() => handleTabSwitch(id)}
@@ -407,14 +417,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                   ${isSelected ? `border-indigo-500 bg-zinc-800 shadow-lg scale-[1.02] z-10` : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 opacity-80 hover:opacity-100'}
               `}
           >
-              {/* Active Badge */}
               {isActive && (
                   <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
                       <span className="text-[9px] font-bold text-green-500 uppercase tracking-wide">Active</span>
                   </div>
               )}
-
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shadow-lg ${color} ${!isSelected ? 'opacity-70 group-hover:opacity-100' : ''}`}>
                   {icon}
               </div>
@@ -427,7 +435,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
-            {/* Page Header */}
+            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                  <div>
                      <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
@@ -435,7 +443,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                      </h2>
                      <p className="text-zinc-400 text-sm mt-1">Управление подпиской и хранилищем.</p>
                  </div>
-                 
                  <div className="flex items-center gap-2">
                      {isAdmin && onNavigate && (
                          <button onClick={() => onNavigate('ADMIN')} className="flex items-center justify-center gap-2 px-4 py-2 bg-white text-black hover:opacity-90 rounded-xl text-sm font-bold transition-all shadow-md">
@@ -450,9 +457,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* COLUMN 1: STORAGE SETTINGS */}
+                {/* COLUMN 1: SETTINGS */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Subscription Card (Condensed) */}
+                    {/* Subscription */}
                     <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div></div>
                         <div>
@@ -468,7 +475,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         {!isPro && <button onClick={() => document.getElementById('roadmap-block')?.scrollIntoView({ behavior: 'smooth' })} className="mt-4 w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2"><ArrowUpCircle size={14} /> Обновиться</button>}
                     </div>
 
-                    {/* STORAGE CONFIGURATION (NEW UI) */}
+                    {/* STORAGE CONFIGURATION */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300"><Database size={20} /></div>
@@ -483,7 +490,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         ) : (
                             <div className="space-y-6 animate-in fade-in">
                                 
-                                {/* 1. PROVIDER GRID (TABS) */}
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                     <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} color="bg-green-600" />
                                     <ProviderCard id="yandex" label="Yandex" icon="Y" color="bg-red-500" />
@@ -492,10 +498,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     <ProviderCard id="custom" label="Custom" icon="?" color="bg-zinc-600" />
                                 </div>
 
-                                {/* 2. CONFIG FORM (DYNAMIC) */}
                                 <div className="bg-zinc-950/50 p-5 rounded-xl border border-zinc-800/50 min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
                                     
-                                    {/* STATE A: GOOGLE DRIVE */}
                                     {selectedTab === 'google' && (
                                         <div className="flex flex-col items-center justify-center h-full py-4 text-center space-y-4">
                                             <div className={`p-3 rounded-full ${isDriveReady ? 'bg-green-900/20 text-green-500' : 'bg-red-900/20 text-red-500'}`}>
@@ -524,11 +528,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                         </div>
                                     )}
 
-                                    {/* STATE B: S3 CONFIG */}
                                     {selectedTab !== 'google' && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             
-                                            {/* Header / Info */}
                                             <div className="col-span-2 flex justify-between items-center border-b border-zinc-800 pb-2 mb-2">
                                                 <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
@@ -539,17 +541,31 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 </button>
                                             </div>
 
+                                            {/* ENDPOINT with EDIT LOCK */}
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Endpoint URL</label>
-                                                <div className="relative">
+                                                <div className="relative group">
                                                     <Globe size={14} className="absolute left-3 top-3 text-zinc-600" />
                                                     <input 
                                                         value={s3Form.endpoint} 
+                                                        readOnly={!isEditingEndpoint}
                                                         onChange={(e) => setS3Form(p => ({...p, endpoint: e.target.value}))}
-                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono transition-colors placeholder-zinc-700" 
+                                                        className={`w-full bg-zinc-900 border rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 outline-none font-mono transition-colors placeholder-zinc-700 ${isEditingEndpoint ? 'border-indigo-500 focus:bg-black' : 'border-zinc-800 cursor-default opacity-80'}`}
                                                         placeholder="https://storage.yandexcloud.net"
                                                     />
+                                                    <button 
+                                                        onClick={() => setIsEditingEndpoint(!isEditingEndpoint)} 
+                                                        className={`absolute right-2 top-2 p-1 rounded hover:bg-zinc-800 transition-colors ${isEditingEndpoint ? 'text-indigo-400' : 'text-zinc-600 hover:text-white'}`}
+                                                        title={isEditingEndpoint ? "Lock Editing" : "Edit Endpoint"}
+                                                    >
+                                                        {isEditingEndpoint ? <Check size={14} /> : <Edit2 size={14} />}
+                                                    </button>
                                                 </div>
+                                                {selectedTab === 'cloudflare' && (
+                                                    <p className="text-[9px] text-zinc-500 mt-1 pl-2">
+                                                        Пример: <code>https://&lt;ACCOUNT_ID&gt;.r2.cloudflarestorage.com</code> (без бакета!)
+                                                    </p>
+                                                )}
                                             </div>
                                             
                                             <div>
@@ -578,7 +594,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 </div>
                                             </div>
                                             
-                                            {/* Access Key (Toggle Vis) */}
+                                            {/* Access Key */}
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Access Key ID</label>
                                                 <div className="relative group">
@@ -588,57 +604,56 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         value={s3Form.accessKeyId} 
                                                         onChange={(e) => setS3Form(p => ({...p, accessKeyId: e.target.value}))}
                                                         className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
-                                                        placeholder="ACCESS_KEY_ID"
+                                                        placeholder="ACCESS_KEY"
                                                     />
                                                     <button onClick={() => setShowAccessKey(!showAccessKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
-                                                        {showAccessKey ? <LogOut size={14} className="rotate-180"/> : <CheckCircle2 size={14} />} 
+                                                        {showAccessKey ? <EyeOff size={14} /> : <Eye size={14} />} 
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            {/* Secret Key (Edit Mode) */}
+                                            {/* Secret Key (Smart UI) */}
                                             <div className="col-span-2">
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
-                                                {editSecretMode ? (
-                                                    <div className="flex gap-2 animate-in fade-in zoom-in-95 duration-200">
-                                                        <div className="relative flex-1">
-                                                            <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                <div className="relative group">
+                                                    <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
+                                                    
+                                                    {s3Form.secretAccessKey === '********' ? (
+                                                        // SAVED STATE
+                                                        <div className="flex items-center">
                                                             <input 
                                                                 type="password"
-                                                                autoComplete="new-password"
-                                                                name={`s3_secret_${Date.now()}`}
-                                                                value={s3Form.secretAccessKey === '********' ? '' : s3Form.secretAccessKey} 
-                                                                onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
-                                                                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
-                                                                placeholder="Введите новый Secret Key"
-                                                                autoFocus
+                                                                disabled
+                                                                value="........................"
+                                                                className="w-full bg-zinc-900/50 border border-green-900/30 rounded-lg pl-9 pr-20 py-2.5 text-sm text-green-500 font-mono cursor-not-allowed opacity-70"
                                                             />
+                                                            <div className="absolute right-2 top-2 flex items-center gap-2">
+                                                                <span className="text-[10px] text-green-600 font-bold uppercase bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/50">Saved</span>
+                                                                <button 
+                                                                    onClick={() => setS3Form(p => ({...p, secretAccessKey: ''}))}
+                                                                    className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                                                    title="Change Secret Key"
+                                                                >
+                                                                    <Edit2 size={12} />
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                        <button 
-                                                            onClick={() => { setEditSecretMode(false); setS3Form(p => ({...p, secretAccessKey: '********'})); }}
-                                                            className="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
-                                                        >
-                                                            <X size={16} />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-lg p-2 pl-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <Key size={14} className="text-zinc-600" />
-                                                            {s3Form.secretAccessKey === '********' ? (
-                                                                <span className="text-xs text-zinc-400 font-mono">••••••••••••••••••••••••</span>
-                                                            ) : (
-                                                                <span className="text-xs text-zinc-600 italic">Не задан</span>
-                                                            )}
-                                                        </div>
-                                                        <button 
-                                                            onClick={() => { setEditSecretMode(true); setS3Form(p => ({...p, secretAccessKey: ''})); }}
-                                                            className="text-xs font-bold text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded transition-colors"
-                                                        >
-                                                            <Edit2 size={12} /> {s3Form.secretAccessKey === '********' ? 'Изменить' : 'Задать'}
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                    ) : (
+                                                        // EDITING STATE
+                                                        <>
+                                                            <input 
+                                                                type={showSecretKey ? "text" : "password"}
+                                                                value={s3Form.secretAccessKey} 
+                                                                onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
+                                                                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
+                                                                placeholder="Enter New Secret Key"
+                                                            />
+                                                            <button onClick={() => setShowSecretKey(!showSecretKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
+                                                                {showSecretKey ? <EyeOff size={14} /> : <Eye size={14} />} 
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {/* Status Area */}
@@ -685,7 +700,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         )}
                     </div>
 
-                    {/* WHITE LABEL / CDN BLOCK (Redesigned) */}
+                    {/* WHITE LABEL / CDN BLOCK */}
                     {selectedTab !== 'google' && canUseWhiteLabel && (
                         <div className="relative group overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/50 via-fuchsia-500/50 to-indigo-500/50 shadow-2xl">
                             <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 opacity-10 blur-xl group-hover:opacity-20 transition-opacity duration-500"></div>
@@ -786,7 +801,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         </button>
                     </div>
 
-                    {/* Migration Tool (Only if needed) */}
+                    {/* Migration Tool */}
                     {!hasMigrated && (
                         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
                             <div className="flex items-center gap-3 mb-3">
@@ -825,7 +840,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 </div>
             )}
 
-            {/* HELP MODALS (Unchanged) */}
+            {/* HELP MODALS (Unchanged logic, just ensure render) */}
             {showProviderHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
