@@ -2,13 +2,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../../types';
-import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save } from 'lucide-react';
+import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check } from 'lucide-react';
 
 export const AdminPaymentsTab: React.FC = () => {
     const { getToken } = useAuth();
     const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [isSavingPayment, setIsSavingPayment] = useState(false);
+
+    // Write-Only UI States
+    const [editYooSecret, setEditYooSecret] = useState(false);
+    const [editProdSecret, setEditProdSecret] = useState(false);
 
     // Drag and Drop Refs
     const dragItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
@@ -82,6 +86,8 @@ export const AdminPaymentsTab: React.FC = () => {
                 body: JSON.stringify(paymentConfig)
             });
             alert("Настройки интеграций сохранены!");
+            setEditYooSecret(false);
+            setEditProdSecret(false);
         } catch (e) {
             alert("Не удалось сохранить настройки платежей");
         } finally {
@@ -317,13 +323,30 @@ export const AdminPaymentsTab: React.FC = () => {
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.yookassa.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
-                                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="test_..."
-                                        />
+                                        {/* WRITE-ONLY FIELD FOR YOOKASSA SECRET */}
+                                        {editYooSecret ? (
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="password"
+                                                    autoComplete="new-password"
+                                                    name={`yoo_secret_${Date.now()}`}
+                                                    data-lpignore="true"
+                                                    value={paymentConfig.yookassa.secretKey === '********' ? '' : paymentConfig.yookassa.secretKey} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="Enter new Secret Key"
+                                                    autoFocus
+                                                />
+                                                <button onClick={() => { setEditYooSecret(false); setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: '********'}})) }} className="px-2 py-1 bg-zinc-200 dark:bg-zinc-800 rounded hover:text-white transition-colors text-zinc-500"><X size={16}/></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2">
+                                                {paymentConfig.yookassa.secretKey ? (
+                                                    <span className="text-xs text-green-500 font-bold flex items-center gap-1 bg-green-500/10 px-2 py-0.5 rounded"><Check size={12}/> Configured</span>
+                                                ) : <span className="text-xs text-zinc-400">Not Set</span>}
+                                                <button onClick={() => { setEditYooSecret(true); setPaymentConfig(prev => ({...prev, yookassa: {...prev.yookassa, secretKey: ''}})) }} className="text-xs font-bold text-zinc-500 hover:text-indigo-500 flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded"><Edit2 size={12}/> {paymentConfig.yookassa.secretKey ? 'Change' : 'Set'}</button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -347,13 +370,30 @@ export const AdminPaymentsTab: React.FC = () => {
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Secret Key (Signing)</label>
-                                        <input 
-                                            type="password" 
-                                            value={paymentConfig.prodamus.secretKey} 
-                                            onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
-                                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
-                                            placeholder="Secret key for signature"
-                                        />
+                                        {/* WRITE-ONLY FIELD FOR PRODAMUS SECRET */}
+                                        {editProdSecret ? (
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="password" 
+                                                    autoComplete="new-password"
+                                                    name={`prod_secret_${Date.now()}`}
+                                                    data-lpignore="true"
+                                                    value={paymentConfig.prodamus.secretKey === '********' ? '' : paymentConfig.prodamus.secretKey} 
+                                                    onChange={(e) => setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: e.target.value}}))}
+                                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-indigo-500"
+                                                    placeholder="Secret key for signature"
+                                                    autoFocus
+                                                />
+                                                <button onClick={() => { setEditProdSecret(false); setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: '********'}})) }} className="px-2 py-1 bg-zinc-200 dark:bg-zinc-800 rounded hover:text-white transition-colors text-zinc-500"><X size={16}/></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2">
+                                                {paymentConfig.prodamus.secretKey ? (
+                                                    <span className="text-xs text-green-500 font-bold flex items-center gap-1 bg-green-500/10 px-2 py-0.5 rounded"><Check size={12}/> Configured</span>
+                                                ) : <span className="text-xs text-zinc-400">Not Set</span>}
+                                                <button onClick={() => { setEditProdSecret(true); setPaymentConfig(prev => ({...prev, prodamus: {...prev.prodamus, secretKey: ''}})) }} className="text-xs font-bold text-zinc-500 hover:text-indigo-500 flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded"><Edit2 size={12}/> {paymentConfig.prodamus.secretKey ? 'Change' : 'Set'}</button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

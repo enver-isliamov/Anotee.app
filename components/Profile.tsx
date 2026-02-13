@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2, Star } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, CreditCard, Calendar, XCircle, Shield, ArrowUpCircle, Settings, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, Info, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Link as LinkIcon, Wand2, Star, Edit2, Lock } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -123,6 +123,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
   
+  // UX State for Secret Key
+  const [isEditingSecret, setIsEditingSecret] = useState(false);
+  
   // Test & Auto-Config State
   const [isTestingS3, setIsTestingS3] = useState(false);
   const [isConfiguringCors, setIsConfiguringCors] = useState(false);
@@ -206,6 +209,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
           if (!res.ok) throw new Error("Failed to save");
           
           setS3Saved(true);
+          setIsEditingSecret(false); // Close secret edit on save
           setTimeout(() => setS3Saved(false), 3000);
       } catch (e) {
           alert("Ошибка сохранения настроек. Проверьте соединение.");
@@ -561,13 +565,55 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate }) => 
                                                 <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
                                                 <div className="relative">
                                                     <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
-                                                    <input 
-                                                        type="password"
-                                                        value={s3Config.secretAccessKey} 
-                                                        onChange={(e) => setS3Config(p => ({...p, secretAccessKey: e.target.value}))}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
-                                                        placeholder="YCMA..."
-                                                    />
+                                                    
+                                                    {/* WRITE-ONLY SECRET PATTERN */}
+                                                    {isEditingSecret ? (
+                                                        <div className="flex gap-2 animate-in fade-in zoom-in-95 duration-200">
+                                                            <input 
+                                                                type="password"
+                                                                autoComplete="new-password"
+                                                                name={`s3_secret_${Date.now()}`} // Random name to confusing browsers
+                                                                data-lpignore="true" // Ignore LastPass
+                                                                value={s3Config.secretAccessKey === '********' ? '' : s3Config.secretAccessKey} 
+                                                                onChange={(e) => setS3Config(p => ({...p, secretAccessKey: e.target.value}))}
+                                                                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono" 
+                                                                placeholder="Введите новый Secret Key"
+                                                                autoFocus
+                                                            />
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setIsEditingSecret(false);
+                                                                    // Restore mask if we cancelled
+                                                                    setS3Config(p => ({...p, secretAccessKey: '********'}));
+                                                                }}
+                                                                className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                                                title="Отмена"
+                                                            >
+                                                                <X size={16} />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg p-2 pl-9">
+                                                            {s3Config.secretAccessKey === '********' ? (
+                                                                <div className="flex items-center gap-2 text-xs font-bold text-green-500 bg-green-900/20 px-2 py-1 rounded border border-green-900/50">
+                                                                    <Check size={12} /> Ключ установлен
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
+                                                                    Не задано
+                                                                </div>
+                                                            )}
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setIsEditingSecret(true);
+                                                                    setS3Config(p => ({...p, secretAccessKey: ''})); // Clear for new input
+                                                                }}
+                                                                className="text-xs font-bold text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded transition-colors"
+                                                            >
+                                                                <Edit2 size={12} /> {s3Config.secretAccessKey === '********' ? 'Задать новый' : 'Задать'}
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="flex justify-between items-center mt-2 gap-4">
                                                     <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-zinc-400 hover:text-white underline flex items-center gap-1 shrink-0">
