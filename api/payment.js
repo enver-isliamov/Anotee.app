@@ -30,13 +30,24 @@ async function getPaymentConfig() {
 }
 
 export default async function handler(req, res) {
-    // GLOBAL LOG: Catch everything
     const { action } = req.query;
-    console.log(`[PaymentAPI] Incoming Request: ${req.method} action=${action}`);
+    
+    // NORMALIZE METHOD
+    const method = req.method ? req.method.toUpperCase() : 'UNKNOWN';
+    console.log(`[PaymentAPI] Request: ${method} ?action=${action}`);
+
+    // CORS & OPTIONS HANDLING (CRITICAL FOR BROWSERS/WEBHOOKS)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (method === 'OPTIONS') {
+        return res.status(200).end();
+    }
 
     // --- 1. INIT PAYMENT (Frontend calls this) ---
     if (action === 'init') {
-        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        if (method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
         try {
             const user = await verifyUser(req);
@@ -142,7 +153,7 @@ export default async function handler(req, res) {
 
     // --- 2. CANCEL SUBSCRIPTION (Disable Auto-renew) ---
     if (action === 'cancel_sub') {
-        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        if (method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         
         try {
             const user = await verifyUser(req);
@@ -150,14 +161,14 @@ export default async function handler(req, res) {
 
             const clerk = getClerkClient();
             
-            // SAFE MERGE: Fetch existing metadata first
+            // SAFE MERGE
             const currentUserData = await clerk.users.getUser(user.userId);
             const currentMeta = currentUserData.publicMetadata || {};
 
             await clerk.users.updateUser(user.userId, {
                 publicMetadata: {
                     ...currentMeta,
-                    yookassaPaymentMethodId: null, // Disable auto-charge
+                    yookassaPaymentMethodId: null, 
                     billingStatus: 'canceled'
                 }
             });
@@ -171,12 +182,20 @@ export default async function handler(req, res) {
 
     // --- 3. WEBHOOK ---
     if (action === 'webhook') {
-        // DIAGNOSTIC: Allow GET to verify availability in browser
-        if (req.method === 'GET') {
-            return res.status(200).json({ status: 'listening', message: 'Webhook endpoint is active. Use POST for events.' });
+        // DIAGNOSTIC: Explicitly allow GET for browser testing
+        if (method === 'GET' || method === 'HEAD') {
+            return res.status(200).json({ 
+                status: 'listening', 
+                message: 'Webhook endpoint is active. Use POST for events.',
+                method_received: method,
+                timestamp: new Date().toISOString()
+            });
         }
 
-        if (req.method !== 'POST') return res.status(405).send('Method not allowed');
+        if (method !== 'POST') {
+            console.warn(`[PaymentAPI] Webhook rejected method: ${method}`);
+            return res.status(405).send(`Method not allowed. Got: ${method}`);
+        }
 
         const provider = req.query.provider || 'yookassa'; 
         console.log(`🔔 Webhook received from: ${provider}`);
@@ -203,40 +222,30 @@ export default async function handler(req, res) {
                     if (userId) {
                         const clerk = getClerkClient();
                         
-                        // --- SAFE MERGE LOGIC START ---
-                        // 1. Fetch current user data
+                        // SAFE MERGE
                         const currentUserData = await clerk.users.getUser(userId);
                         const currentMeta = currentUserData.publicMetadata || {};
                         
-                        console.log(`Current Meta for ${userId}:`, JSON.stringify(currentMeta));
-
-                        // 2. Prepare Updates
                         let updates = { 
-                            ...currentMeta, // Preserve existing roles/settings
+                            ...currentMeta, 
                             plan: 'pro', 
                             status: 'active' 
                         };
                         
-                        // LIFETIME LOGIC
                         if (planType === 'lifetime' || (!planType && payment.amount.value >= 2000)) {
                              updates.plan = 'lifetime';
                              updates.expiresAt = new Date('2100-01-01').getTime();
-                             updates.yookassaPaymentMethodId = null; // No recur needed
-                        } 
-                        // MONTHLY LOGIC
-                        else {
+                             updates.yookassaPaymentMethodId = null; 
+                        } else {
                              updates.plan = 'pro';
                              updates.expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000);
                              updates.yookassaPaymentMethodId = paymentMethodId || updates.yookassaPaymentMethodId;
                         }
 
-                        // 3. Apply Updates safely
                         await clerk.users.updateUser(userId, {
                             publicMetadata: updates
                         });
                         console.log(`✅ Clerk updated successfully for ${userId}. New Plan: ${updates.plan}`);
-                        // --- SAFE MERGE LOGIC END ---
-
                     } else {
                         console.warn("⚠️ Payment succeeded but No User ID in metadata");
                     }
@@ -256,7 +265,6 @@ export default async function handler(req, res) {
                 if (paymentStatus === 'success' && userId) {
                     const clerk = getClerkClient();
                     
-                    // SAFE MERGE
                     const currentUserData = await clerk.users.getUser(userId);
                     const currentMeta = currentUserData.publicMetadata || {};
 
