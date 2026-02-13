@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../../types';
-import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check } from 'lucide-react';
+import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check, Lock, Unlock } from 'lucide-react';
 
 export const AdminPaymentsTab: React.FC = () => {
     const { getToken } = useAuth();
@@ -10,9 +10,10 @@ export const AdminPaymentsTab: React.FC = () => {
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [isSavingPayment, setIsSavingPayment] = useState(false);
 
-    // Write-Only UI States
+    // UI States
     const [editYooSecret, setEditYooSecret] = useState(false);
     const [editProdSecret, setEditProdSecret] = useState(false);
+    const [isEditingGateway, setIsEditingGateway] = useState(false);
 
     // Drag and Drop Refs
     const dragItem = useRef<{ type: 'PLAN' | 'FEATURE', index: number, parentId?: string } | null>(null);
@@ -88,6 +89,7 @@ export const AdminPaymentsTab: React.FC = () => {
             alert("Настройки интеграций сохранены!");
             setEditYooSecret(false);
             setEditProdSecret(false);
+            setIsEditingGateway(false); // Lock gateway selection after save
         } catch (e) {
             alert("Не удалось сохранить настройки платежей");
         } finally {
@@ -277,14 +279,35 @@ export const AdminPaymentsTab: React.FC = () => {
                     
                     {/* BLOCK 1: GATEWAY SELECTION */}
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
-                        <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-6">
-                            <CreditCard size={18}/> Выбор Шлюза (Gateway)
-                        </h3>
+                        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-6">
+                            <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                                <CreditCard size={18}/> Выбор Шлюза (Gateway)
+                            </h3>
+                            <button 
+                                onClick={() => setIsEditingGateway(!isEditingGateway)} 
+                                className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold ${isEditingGateway ? 'bg-indigo-600 text-white shadow-lg' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+                            >
+                                {isEditingGateway ? (
+                                    <> <Check size={14} /> Готово </>
+                                ) : (
+                                    <> <Edit2 size={14} /> Изменить </>
+                                )}
+                            </button>
+                        </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <button 
-                                onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
-                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'yookassa' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                onClick={() => isEditingGateway && setPaymentConfig(prev => ({...prev, activeProvider: 'yookassa'}))}
+                                disabled={!isEditingGateway}
+                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group 
+                                    ${paymentConfig.activeProvider === 'yookassa' 
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                                        : 'border-zinc-200 dark:border-zinc-800'
+                                    }
+                                    ${!isEditingGateway && paymentConfig.activeProvider !== 'yookassa' ? 'opacity-50 grayscale cursor-default' : ''}
+                                    ${!isEditingGateway && paymentConfig.activeProvider === 'yookassa' ? 'cursor-default' : ''}
+                                    ${isEditingGateway ? 'hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer' : ''}
+                                `}
                             >
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'yookassa' ? 'bg-[#7B61FF]' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Yoo</div>
                                 <div>
@@ -292,11 +315,21 @@ export const AdminPaymentsTab: React.FC = () => {
                                     <div className="text-xs text-zinc-500">Автоплатежи (Recurrent)</div>
                                 </div>
                                 {paymentConfig.activeProvider === 'yookassa' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                {!isEditingGateway && paymentConfig.activeProvider !== 'yookassa' && <div className="absolute top-4 right-4 text-zinc-300"><Lock size={16} /></div>}
                             </button>
 
                             <button 
-                                onClick={() => setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
-                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group ${paymentConfig.activeProvider === 'prodamus' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                                onClick={() => isEditingGateway && setPaymentConfig(prev => ({...prev, activeProvider: 'prodamus'}))}
+                                disabled={!isEditingGateway}
+                                className={`relative p-4 rounded-xl border-2 transition-all text-left flex items-center gap-4 group 
+                                    ${paymentConfig.activeProvider === 'prodamus' 
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                                        : 'border-zinc-200 dark:border-zinc-800'
+                                    }
+                                    ${!isEditingGateway && paymentConfig.activeProvider !== 'prodamus' ? 'opacity-50 grayscale cursor-default' : ''}
+                                    ${!isEditingGateway && paymentConfig.activeProvider === 'prodamus' ? 'cursor-default' : ''}
+                                    ${isEditingGateway ? 'hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer' : ''}
+                                `}
                             >
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white ${paymentConfig.activeProvider === 'prodamus' ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>Pr</div>
                                 <div>
@@ -304,6 +337,7 @@ export const AdminPaymentsTab: React.FC = () => {
                                     <div className="text-xs text-zinc-500">Международные карты</div>
                                 </div>
                                 {paymentConfig.activeProvider === 'prodamus' && <div className="absolute top-4 right-4 text-indigo-500"><CheckCircle size={20} /></div>}
+                                {!isEditingGateway && paymentConfig.activeProvider !== 'prodamus' && <div className="absolute top-4 right-4 text-zinc-300"><Lock size={16} /></div>}
                             </button>
                         </div>
 
