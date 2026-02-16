@@ -1,15 +1,16 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, ArrowLeft, Settings, Crown, Layout, CreditCard, TrendingUp, FlaskConical } from 'lucide-react';
+import { Shield, ArrowLeft, Settings, Crown, Layout, CreditCard, TrendingUp, FlaskConical, PenTool } from 'lucide-react';
 import { AdminStrategyTab } from './admin/AdminStrategyTab';
 import { AdminUsersTab } from './admin/AdminUsersTab';
 import { AdminFeaturesTab } from './admin/AdminFeaturesTab';
 import { AdminPaymentsTab } from './admin/AdminPaymentsTab';
+import { AdminContentTab } from './admin/AdminContentTab';
 
 export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: string) => void }> = ({ onBack, onNavigate }) => {
     const { userId: currentUserId } = useAuth();
-    const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy' | 'content'>('users');
 
     return (
         <div className="w-full mx-auto py-4 md:py-8 px-3 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
@@ -46,30 +47,36 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
                 </div>
                 
                 {/* Main Tabs */}
-                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded-xl w-full max-w-2xl overflow-x-auto">
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded-xl w-full max-w-3xl overflow-x-auto gap-1">
                     <button 
                         onClick={() => setActiveTab('users')}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'users' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[100px] ${activeTab === 'users' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
                         <Crown size={16} /> Пользователи
                     </button>
                     <button 
                         onClick={() => setActiveTab('features')}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'features' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[100px] ${activeTab === 'features' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
                         <Settings size={16} /> Настройки
                     </button>
                     <button 
                         onClick={() => setActiveTab('payments')}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'payments' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[100px] ${activeTab === 'payments' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
                         <CreditCard size={16} /> Интеграции
                     </button>
                     <button 
                         onClick={() => setActiveTab('strategy')}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[120px] ${activeTab === 'strategy' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[100px] ${activeTab === 'strategy' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
                     >
                         <TrendingUp size={16} /> Стратегия
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('content')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold rounded-lg transition-all min-w-[100px] ${activeTab === 'content' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                    >
+                        <PenTool size={16} /> Контент
                     </button>
                 </div>
             </div>
@@ -79,6 +86,7 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
             {activeTab === 'users' && <AdminUsersTab currentUserId={currentUserId} />}
             {activeTab === 'features' && <AdminFeaturesTab />}
             {activeTab === 'payments' && <AdminPaymentsTab />}
+            {activeTab === 'content' && <AdminContentTab />}
         </div>
     );
 };
