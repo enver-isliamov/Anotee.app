@@ -2,6 +2,7 @@
 import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { GoogleGenAI, Type } from "@google/genai";
+import { encrypt, decrypt } from './_crypto.js';
 
 export default async function handler(req, res) {
     const { action } = req.query;
@@ -90,18 +91,107 @@ export default async function handler(req, res) {
             return res.status(403).json({ error: "Forbidden: Admins only" });
         }
 
-        // --- MERGED: AI GENERATION (Protected & Robust) ---
+        // --- AI CONFIG MANAGEMENT ---
+        if (action === 'get_ai_config') {
+            if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+            
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'ai_config'`;
+            const config = rows.length > 0 ? rows[0].value : { provider: 'gemini', openaiKey: '' };
+            
+            // Return empty/masked key for security in UI
+            const hasOpenAiKey = !!config.openaiKey;
+            
+            return res.status(200).json({ 
+                provider: config.provider || 'gemini',
+                hasOpenAiKey 
+            });
+        }
+
+        if (action === 'update_ai_config') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            
+            const { provider, openaiKey } = req.body;
+            
+            // Get existing to preserve key if not updating
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'ai_config'`;
+            let currentConfig = rows.length > 0 ? rows[0].value : {};
+
+            const newConfig = {
+                provider: provider || currentConfig.provider || 'gemini',
+                openaiKey: currentConfig.openaiKey // Default keep old
+            };
+
+            if (openaiKey) {
+                newConfig.openaiKey = encrypt(openaiKey);
+            }
+
+            await sql`INSERT INTO system_settings (key, value) VALUES ('ai_config', ${JSON.stringify(newConfig)}::jsonb) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(newConfig)}::jsonb;`;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- MERGED: TEXT GENERATION (Gemini + OpenAI) ---
         if (action === 'generate_ai') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-            // CRITICAL: Check Key explicitly to avoid crashing
+            const { prompt, model, provider } = req.body; // provider explicitly passed from UI
+
+            // Fetch config to check provider setting or keys
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'ai_config'`;
+            const config = rows.length > 0 ? rows[0].value : {};
+            
+            const activeProvider = provider || config.provider || 'gemini';
+
+            // --- OPENAI PATH ---
+            if (activeProvider === 'openai') {
+                const encryptedKey = config.openaiKey;
+                const openAiKey = decrypt(encryptedKey);
+
+                if (!openAiKey) return res.status(400).json({ error: "OpenAI API Key not configured." });
+
+                try {
+                    const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${openAiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: "gpt-4o", // Or gpt-4-turbo
+                            messages: [
+                                { role: "system", content: "You are an expert content marketer for Anotee (a video collaboration platform). Return ONLY valid JSON." },
+                                { role: "user", content: `${prompt} 
+                                
+                                RETURN JSON ONLY matching this schema:
+                                {
+                                    "hook": "string",
+                                    "body": "string",
+                                    "cta": "string",
+                                    "imageHint": "string",
+                                    "category": "string"
+                                }` }
+                            ],
+                            response_format: { type: "json_object" }
+                        })
+                    });
+
+                    const data = await openAiRes.json();
+                    if (!openAiRes.ok) throw new Error(data.error?.message || "OpenAI Error");
+                    
+                    const content = data.choices[0].message.content;
+                    return res.status(200).json(JSON.parse(content));
+
+                } catch (e) {
+                    console.error("OpenAI Error:", e);
+                    return res.status(500).json({ error: `OpenAI Failed: ${e.message}` });
+                }
+            }
+
+            // --- GEMINI PATH (Default) ---
             if (!process.env.API_KEY) {
-                console.error("AI Error: API_KEY is missing in env vars");
                 return res.status(500).json({ error: "Server Configuration Error: API_KEY is missing." });
             }
 
             try {
-                const { prompt, model } = req.body;
                 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
                 const responseSchema = {
@@ -134,6 +224,51 @@ export default async function handler(req, res) {
             } catch(aiError) {
                 console.error("Gemini API Error:", aiError);
                 return res.status(500).json({ error: "AI Generation Failed: " + aiError.message });
+            }
+        }
+
+        // --- IMAGE GENERATION (Imagen 3) ---
+        if (action === 'generate_image') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            
+            const { prompt } = req.body;
+            if (!prompt) return res.status(400).json({ error: "Prompt required" });
+
+            if (!process.env.API_KEY) return res.status(500).json({ error: "Google API Key missing" });
+
+            // DESIGN SYSTEM INJECTION
+            const designSystem = `
+                Style: Professional SaaS Interface, Dark Mode, High Tech.
+                Color Palette: Dark Background (#09090b), Indigo Accents (#4f46e5), White Text.
+                Vibe: Cinematic lighting, 8k resolution, photorealistic or high-end 3D render.
+                Context: A video collaboration platform interface on a screen.
+            `;
+            
+            const fullPrompt = `${designSystem} \n Scene Description: ${prompt}`;
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                
+                // Using Imagen 3 model via standard SDK
+                const response = await ai.models.generateImages({
+                    model: 'imagen-3.0-generate-001',
+                    prompt: fullPrompt,
+                    config: {
+                        numberOfImages: 1,
+                        aspectRatio: '16:9',
+                    },
+                });
+
+                const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+                if (!imageBytes) throw new Error("No image generated");
+
+                return res.status(200).json({ 
+                    image: `data:image/png;base64,${imageBytes}` 
+                });
+
+            } catch (e) {
+                console.error("Image Gen Error:", e);
+                return res.status(500).json({ error: e.message || "Failed to generate image" });
             }
         }
 
