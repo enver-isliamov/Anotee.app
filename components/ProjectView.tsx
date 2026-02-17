@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
-import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff, CircleHelp, Zap } from 'lucide-react';
+import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff, CircleHelp } from 'lucide-react';
 import { generateId } from '../services/utils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
@@ -24,7 +24,7 @@ interface ProjectViewProps {
   notify: (msg: string, type: ToastType) => void;
   restrictedAssetId?: string;
   isMockMode?: boolean;
-  onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string, createProxy?: boolean) => Promise<void>;
+  onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
   onboardingActiveStep?: number;
   uploadTasks: UploadTask[];
   onStartTour?: () => void;
@@ -83,7 +83,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [uploadingVersionFor, setUploadingVersionFor] = useState<string | null>(null);
-  const [createProxy, setCreateProxy] = useState(false);
   
   // Use Context
   const { isDriveReady } = useDrive();
@@ -130,6 +129,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               }
 
               // 2. Check S3 Config (for Project Owner)
+              // We infer S3 existence by checking config endpoint for current user (if owner) 
+              // or relying on previous successful uploads.
+              // A robust way: backend check. For now, simple check:
               const token = await getToken();
               if (token) {
                   const res = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` } });
@@ -159,7 +161,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           notify("No storage connected. Please connect Google Drive or configure S3.", "error");
           return;
       }
-      onUploadAsset(e.target.files[0], project.id, true, undefined, createProxy);
+      onUploadAsset(e.target.files[0], project.id, true);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -170,7 +172,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             notify("No storage connected. Upload disabled.", "error");
             return;
         }
-        onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor, createProxy);
+        onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor);
     }
     setUploadingVersionFor(null);
     if (versionInputRef.current) versionInputRef.current.value = '';
@@ -415,7 +417,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               if (files.length > 0) notify("Only video files supported", "warning");
               return;
           }
-          onUploadAsset(videoFiles[0], project.id, true, undefined, createProxy);
+          onUploadAsset(videoFiles[0], project.id, true);
       };
 
       const handleClick = () => {
@@ -435,50 +437,34 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       if (!canEditProject || isLocked) return null;
 
       return (
-          <div className="relative group/zone">
-            <div 
-                id="tour-upload-zone"
-                onClick={!isProcessing ? handleClick : undefined}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                className={`aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden ${borderClass}`}
-            >
-                {isProcessing ? (
-                    <div className="flex flex-col items-center gap-3 w-full px-4">
-                        <Loader2 className="animate-spin text-indigo-500" size={32} />
-                        <div className="w-full text-center">
-                            <div className="text-xs font-bold text-zinc-900 dark:text-white truncate mb-1">{activeUpload.file.name}</div>
-                            <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${activeUpload.progress}%` }}></div>
-                            </div>
-                            <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">
-                                {activeUpload.status === 'processing' ? 'Transcoding...' : `${activeUpload.progress}% Uploading`}
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                        <div className={`p-3 rounded-full mb-3 transition-transform ${isDragOver ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover/zone:text-indigo-500 group-hover/zone:scale-110'}`}>
-                            <Plus size={24} />
-                        </div>
-                        <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? 'Drop to Upload' : t('pv.upload_asset')}</h3>
-                        <p className="text-[10px] text-zinc-400 mt-1">Drag & Drop or Click</p>
-                    </>
-                )}
-            </div>
-            
-            {/* Proxy Toggle - Always visible at bottom of tile area when idle */}
-            {!isProcessing && (
-                <button 
-                    onClick={(e) => { e.stopPropagation(); setCreateProxy(!createProxy); }}
-                    className={`absolute -bottom-8 left-0 right-0 flex items-center justify-center gap-2 text-[10px] font-bold py-1.5 rounded-lg border transition-all ${createProxy ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'text-zinc-500 border-transparent hover:bg-zinc-800'}`}
-                    title="Generate 720p Proxy before upload (Saves bandwidth & storage)"
-                >
-                    <Zap size={12} className={createProxy ? 'text-indigo-400 fill-indigo-400' : 'text-zinc-600'} />
-                    {createProxy ? 'Instant Proxy ON' : 'Create Proxy (CPU)'}
-                </button>
-            )}
+          <div 
+            id="tour-upload-zone"
+            onClick={!isProcessing ? handleClick : undefined}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={`aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer group relative overflow-hidden ${borderClass}`}
+          >
+              {isProcessing ? (
+                  <div className="flex flex-col items-center gap-3 w-full px-4">
+                      <Loader2 className="animate-spin text-indigo-500" size={32} />
+                      <div className="w-full text-center">
+                          <div className="text-xs font-bold text-zinc-900 dark:text-white truncate mb-1">{activeUpload.file.name}</div>
+                          <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${activeUpload.progress}%` }}></div>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">{activeUpload.progress}% Uploading</div>
+                      </div>
+                  </div>
+              ) : (
+                  <>
+                      <div className={`p-3 rounded-full mb-3 transition-transform ${isDragOver ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110'}`}>
+                          <Plus size={24} />
+                      </div>
+                      <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? 'Drop to Upload' : t('pv.upload_asset')}</h3>
+                      <p className="text-[10px] text-zinc-400 mt-1">Drag & Drop or Click</p>
+                  </>
+              )}
           </div>
       );
   };
@@ -652,7 +638,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-[1600px] mx-auto">
             {/* Asset Grid */}
             <div className="flex justify-between items-center mb-4">
@@ -668,7 +654,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 )}
             </div>
 
-            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-12">
+            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                 {/* NEW INLINE UPLOAD TILE - Always First */}
                 <UploadZoneTile />
 
@@ -681,7 +667,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <div 
                         key={asset.id}
                         onClick={() => onSelectAsset(asset)}
-                        className="group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 hover:border-indigo-500/50 transition-all shadow-sm relative h-fit"
+                        className="group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 hover:border-indigo-500/50 transition-all shadow-sm relative"
                     >
                         <div className="aspect-video bg-zinc-950 relative overflow-hidden">
                         <img 
