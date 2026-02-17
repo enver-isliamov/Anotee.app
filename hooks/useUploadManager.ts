@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
@@ -18,6 +18,22 @@ export const useUploadManager = (
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
     
+    // Worker Ref
+    const proxyWorkerRef = useRef<Worker | null>(null);
+
+    useEffect(() => {
+        // Initialize Worker
+        if (!proxyWorkerRef.current) {
+            proxyWorkerRef.current = new Worker(new URL('../services/proxyWorker.ts', import.meta.url), { type: 'module' });
+        }
+        return () => {
+            if (proxyWorkerRef.current) {
+                proxyWorkerRef.current.terminate();
+                proxyWorkerRef.current = null;
+            }
+        };
+    }, []);
+    
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
 
@@ -25,7 +41,7 @@ export const useUploadManager = (
         setUploadTasks(prev => prev.filter(t => t.id !== id));
     };
 
-    const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
+    const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string, createProxy: boolean = false) => {
         const taskId = generateId();
         
         const newTask: UploadTask = {
@@ -33,7 +49,7 @@ export const useUploadManager = (
             file,
             projectName: 'Uploading...', // Placeholder
             progress: 0,
-            status: 'uploading'
+            status: createProxy ? 'processing' : 'uploading' // Initial status
         };
 
         setUploadTasks(prev => [...prev, newTask]);
@@ -61,16 +77,52 @@ export const useUploadManager = (
             const project = projects.find(p => p.id === projectId);
             if (project) updateTask({ projectName: project.name });
 
+            // 0. PROXY GENERATION STEP
+            let fileToUpload = file;
+            
+            if (createProxy && proxyWorkerRef.current) {
+                notify("Starting background transcoding...", "info");
+                
+                try {
+                    const proxyResult = await new Promise<File>((resolve, reject) => {
+                        if (!proxyWorkerRef.current) return reject("Worker not initialized");
+                        
+                        // Handler for this specific transaction
+                        const handler = (e: MessageEvent) => {
+                            const { type, file: resultFile, error } = e.data;
+                            // In a real app we'd need IDs to match requests, simplifying here assuming serial or isolated usage for MVP
+                            if (type === 'done') {
+                                proxyWorkerRef.current?.removeEventListener('message', handler);
+                                resolve(resultFile);
+                            } else if (type === 'error') {
+                                proxyWorkerRef.current?.removeEventListener('message', handler);
+                                reject(new Error(error));
+                            }
+                        };
+
+                        proxyWorkerRef.current.addEventListener('message', handler);
+                        proxyWorkerRef.current.postMessage({ type: 'transcode', file });
+                    });
+
+                    fileToUpload = proxyResult;
+                    notify("Proxy created successfully!", "success");
+                } catch (proxyError: any) {
+                    console.error("Proxy creation failed, uploading original:", proxyError);
+                    notify("Proxy failed, uploading original.", "warning");
+                    // Fallback to original
+                }
+            }
+
             // 1. Calculate Naming & Version
             let nextVersionNumber = 1;
             
             // Extract base name and extension
-            let rawTitle = file.name.replace(/\.[^/.]+$/, "");
+            let rawTitle = file.name.replace(/\.[^/.]+$/, ""); // Original name for title
             // Sanitize: Keep alphanumeric, spaces, dashes, underscores.
             let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
             if (!assetTitle) assetTitle = "Video_Asset";
 
-            const ext = file.name.split('.').pop();
+            const ext = fileToUpload.name.split('.').pop(); // Use extension of potentially new file
 
             if (targetAssetId && project) {
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
@@ -82,9 +134,9 @@ export const useUploadManager = (
             // Construct Filename: {SanitizedName}_v{Number}.{ext}
             const finalFileName = `${assetTitle}_v${nextVersionNumber}.${ext}`;
 
-            // 2. Generate Thumbnail
+            // 2. Generate Thumbnail (From Original or Proxy)
             updateTask({ status: 'processing' });
-            const thumbnailDataUrl = await generateVideoThumbnail(file);
+            const thumbnailDataUrl = await generateVideoThumbnail(fileToUpload);
             updateTask({ status: 'uploading' });
 
             let assetUrl = '';
@@ -96,20 +148,10 @@ export const useUploadManager = (
             let useS3 = false;
             
             if (!isMockMode) {
-                // Check if user has S3 configured
-                // Note: We check config for CURRENT user first, but if uploading to shared project, 
-                // the upload will fail if we don't have WRITE access to the owner's bucket.
-                // However, the check here is just "should we use S3?".
-                // Ideally, we should check if the PROJECT uses S3.
-                // For now, let's assume if the current user has S3 set up, they prefer S3.
-                // Or better: try to presign with projectId. If backend says "Owner has S3", use it.
-                
                 try {
+                    // Try to get a token just to ensure we are logged in, 
+                    // config check effectively happens when we try to presign below
                     const token = await getToken();
-                    // We check if we can get a presigned URL for this project.
-                    // Instead of full config check, we'll try the upload flow immediately below.
-                    // But to know *which* flow (Drive vs S3) to pick, we need a hint.
-                    // Let's default to S3 attempt first if not Drive-forced.
                     useS3 = true; 
                 } catch (e) {
                     console.warn("Failed to check token");
@@ -122,7 +164,7 @@ export const useUploadManager = (
                     updateProgress(i);
                     await new Promise(r => setTimeout(r, 200));
                 }
-                assetUrl = URL.createObjectURL(file);
+                assetUrl = URL.createObjectURL(fileToUpload);
                 storageType = 'local';
             } else if (useS3) {
                 let s3UploadSuccess = false;
@@ -139,8 +181,8 @@ export const useUploadManager = (
                         body: JSON.stringify({
                             operation: 'put',
                             key: `anotee/${projectId}/${finalFileName}`, 
-                            contentType: file.type,
-                            projectId: projectId // CRITICAL: Upload to Project Owner's Bucket
+                            contentType: fileToUpload.type,
+                            projectId: projectId
                         })
                     });
 
@@ -151,7 +193,7 @@ export const useUploadManager = (
                         await new Promise((resolve, reject) => {
                             const xhr = new XMLHttpRequest();
                             xhr.open('PUT', uploadUrl);
-                            xhr.setRequestHeader('Content-Type', file.type);
+                            xhr.setRequestHeader('Content-Type', fileToUpload.type);
                             
                             xhr.upload.onprogress = (e) => {
                                 if (e.lengthComputable) {
@@ -167,7 +209,7 @@ export const useUploadManager = (
                                 }
                             };
                             xhr.onerror = () => reject(new Error("Network error during S3 upload"));
-                            xhr.send(file);
+                            xhr.send(fileToUpload);
                         });
 
                         storageType = 's3';
@@ -176,7 +218,6 @@ export const useUploadManager = (
                     } 
                 } catch (e) {
                     console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
-                    // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
                 }
 
                 if (!s3UploadSuccess) {
@@ -200,7 +241,7 @@ export const useUploadManager = (
 
                         const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
 
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
+                        const result = await GoogleDriveService.uploadFile(fileToUpload, assetFolder, (p) => updateProgress(p), finalFileName);
                         googleDriveId = result.id;
                         storageType = 'drive';
                         
@@ -229,11 +270,11 @@ export const useUploadManager = (
                 url: assetUrl, 
                 storageType,
                 googleDriveId,
-                s3Key, // New Field
+                s3Key, 
                 uploadedAt: 'Just now',
                 comments: [],
-                localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
-                localFileName: isMockMode ? file.name : undefined
+                localFileUrl: isMockMode ? URL.createObjectURL(fileToUpload) : undefined,
+                localFileName: isMockMode ? fileToUpload.name : undefined
             };
 
             if (targetAssetId) {
@@ -272,7 +313,7 @@ export const useUploadManager = (
                 await forceSync([updatedProject]);
                 
                 updateTask({ status: 'done', progress: 100 });
-                notify("Upload completed", "success");
+                notify(createProxy ? "Proxy uploaded successfully!" : "Upload completed", "success");
 
             } catch (syncError) {
                 console.error("Sync failed during upload finalization", syncError);
