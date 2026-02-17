@@ -147,7 +147,10 @@ const AdminContentTabInner: React.FC = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ prompt: result.imageHint })
+                body: JSON.stringify({ 
+                    prompt: result.imageHint,
+                    provider: aiConfig.provider // Pass the selected provider
+                })
             });
             
             const data = await res.json();
@@ -188,7 +191,7 @@ const AdminContentTabInner: React.FC = () => {
                             <p className="text-indigo-200 text-xs leading-relaxed">
                                 Генератор контента для соцсетей. 
                                 <span className="opacity-70 ml-1">
-                                    Provider: {aiConfig.provider === 'openai' ? 'GPT-4o' : 'Gemini 2.5'}
+                                    Provider: {aiConfig.provider === 'openai' ? 'GPT-4 + DALL-E 3' : 'Gemini 2.5 + Imagen 3'}
                                 </span>
                             </p>
                         </div>
@@ -362,7 +365,7 @@ const AdminContentTabInner: React.FC = () => {
                                         className="w-full mt-2 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-zinc-700"
                                     >
                                         {isGeneratingImage ? <Loader2 size={14} className="animate-spin" /> : <ImageIcon size={14} />}
-                                        {isGeneratingImage ? 'Рисую...' : '🎨 Визуализировать (Imagen 3)'}
+                                        {isGeneratingImage ? 'Рисую...' : `🎨 Визуализировать (${aiConfig.provider === 'openai' ? 'DALL-E 3' : 'Imagen 3'})`}
                                     </button>
                                 )}
                             </div>

@@ -227,13 +227,53 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- IMAGE GENERATION (Imagen 3) ---
+        // --- IMAGE GENERATION (Imagen 3 / DALL-E 3) ---
         if (action === 'generate_image') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             
-            const { prompt } = req.body;
+            const { prompt, provider } = req.body;
             if (!prompt) return res.status(400).json({ error: "Prompt required" });
 
+            // Fetch config to determine active provider
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'ai_config'`;
+            const config = rows.length > 0 ? rows[0].value : {};
+            const activeProvider = provider || config.provider || 'gemini';
+
+            // --- OPENAI (DALL-E 3) ---
+            if (activeProvider === 'openai') {
+                const encryptedKey = config.openaiKey;
+                const openAiKey = decrypt(encryptedKey);
+                if (!openAiKey) return res.status(400).json({ error: "OpenAI API Key not configured." });
+
+                try {
+                    const response = await fetch('https://api.openai.com/v1/images/generations', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${openAiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: "dall-e-3",
+                            prompt: `Professional UI Design, SaaS Interface, Dark Mode, Indigo Accents. ${prompt}`,
+                            n: 1,
+                            size: "1024x1024",
+                            response_format: "b64_json"
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error?.message || "DALL-E Error");
+
+                    const b64 = data.data[0].b64_json;
+                    return res.status(200).json({ image: `data:image/png;base64,${b64}` });
+
+                } catch (e) {
+                    console.error("DALL-E Error:", e);
+                    return res.status(500).json({ error: `DALL-E Failed: ${e.message}` });
+                }
+            }
+
+            // --- GEMINI (Imagen 3) ---
             if (!process.env.API_KEY) return res.status(500).json({ error: "Google API Key missing" });
 
             // DESIGN SYSTEM INJECTION
