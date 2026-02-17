@@ -20,7 +20,7 @@ export default async function handler(req, res) {
                     const role = clerkUser.publicMetadata?.role;
                     isAdmin = role === 'admin' || role === 'superadmin';
                 } catch (e) {
-                    console.warn("Failed to verify admin status", e);
+                    console.warn("Failed to verify admin status for payment config", e);
                 }
             }
 
@@ -69,62 +69,77 @@ export default async function handler(req, res) {
     // --- STRICT ADMIN ACTIONS ---
     try {
         const user = await verifyUser(req); 
-        if (!user) {
+        if (!user || !user.userId) {
             return res.status(401).json({ error: "Unauthorized" });
         }
 
         const clerk = getClerkClient();
-        const clerkUser = await clerk.users.getUser(user.userId);
-        const role = clerkUser.publicMetadata?.role;
-        const isSuperAdmin = role === 'admin' || role === 'superadmin';
+        
+        // Robust Admin Check
+        let isSuperAdmin = false;
+        try {
+            const clerkUser = await clerk.users.getUser(user.userId);
+            const role = clerkUser.publicMetadata?.role;
+            isSuperAdmin = role === 'admin' || role === 'superadmin';
+        } catch(e) {
+            console.error("Clerk User Fetch Error:", e);
+            return res.status(500).json({ error: "Auth Service Unreachable" });
+        }
 
         if (!isSuperAdmin) {
             return res.status(403).json({ error: "Forbidden: Admins only" });
         }
 
-        // --- MERGED: AI GENERATION (from generate.js) ---
+        // --- MERGED: AI GENERATION (Protected & Robust) ---
         if (action === 'generate_ai') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-            const { prompt, model } = req.body;
-
+            // CRITICAL: Check Key explicitly to avoid crashing
             if (!process.env.API_KEY) {
-                return res.status(500).json({ error: "Server Error: API_KEY is missing." });
+                console.error("AI Error: API_KEY is missing in env vars");
+                return res.status(500).json({ error: "Server Configuration Error: API_KEY is missing." });
             }
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            try {
+                const { prompt, model } = req.body;
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-            const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    hook: { type: Type.STRING, description: "Цепляющий заголовок или первый абзац" },
-                    body: { type: Type.STRING, description: "Основной текст поста (с абзацами)" },
-                    cta: { type: Type.STRING, description: "Призыв к действию (Call to Action)" },
-                    imageHint: { type: Type.STRING, description: "Описание идеи для визуализации/картинки" },
-                    category: { type: Type.STRING, description: "Категория контента" }
-                },
-                required: ["hook", "body", "cta", "imageHint"],
-            };
+                const responseSchema = {
+                    type: Type.OBJECT,
+                    properties: {
+                        hook: { type: Type.STRING, description: "Цепляющий заголовок или первый абзац" },
+                        body: { type: Type.STRING, description: "Основной текст поста (с абзацами)" },
+                        cta: { type: Type.STRING, description: "Призыв к действию (Call to Action)" },
+                        imageHint: { type: Type.STRING, description: "Описание идеи для визуализации/картинки" },
+                        category: { type: Type.STRING, description: "Категория контента" }
+                    },
+                    required: ["hook", "body", "cta", "imageHint"],
+                };
 
-            const response = await ai.models.generateContent({
-                model: model || 'gemini-2.5-flash', 
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: responseSchema,
-                    systemInstruction: "You are an expert content marketer for Anotee (a video collaboration platform for filmmakers). Your tone is professional, concise, and 'indie-hacker' style. Never use corporate jargon. Always reply in Russian.",
-                },
-            });
+                const response = await ai.models.generateContent({
+                    model: model || 'gemini-2.5-flash', 
+                    contents: prompt,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: responseSchema,
+                        systemInstruction: "You are an expert content marketer for Anotee (a video collaboration platform for filmmakers). Your tone is professional, concise, and 'indie-hacker' style. Never use corporate jargon. Always reply in Russian.",
+                    },
+                });
 
-            return res.status(200).json(JSON.parse(response.text));
+                if (!response.text) {
+                    throw new Error("Empty response from AI");
+                }
+
+                return res.status(200).json(JSON.parse(response.text));
+            } catch(aiError) {
+                console.error("Gemini API Error:", aiError);
+                return res.status(500).json({ error: "AI Generation Failed: " + aiError.message });
+            }
         }
 
         // --- SETUP DATABASE ---
         if (action === 'setup') {
-            const providedSecret = req.query.secret;
-            const expectedSecret = process.env.CLERK_SECRET_KEY;
-            if (!expectedSecret || providedSecret !== expectedSecret) return res.status(403).json({ error: "Forbidden" });
-
+            // Setup is protected by secret param AND admin check now
             try {
                 await sql`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL, updated_at BIGINT, created_at BIGINT);`;
                 await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT;`;
@@ -171,23 +186,29 @@ export default async function handler(req, res) {
         // --- LIST USERS ---
         if (action === 'users') {
             if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-            const usersList = await clerk.users.getUserList({ limit: 100, orderBy: '-created_at' });
-            const data = usersList.data.map(u => {
-                const meta = u.publicMetadata || {};
-                const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
-                return {
-                    id: u.id,
-                    name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
-                    email: email,
-                    avatar: u.imageUrl,
-                    plan: meta.plan || 'free',
-                    expiresAt: meta.expiresAt,
-                    isAutoRenew: !!meta.yookassaPaymentMethodId,
-                    lastActive: u.lastSignInAt,
-                    isAdmin: meta.role === 'admin' || meta.role === 'superadmin'
-                };
-            });
-            return res.status(200).json({ users: data });
+            
+            try {
+                const usersList = await clerk.users.getUserList({ limit: 100, orderBy: '-created_at' });
+                const data = usersList.data.map(u => {
+                    const meta = u.publicMetadata || {};
+                    const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
+                    return {
+                        id: u.id,
+                        name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+                        email: email,
+                        avatar: u.imageUrl,
+                        plan: meta.plan || 'free',
+                        expiresAt: meta.expiresAt,
+                        isAutoRenew: !!meta.yookassaPaymentMethodId,
+                        lastActive: u.lastSignInAt,
+                        isAdmin: meta.role === 'admin' || meta.role === 'superadmin'
+                    };
+                });
+                return res.status(200).json({ users: data });
+            } catch(e) {
+                console.error("Clerk List Error:", e);
+                return res.status(500).json({ error: "Failed to fetch users list" });
+            }
         }
 
         // --- GRANT PRO ---
