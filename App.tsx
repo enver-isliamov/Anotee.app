@@ -350,7 +350,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             try {
                 const clerkToken = await getToken();
                 if (!clerkToken) return null;
-                const res = await fetch('/api/driveToken', { headers: { 'Authorization': `Bearer ${clerkToken}` } });
+                // UPDATED: use merged API
+                const res = await fetch('/api/data?action=drive_token', { headers: { 'Authorization': `Bearer ${clerkToken}` } });
                 if (res.ok) {
                     const data = await res.json();
                     checkDriveConnection();
