@@ -1,6 +1,5 @@
 
 import { sql } from '@vercel/postgres';
-import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
 
@@ -65,175 +64,6 @@ export default async function handler(req, res) {
       if (!user) {
           return res.status(401).json({ error: "Unauthorized" });
       }
-
-      const { action } = req.query;
-
-      // ==========================================
-      // MERGED ROUTE: DRIVE TOKEN (from driveToken.js)
-      // ==========================================
-      if (req.method === 'GET' && action === 'drive_token') {
-          if (!user.isVerified) return res.status(403).json({ error: "Guest accounts cannot access Google Drive." });
-
-          const clerk = getClerkClient();
-          let tokenData = null;
-          
-          try {
-              const response = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
-              const tokens = response.data || response || [];
-              if (Array.isArray(tokens) && tokens.length > 0) tokenData = tokens[0];
-          } catch(e) {
-              // Try legacy provider
-              try {
-                  const response = await clerk.users.getUserOauthAccessToken(user.userId, 'google');
-                  const tokens = response.data || response || [];
-                  if (Array.isArray(tokens) && tokens.length > 0) tokenData = tokens[0];
-              } catch(legacyErr) {}
-          }
-
-          if (tokenData && tokenData.token) {
-              return res.status(200).json({ token: tokenData.token });
-          }
-          return res.status(404).json({ error: "No Drive Token Found" });
-      }
-
-      // ==========================================
-      // MERGED ROUTE: CHECK UPDATES (from check-updates.js)
-      // ==========================================
-      if (req.method === 'GET' && action === 'check_updates') {
-          const targetOrgId = req.query.orgId;
-          // 1. Fetch Org Memberships to verify access
-          let userOrgIds = [];
-          if (user.isVerified && user.userId) {
-              try {
-                  const clerk = getClerkClient();
-                  const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId });
-                  userOrgIds = memberships.data.map(m => m.organization.id);
-              } catch (e) {
-                  // non-critical
-              }
-          }
-
-          let query;
-          if (targetOrgId) {
-              if (!userOrgIds.includes(targetOrgId)) return res.status(403).json({ error: "Forbidden" });
-              query = sql`SELECT MAX(updated_at) as last_modified FROM projects WHERE org_id = ${targetOrgId}`;
-          } else {
-              query = sql`
-                  SELECT MAX(updated_at) as last_modified 
-                  FROM projects 
-                  WHERE (org_id IS NULL OR org_id = '') 
-                  AND (
-                      owner_id = ${user.id} 
-                      OR 
-                      data->'team' @> ${JSON.stringify([{id: user.id}])}::jsonb
-                  )
-              `;
-          }
-          const { rows } = await query;
-          return res.status(200).json({ lastModified: Number(rows[0]?.last_modified || 0) });
-      }
-
-      // ==========================================
-      // MERGED ROUTE: COMMENTS (from comment.js)
-      // ==========================================
-      if (req.method === 'POST' && action === 'comment') {
-          let body = req.body;
-          if (typeof body === 'string') try { body = JSON.parse(body); } catch(e) {}
-          
-          const { projectId, assetId, versionId, action: commentAction, payload } = body || {};
-          if (!projectId || !assetId || !versionId || !commentAction) return res.status(400).json({ error: "Missing required fields" });
-
-          const result = await sql`SELECT data, owner_id, org_id FROM projects WHERE id = ${projectId};`;
-          if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
-
-          const projectRow = result.rows[0];
-          let projectData = projectRow.data;
-          const currentVersion = projectData._version || 0;
-
-          const hasAccess = await checkProjectAccess(user, projectRow);
-          if (!hasAccess) return res.status(403).json({ error: "Access denied" });
-
-          const asset = projectData.assets.find(a => a.id === assetId);
-          if (!asset) return res.status(404).json({ error: "Asset not found" });
-
-          const version = asset.versions.find(v => v.id === versionId);
-          if (!version) return res.status(404).json({ error: "Version not found" });
-          if (!version.comments) version.comments = [];
-
-          switch (commentAction) {
-              case 'create':
-                  version.comments.push({ ...payload, userId: user.id, createdAt: 'Just now' });
-                  break;
-              case 'update':
-                  const uIdx = version.comments.findIndex(c => c.id === payload.id);
-                  if (uIdx !== -1) {
-                      const isCommentOwner = version.comments[uIdx].userId === user.id;
-                      const isProjectOwner = projectRow.owner_id === user.id;
-                      if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
-                      version.comments[uIdx] = { ...version.comments[uIdx], ...payload };
-                  }
-                  break;
-              case 'delete':
-                  const dIdx = version.comments.findIndex(c => c.id === payload.id);
-                  if (dIdx !== -1) {
-                      const isCommentOwner = version.comments[dIdx].userId === user.id;
-                      const isProjectOwner = projectRow.owner_id === user.id;
-                      if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
-                      version.comments.splice(dIdx, 1);
-                  }
-                  break;
-          }
-
-          const newVersion = currentVersion + 1;
-          projectData._version = newVersion;
-
-          const updateResult = await sql`
-              UPDATE projects 
-              SET data = ${JSON.stringify(projectData)}::jsonb, updated_at = ${Date.now()}
-              WHERE id = ${projectId} 
-              AND ((data->>'_version')::int = ${currentVersion} OR data->>'_version' IS NULL);
-          `;
-
-          if (updateResult.rowCount === 0) return res.status(409).json({ error: "Conflict" });
-          return res.status(200).json({ success: true, _version: newVersion });
-      }
-
-      // ==========================================
-      // MERGED ROUTE: DELETE ASSETS (from delete.js)
-      // ==========================================
-      if (req.method === 'POST' && action === 'delete_assets') {
-          if (!process.env.BLOB_READ_WRITE_TOKEN) return res.status(500).json({ error: "Blob Token missing" });
-          
-          const { urls, projectId } = req.body;
-          if (!urls || !projectId) return res.status(400).json({ error: "Missing data" });
-
-          const { rows } = await sql`SELECT owner_id, org_id, data FROM projects WHERE id = ${projectId}`;
-          if (rows.length === 0) return res.status(404).json({ error: "Project not found" });
-
-          const projectRow = rows[0];
-          const hasAccess = await checkProjectAccess(user, projectRow);
-          if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
-
-          let canDelete = false;
-          if (projectRow.owner_id === user.id) canDelete = true;
-          else if (projectRow.org_id) {
-              try {
-                  const clerk = getClerkClient();
-                  const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId, limit: 100 });
-                  const targetOrg = memberships.data.find(m => m.organization.id === projectRow.org_id);
-                  if (targetOrg && (targetOrg.role === 'org:admin' || targetOrg.role === 'org:member')) canDelete = true;
-              } catch (e) { console.error("Org check failed", e); }
-          }
-
-          if (!canDelete) return res.status(403).json({ error: "Forbidden: Delete assets restricted" });
-          
-          await del(urls);
-          return res.status(200).json({ success: true });
-      }
-
-      // ==========================================
-      // ORIGINAL DATA LOGIC (Project CRUD)
-      // ==========================================
 
       // --- DELETE: Remove Project Row ---
       if (req.method === 'DELETE') {
@@ -331,6 +161,7 @@ export default async function handler(req, res) {
                               shouldUpdate = true;
                               hasAccess = true;
                           }
+                          // B3. DIRECT LINK -> Do NOT auto-join.
                       }
 
                       if (shouldUpdate) {
@@ -344,7 +175,7 @@ export default async function handler(req, res) {
                   }
 
                   if (hasAccess) {
-                      // Member Acces 
+                      // Member Access
                       const sanitizedData = sanitizeProjectForUser(projectData, user);
                       query = [{ ...projectRow, data: sanitizedData }];
                   } else if (projectData.publicAccess === 'view') {
@@ -480,9 +311,12 @@ export default async function handler(req, res) {
                     const hasAccess = await checkProjectAccess(user, checkExists.rows[0]);
                     if (!hasAccess) continue; 
                     
+                    // Restricted users cannot overwrite project data via Sync
                     const existingData = checkExists.rows[0].data;
                     const member = existingData.team?.find(m => m.id === user.id);
-                    if (member?.restrictedAssetId) continue; 
+                    if (member?.restrictedAssetId) {
+                        continue; 
+                    }
 
                     await sql`
                         UPDATE projects 

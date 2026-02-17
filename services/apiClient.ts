@@ -55,9 +55,8 @@ export const api = {
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             
-            // UPDATED: Use merged endpoint
-            let url = '/api/data?action=check_updates';
-            if (orgId) url += `&orgId=${orgId}`;
+            let url = '/api/check-updates';
+            if (orgId) url += `?orgId=${orgId}`;
             
             const res = await fetch(url, { headers });
             if (!res.ok) return 0;
@@ -193,8 +192,7 @@ export const api = {
         };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        // UPDATED: Use merged endpoint
-        await fetch('/api/data?action=delete_assets', {
+        await fetch('/api/delete', {
             method: 'POST',
             headers,
             body: JSON.stringify({ urls, projectId })
@@ -210,8 +208,7 @@ export const api = {
         };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        // UPDATED: Use merged endpoint
-        const res = await fetch('/api/data?action=comment', {
+        const res = await fetch('/api/comment', {
             method: 'POST',
             headers,
             body: JSON.stringify({ projectId, assetId, versionId, action, payload })
