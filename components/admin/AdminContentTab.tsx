@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Copy, RefreshCw, Zap, BookOpen, Lightbulb, GraduationCap, CheckCircle2, MessageSquare, Hand, Sparkles } from 'lucide-react';
+import { Copy, RefreshCw, Zap, BookOpen, Lightbulb, GraduationCap, CheckCircle2, MessageSquare, Hand, Sparkles, Wand2 } from 'lucide-react';
 
 // --- STRATEGY: PRODUCT-LED GROWTH (PLG) ---
 // Focus: Education, Workflow improvement, Feature discovery. No hard selling.
@@ -16,33 +16,46 @@ interface PostTemplate {
     imageHint: string;
 }
 
-// 1. INTRO / WELCOME GENERATOR
-const INTRO_TEMPLATES: PostTemplate[] = [
-    {
-        id: 'intro-1',
-        category: 'INTRO',
-        hook: "Привет! Мы — Anotee. Давайте знакомиться.",
-        body: "Мы создали платформу для видео-коллаборации, потому что устали от хаоса в Telegram-чатах и бесконечных таблиц с правками.\n\nAnotee — это мост между клиентом и монтажером. Вы загружаете видео, клиент тыкает в экран и пишет комментарий. Вы скачиваете эти комментарии прямо в Premiere или DaVinci.\n\nНикаких лишних звонков. Только чистый поток работы.",
-        cta: "Посмотрите, как это работает на сайте (демо без регистрации).",
-        imageHint: "Красивый скриншот интерфейса плеера с открытыми комментариями."
-    },
-    {
-        id: 'intro-2',
-        category: 'INTRO',
-        hook: "Для кого создан Anotee?",
-        body: "Мы строим инструмент для:\n— Инди-фильммейкеров\n— Фриланс-монтажеров\n— Небольших студий пост-продакшена\n\nЕсли вы хоть раз тратили час на то, чтобы понять, какую именно секунду имел в виду клиент — вы наш человек. Мы убрали всё лишнее, оставив только скорость и точность.",
-        cta: "Присоединяйтесь к сообществу эффективных креаторов.",
-        imageHint: "Коллаж: Монтажер за работой + довольный клиент."
-    },
-    {
-        id: 'intro-3',
-        category: 'INTRO',
-        hook: "Ваше видео. Идеально согласовано.",
-        body: "Представьте мир, где правки приходят не голосовым сообщением, а появляются маркером на вашем таймлайне.\n\nAnotee делает это реальностью. Мы синхронизируем мысли клиента с вашим софтом для монтажа. Безопасное хранение, версионность и мгновенные прокси.",
-        cta: "Попробуйте загрузить свой первый проект.",
-        imageHint: "Анимация: Экспорт XML файла и импорт в DaVinci."
-    }
-];
+// 1. INTRO / WELCOME GENERATOR COMPONENTS
+const INTRO_COMPONENTS = {
+    hooks: [
+        "Привет! Мы — Anotee. Давайте знакомиться.",
+        "Для кого создан Anotee?",
+        "Ваше видео. Идеально согласовано.",
+        "Забудьте про правки в Excel и Telegram.",
+        "Как ускорить пост-продакшн в 5 раз?",
+        "Знакомьтесь: профессиональный инструмент для ревью видео.",
+        "Монтажер? Продюсер? Этот пост для вас."
+    ],
+    problems: [
+        "Мы создали платформу, потому что устали от хаоса в чатах и бесконечных таблиц с таймкодами.",
+        "Если вы хоть раз тратили час на то, чтобы понять, какую именно секунду имел в виду клиент — вы наш человек.",
+        "Представьте мир, где правки приходят не голосовым сообщением, а появляются маркером прямо на вашем таймлайне.",
+        "Больше никаких 'на 15-й секунде что-то не то'. Только точность и профессионализм.",
+        "Хаос в переписке убивает творчество. Мы решили это исправить."
+    ],
+    solutions: [
+        "Anotee — это мост между клиентом и монтажером. Вы загружаете видео, клиент комментирует кадр, а вы скачиваете XML для Premiere или DaVinci.",
+        "Мы убрали всё лишнее, оставив только скорость. Мгновенные прокси, версионность и безопасное хранение.",
+        "Anotee синхронизирует мысли клиента с вашим софтом для монтажа. Никаких лишних звонков. Только чистый поток работы.",
+        "Это пространство, где видео утверждается быстрее. Безопасные ссылки, защита паролем и интеграция с вашим облаком.",
+        "Наш инструмент превращает фидбек в чек-лист. Вы просто импортируете файл маркеров и сразу приступаете к правкам."
+    ],
+    ctas: [
+        "Посмотрите, как это работает на сайте (демо без регистрации).",
+        "Присоединяйтесь к сообществу эффективных креаторов.",
+        "Попробуйте загрузить свой первый проект бесплатно.",
+        "Создайте проект и отправьте ссылку клиенту уже сегодня.",
+        "Протестируйте плеер прямо сейчас в Live Demo."
+    ],
+    images: [
+        "Красивый скриншот интерфейса плеера с открытыми комментариями.",
+        "Коллаж: Монтажер за работой + довольный клиент.",
+        "Анимация: Экспорт XML файла и импорт в DaVinci.",
+        "Минималистичный логотип Anotee на темном фоне.",
+        "Сплит-скрин: Хаос в чате (было) vs Чек-лист в Anotee (стало)."
+    ]
+};
 
 // 2. REGULAR EDUCATIONAL CONTENT GENERATOR
 const VALUE_GENERATORS: Record<ContentCategory, { hooks: string[], bodies: string[], ctas: string[], images: string[] }> = {
@@ -150,6 +163,18 @@ const VALUE_GENERATORS: Record<ContentCategory, { hooks: string[], bodies: strin
 
 const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
+const generateIntroPost = (): PostTemplate => {
+    const { hooks, problems, solutions, ctas, images } = INTRO_COMPONENTS;
+    return {
+        id: Math.random().toString(36).substr(2, 9),
+        category: 'INTRO',
+        hook: getRandom(hooks),
+        body: `${getRandom(problems)}\n\n${getRandom(solutions)}`,
+        cta: getRandom(ctas),
+        imageHint: getRandom(images)
+    };
+};
+
 const generateFeedPosts = (count: number): PostTemplate[] => {
     const posts: PostTemplate[] = [];
     const categories: ContentCategory[] = ['EDUCATION', 'WORKFLOW', 'DEEP_DIVE', 'PHILOSOPHY'];
@@ -172,17 +197,15 @@ const generateFeedPosts = (count: number): PostTemplate[] => {
 
 export const AdminContentTab: React.FC = () => {
     const [feedPosts, setFeedPosts] = useState<PostTemplate[]>(generateFeedPosts(4));
-    const [introPost, setIntroPost] = useState<PostTemplate>(INTRO_TEMPLATES[0]);
+    const [introPost, setIntroPost] = useState<PostTemplate>(generateIntroPost());
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
     const handleGenerateFeed = () => {
         setFeedPosts(generateFeedPosts(4));
     };
 
-    const handleNextIntro = () => {
-        const currentIdx = INTRO_TEMPLATES.findIndex(p => p.id === introPost.id);
-        const nextIdx = (currentIdx + 1) % INTRO_TEMPLATES.length;
-        setIntroPost(INTRO_TEMPLATES[nextIdx]);
+    const handleGenerateIntro = () => {
+        setIntroPost(generateIntroPost());
     };
 
     const handleCopy = (post: PostTemplate) => {
@@ -234,13 +257,13 @@ export const AdminContentTab: React.FC = () => {
             <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-zinc-400 uppercase text-xs tracking-wider flex items-center gap-2">
-                        <Hand size={14} /> Приветственный пост (Закреп)
+                        <Hand size={14} /> Приветственный пост (Генератор)
                     </h3>
                     <button 
-                        onClick={handleNextIntro}
-                        className="text-xs text-indigo-400 hover:text-white transition-colors flex items-center gap-1"
+                        onClick={handleGenerateIntro}
+                        className="text-xs text-indigo-400 hover:text-white transition-colors flex items-center gap-1 font-bold bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20"
                     >
-                        <RefreshCw size={12} /> Вариант {INTRO_TEMPLATES.findIndex(p => p.id === introPost.id) + 1}/{INTRO_TEMPLATES.length}
+                        <Wand2 size={12} /> Сгенерировать новый
                     </button>
                 </div>
                 
@@ -261,6 +284,12 @@ export const AdminContentTab: React.FC = () => {
                         <div>
                             <div className="text-xs font-bold text-zinc-500 mb-1">Призыв (Soft CTA)</div>
                             <p className="text-sm text-indigo-400 font-medium">👉 {introPost.cta}</p>
+                        </div>
+                        <div className="bg-zinc-900/50 p-3 rounded-lg border border-dashed border-zinc-800">
+                            <div className="text-[10px] font-bold text-zinc-500 uppercase mb-1">Визуал</div>
+                            <div className="text-xs text-zinc-400 italic">
+                                {introPost.imageHint}
+                            </div>
                         </div>
                     </div>
 
