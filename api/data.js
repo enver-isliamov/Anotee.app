@@ -69,6 +69,34 @@ export default async function handler(req, res) {
       const { action } = req.query;
 
       // ==========================================
+      // MERGED ROUTE: DRIVE TOKEN (from driveToken.js)
+      // ==========================================
+      if (req.method === 'GET' && action === 'drive_token') {
+          if (!user.isVerified) return res.status(403).json({ error: "Guest accounts cannot access Google Drive." });
+
+          const clerk = getClerkClient();
+          let tokenData = null;
+          
+          try {
+              const response = await clerk.users.getUserOauthAccessToken(user.userId, 'oauth_google');
+              const tokens = response.data || response || [];
+              if (Array.isArray(tokens) && tokens.length > 0) tokenData = tokens[0];
+          } catch(e) {
+              // Try legacy provider
+              try {
+                  const response = await clerk.users.getUserOauthAccessToken(user.userId, 'google');
+                  const tokens = response.data || response || [];
+                  if (Array.isArray(tokens) && tokens.length > 0) tokenData = tokens[0];
+              } catch(legacyErr) {}
+          }
+
+          if (tokenData && tokenData.token) {
+              return res.status(200).json({ token: tokenData.token });
+          }
+          return res.status(404).json({ error: "No Drive Token Found" });
+      }
+
+      // ==========================================
       // MERGED ROUTE: CHECK UPDATES (from check-updates.js)
       // ==========================================
       if (req.method === 'GET' && action === 'check_updates') {
