@@ -1,33 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Copy, Sparkles, Wand2, RefreshCw, MessageSquare, Edit3, Terminal, CheckCircle2, AlertTriangle, Loader2, Image as ImageIcon, Settings, Save, Key, Check } from 'lucide-react';
+import { Copy, Sparkles, Wand2, RefreshCw, MessageSquare, Edit3, Terminal, CheckCircle2, AlertTriangle, Loader2, Image as ImageIcon, Settings, Save, Key, Check, Target, Lightbulb, TrendingUp, BookOpen, Briefcase } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 
-// --- PROMPT TEMPLATES ---
-const PROMPT_TEMPLATES = {
-    INTRO: `Напиши приветственный пост для нового пользователя Anotee.
-Цель: Объяснить, что Anotee — это инструмент для видео-коллаборации, который заменяет переписки в Telegram и Excel-таблицы.
-Боли: Хаос в правках, таймкоды вручную, потерянные файлы.
-Решение: Комментарии прямо на видео, экспорт в DaVinci/Premiere.
-Тон: Дружелюбный, профессиональный, "от создателей для создателей".`,
-
-    EDUCATION: `Напиши обучающий пост про функцию "Экспорт XML" в Anotee.
-Цель: Научить пользователя экспортировать комментарии в монтажную программу.
-Факты: Мы поддерживаем DaVinci Resolve (.xml) и Premiere Pro (.csv). Это экономит часы ручного перебивания правок.
-Тон: Экспертный, технический, но простой.`,
-
-    SALES: `Напиши продающий пост для тарифа "Founder's Club".
-Оффер: Заплати один раз $30 и пользуйся вечно (Lifetime). В будущем будет подписка, но для ранних пользователей — халява.
-Срочность: Предложение ограничено первыми 150 пользователями.
-Аргумент: Это инвестиция в инструмент, а не аренда.`,
-
-    WORKFLOW: `Напиши пост-кейс про "Утверждение с клиентом".
-Сценарий: Клиент не хочет регистрироваться.
-Решение: В Anotee можно отправить Публичную ссылку (Review Link). Клиент просто открывает и пишет комменты. Никаких логинов.
-Тон: "Lifehack", упрощение жизни.`
-};
-
-type TemplateKey = keyof typeof PROMPT_TEMPLATES;
+const STRATEGY_GOALS = [
+    { id: 'Awareness', label: 'Охват (Viral)', icon: Sparkles, desc: 'Для холодной аудитории. Кликбейтные заголовки.' },
+    { id: 'Education', label: 'Обучение (Value)', icon: BookOpen, desc: 'Экспертный контент. Полезные советы.' },
+    { id: 'Conversion', label: 'Продажа (Sales)', icon: TrendingUp, desc: 'Закрытие сделки. FOMO, офферы.' },
+    { id: 'CaseStudy', label: 'Кейс (Trust)', icon: Briefcase, desc: 'Реальный пример использования.' },
+];
 
 export const AdminContentTab: React.FC = () => {
     return <AdminContentTabInner />;
@@ -35,9 +16,10 @@ export const AdminContentTab: React.FC = () => {
 
 const AdminContentTabInner: React.FC = () => {
     const { getToken } = useAuth();
-    const [activeTab, setActiveTab] = useState<TemplateKey>('INTRO');
-    const [customPrompt, setCustomPrompt] = useState(PROMPT_TEMPLATES['INTRO']);
-    const [isLoading, setIsLoading] = useState(false);
+    const [selectedGoal, setSelectedGoal] = useState<string>('Awareness');
+    const [customPrompt, setCustomPrompt] = useState('');
+    const [isGeneratingMeta, setIsGeneratingMeta] = useState(false); // New state for prompt generation
+    const [isLoading, setIsLoading] = useState(false); // State for content generation
     const [result, setResult] = useState<{ hook: string, body: string, cta: string, imageHint: string } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
@@ -69,12 +51,6 @@ const AdminContentTabInner: React.FC = () => {
         loadConfig();
     }, [getToken]);
 
-    const handleTabChange = (key: TemplateKey) => {
-        setActiveTab(key);
-        setCustomPrompt(PROMPT_TEMPLATES[key]);
-        setError(null);
-    };
-
     const handleSaveSettings = async () => {
         setIsSavingSettings(true);
         try {
@@ -87,10 +63,10 @@ const AdminContentTabInner: React.FC = () => {
                 },
                 body: JSON.stringify({ 
                     provider: aiConfig.provider,
-                    openaiKey: newOpenAiKey || undefined // Only send if changed
+                    openaiKey: newOpenAiKey || undefined 
                 })
             });
-            setNewOpenAiKey(''); // Clear input
+            setNewOpenAiKey(''); 
             setAiConfig(prev => ({ ...prev, hasOpenAiKey: newOpenAiKey ? true : prev.hasOpenAiKey }));
             setShowSettings(false);
         } catch (e) {
@@ -100,7 +76,39 @@ const AdminContentTabInner: React.FC = () => {
         }
     };
 
-    const handleGenerate = async () => {
+    // 1. META-PROMPT GENERATION (New Logic)
+    const handleGeneratePrompt = async () => {
+        setIsGeneratingMeta(true);
+        setError(null);
+        try {
+            const token = await getToken();
+            // This endpoint ALWAYS uses free Gemini
+            const response = await fetch('/api/admin?action=generate_meta_prompt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ goal: selectedGoal })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Meta-Prompt Error");
+            
+            setCustomPrompt(data.prompt);
+        } catch (e: any) {
+            setError("Ошибка создания промпта: " + e.message);
+        } finally {
+            setIsGeneratingMeta(false);
+        }
+    };
+
+    // 2. CONTENT GENERATION (Existing Logic)
+    const handleGenerateContent = async () => {
+        if (!customPrompt) {
+            setError("Сначала создайте или введите промпт.");
+            return;
+        }
         setIsLoading(true);
         setError(null);
         setGeneratedImage(null);
@@ -149,7 +157,7 @@ const AdminContentTabInner: React.FC = () => {
                 },
                 body: JSON.stringify({ 
                     prompt: result.imageHint,
-                    provider: aiConfig.provider // Pass the selected provider
+                    provider: aiConfig.provider 
                 })
             });
             
@@ -175,7 +183,7 @@ const AdminContentTabInner: React.FC = () => {
     return (
         <div className="w-full pb-24 grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
             
-            {/* LEFT COLUMN: CONTROLS */}
+            {/* LEFT COLUMN: STRATEGY & INPUT */}
             <div className="space-y-6">
                 
                 {/* 1. Header with Settings */}
@@ -189,7 +197,7 @@ const AdminContentTabInner: React.FC = () => {
                                 <Wand2 className="text-indigo-400" /> AI Content Studio
                             </h2>
                             <p className="text-indigo-200 text-xs leading-relaxed">
-                                Генератор контента для соцсетей. 
+                                Генератор контента. 
                                 <span className="opacity-70 ml-1">
                                     Provider: {aiConfig.provider === 'openai' ? 'GPT-4 + DALL-E 3' : 'Gemini 2.5 + Imagen 3'}
                                 </span>
@@ -249,43 +257,66 @@ const AdminContentTabInner: React.FC = () => {
                     )}
                 </div>
 
-                {/* 2. Template Selector */}
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {(Object.keys(PROMPT_TEMPLATES) as TemplateKey[]).map(key => (
-                        <button
-                            key={key}
-                            onClick={() => handleTabChange(key)}
-                            className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
-                                activeTab === key 
-                                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 shadow-sm' 
-                                    : 'bg-transparent text-zinc-500 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-900'
-                            }`}
-                        >
-                            {key}
-                        </button>
-                    ))}
+                {/* 2. Strategy Selector (REPLACED TEMPLATES) */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Target size={14} /> Выберите Цель (Strategy)
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2">
+                        {STRATEGY_GOALS.map(goal => (
+                            <button
+                                key={goal.id}
+                                onClick={() => setSelectedGoal(goal.id)}
+                                className={`p-3 rounded-xl border text-left transition-all ${
+                                    selectedGoal === goal.id 
+                                        ? 'bg-zinc-800 border-indigo-500 ring-1 ring-indigo-500/50' 
+                                        : 'bg-black/20 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2 mb-1">
+                                    <goal.icon size={16} className={selectedGoal === goal.id ? 'text-indigo-400' : 'text-zinc-500'} />
+                                    <span className={`text-xs font-bold ${selectedGoal === goal.id ? 'text-white' : 'text-zinc-400'}`}>{goal.label}</span>
+                                </div>
+                                <div className="text-[10px] text-zinc-500 leading-tight">{goal.desc}</div>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                {/* 3. Prompt Editor */}
+                {/* 3. Prompt Editor & Generator */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-1 overflow-hidden shadow-inner group focus-within:border-indigo-500/50 transition-colors">
-                    <div className="bg-zinc-950 px-4 py-2 border-b border-zinc-800 flex items-center gap-2 text-zinc-500">
-                        <Terminal size={12} />
-                        <span className="text-[10px] font-mono uppercase tracking-wider">System Prompt</span>
+                    <div className="bg-zinc-950 px-4 py-2 border-b border-zinc-800 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-zinc-500">
+                            <Terminal size={12} />
+                            <span className="text-[10px] font-mono uppercase tracking-wider">System Prompt</span>
+                        </div>
+                        
+                        {/* META GENERATOR BUTTON */}
+                        <button 
+                            onClick={handleGeneratePrompt}
+                            disabled={isGeneratingMeta}
+                            className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[10px] font-bold transition-colors disabled:opacity-50"
+                        >
+                            {isGeneratingMeta ? <Loader2 size={10} className="animate-spin" /> : <Lightbulb size={10} />}
+                            {isGeneratingMeta ? 'Создаю инструкцию...' : 'Сгенерировать Промпт (Free)'}
+                        </button>
                     </div>
+                    
                     <textarea
                         value={customPrompt}
                         onChange={(e) => setCustomPrompt(e.target.value)}
-                        className="w-full h-64 bg-zinc-900 p-4 text-sm text-zinc-300 font-mono outline-none resize-none leading-relaxed"
-                        placeholder="Опишите задачу для ИИ..."
+                        className="w-full h-64 bg-zinc-900 p-4 text-sm text-zinc-300 font-mono outline-none resize-none leading-relaxed placeholder-zinc-700"
+                        placeholder="Здесь появится сгенерированная инструкция для ИИ. Вы можете её отредактировать перед созданием поста..."
                     />
+                    
                     <div className="bg-zinc-900 p-2 flex justify-end border-t border-zinc-800">
                         <button 
-                            onClick={handleGenerate}
-                            disabled={isLoading}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-indigo-900/20"
+                            onClick={handleGenerateContent}
+                            disabled={isLoading || !customPrompt}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-900/20"
                         >
                             {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                            {isLoading ? 'Генерирую...' : 'Запустить AI'}
+                            {isLoading ? 'Пишу пост...' : 'Создать Контент'}
                         </button>
                     </div>
                 </div>
@@ -302,7 +333,7 @@ const AdminContentTabInner: React.FC = () => {
             <div className="relative">
                 <div className="sticky top-6">
                     <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <MessageSquare size={14} /> Результат генерации
+                        <MessageSquare size={14} /> Результат
                     </h3>
 
                     {isLoading ? (
@@ -388,7 +419,7 @@ const AdminContentTabInner: React.FC = () => {
                     ) : (
                         <div className="h-96 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center text-zinc-600 gap-2 bg-zinc-900/30">
                             <Sparkles size={24} className="opacity-20" />
-                            <p className="text-xs">Нажмите "Запустить AI", чтобы увидеть магию.</p>
+                            <p className="text-xs">Нажмите "Создать Контент", чтобы увидеть магию.</p>
                         </div>
                     )}
                 </div>

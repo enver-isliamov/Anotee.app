@@ -129,6 +129,48 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // --- META-PROMPT GENERATION (Uses Free Gemini) ---
+        if (action === 'generate_meta_prompt') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const { goal } = req.body;
+
+            if (!process.env.API_KEY) return res.status(500).json({ error: "Gemini Key missing" });
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                
+                // Detailed instructions for the "Prompt Engineer" AI
+                const promptEngineeringTask = `
+                    You are a World-Class Prompt Engineer. 
+                    Your task is to write a PERFECT "System Instruction" for another AI to generate a social media post for "Anotee".
+                    
+                    Context: Anotee is a video collaboration platform (like Frame.io but simpler/cheaper). It helps filmmakers get feedback on videos with frame-accurate comments.
+                    
+                    Goal of the post: ${goal}
+                    
+                    Output Requirement:
+                    Return ONLY the prompt text in Russian. Do not add "Here is the prompt".
+                    The output prompt should be structured like this:
+                    "Роль: [Role]
+                    Задача: [Task]
+                    Контекст: [Context about Anotee]
+                    Боли аудитории: [Pain points related to ${goal}]
+                    Структура поста: [Structure]
+                    Тон: [Tone]"
+                `;
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash', // Fast & Free model
+                    contents: promptEngineeringTask
+                });
+
+                return res.status(200).json({ prompt: response.text });
+            } catch (e) {
+                console.error("Meta Prompt Error:", e);
+                return res.status(500).json({ error: "Failed to generate prompt template" });
+            }
+        }
+
         // --- MERGED: TEXT GENERATION (Gemini + OpenAI) ---
         if (action === 'generate_ai') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
