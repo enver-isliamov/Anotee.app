@@ -1,6 +1,7 @@
 
 import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
+import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(req, res) {
     const { action } = req.query;
@@ -79,6 +80,43 @@ export default async function handler(req, res) {
 
         if (!isSuperAdmin) {
             return res.status(403).json({ error: "Forbidden: Admins only" });
+        }
+
+        // --- MERGED: AI GENERATION (from generate.js) ---
+        if (action === 'generate_ai') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+            const { prompt, model } = req.body;
+
+            if (!process.env.API_KEY) {
+                return res.status(500).json({ error: "Server Error: API_KEY is missing." });
+            }
+
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+            const responseSchema = {
+                type: Type.OBJECT,
+                properties: {
+                    hook: { type: Type.STRING, description: "Цепляющий заголовок или первый абзац" },
+                    body: { type: Type.STRING, description: "Основной текст поста (с абзацами)" },
+                    cta: { type: Type.STRING, description: "Призыв к действию (Call to Action)" },
+                    imageHint: { type: Type.STRING, description: "Описание идеи для визуализации/картинки" },
+                    category: { type: Type.STRING, description: "Категория контента" }
+                },
+                required: ["hook", "body", "cta", "imageHint"],
+            };
+
+            const response = await ai.models.generateContent({
+                model: model || 'gemini-2.5-flash', 
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema,
+                    systemInstruction: "You are an expert content marketer for Anotee (a video collaboration platform for filmmakers). Your tone is professional, concise, and 'indie-hacker' style. Never use corporate jargon. Always reply in Russian.",
+                },
+            });
+
+            return res.status(200).json(JSON.parse(response.text));
         }
 
         // --- SETUP DATABASE ---

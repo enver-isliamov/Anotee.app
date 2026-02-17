@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
 import { Copy, Sparkles, Wand2, RefreshCw, MessageSquare, Edit3, Terminal, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { useAuth } from '@clerk/clerk-react';
 
 // --- PROMPT TEMPLATES ---
-// These are the starting points that the user can edit.
 const PROMPT_TEMPLATES = {
     INTRO: `Напиши приветственный пост для нового пользователя Anotee.
 Цель: Объяснить, что Anotee — это инструмент для видео-коллаборации, который заменяет переписки в Telegram и Excel-таблицы.
@@ -30,92 +30,8 @@ const PROMPT_TEMPLATES = {
 type TemplateKey = keyof typeof PROMPT_TEMPLATES;
 
 export const AdminContentTab: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<TemplateKey>('INTRO');
-    const [customPrompt, setCustomPrompt] = useState(PROMPT_TEMPLATES['INTRO']);
-    
-    const [isLoading, setIsLoading] = useState(false);
-    const [result, setResult] = useState<{ hook: string, body: string, cta: string, imageHint: string } | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
-
-    const handleTabChange = (key: TemplateKey) => {
-        setActiveTab(key);
-        setCustomPrompt(PROMPT_TEMPLATES[key]);
-        setResult(null);
-        setError(null);
-    };
-
-    const handleGenerate = async () => {
-        setIsLoading(true);
-        setError(null);
-        setResult(null);
-
-        try {
-            // Retrieve token implicitly handled by browser cookies or if we need explicit header:
-            // Since this is a client-side component inside ClerkProvider, we usually need getToken()
-            // But for simplicity in this specific file context, let's assume standard fetch or injected fetch.
-            // *CORRECTION*: We must use proper auth headers as per api/generate.js requirements.
-            
-            // NOTE: In a real app, we would import useAuth() here. 
-            // Assuming this component is wrapped in Auth context.
-            // I will use a simple fetch, assuming the browser session cookie works or 
-            // passing headers if useAuth was available in scope. 
-            // To ensure it works, I'll add the bearer token extraction if this component is used inside the AdminPanel which has auth.
-            
-            // Let's assume the parent passes auth or we fetch it. 
-            // For this specific snippet replacement, I'll assume global fetch works or fail gracefully.
-            // BETTER: Let's fetch the token from localStorage or similar if Clerk stores it, 
-            // OR ideally, use useAuth hook inside here.
-            
-            // RE-ADDING IMPORTS FOR AUTH
-            // (See top of file imports, I will need to add useAuth)
-            
-            const response = await fetch('/api/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    // Note: We need the token here. I will use a placeholder or assume the interceptor adds it.
-                    // However, standard Clerk requires explicit token passing.
-                    // I will add the token logic below in the full implementation block.
-                },
-                body: JSON.stringify({
-                    prompt: customPrompt,
-                    model: 'gemini-2.5-flash' // Fast model
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                // If 401, it means we forgot the token. 
-                // Since I cannot easily change the parent to pass token prop in this single file edit 
-                // without breaking props interface, I will try to use the hook.
-                throw new Error(data.error || "Generation failed");
-            }
-
-            setResult(data);
-        } catch (e: any) {
-            console.error(e);
-            if (e.message.includes('Unauthorized')) {
-                setError("Ошибка авторизации. Перезагрузите страницу.");
-            } else {
-                setError(e.message || "Ошибка соединения с ИИ");
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // We need to inject the token. 
-    // Since I can't import useAuth here without ensuring @clerk/clerk-react is installed (it is), 
-    // I will modify the generate function to use the clerk hook.
-    
-    // WRAPPER COMPONENT PATTERN to use Hooks safely
     return <AdminContentTabInner />;
 };
-
-// Separated component to safely use Hooks
-import { useAuth } from '@clerk/clerk-react';
 
 const AdminContentTabInner: React.FC = () => {
     const { getToken } = useAuth();
@@ -137,7 +53,8 @@ const AdminContentTabInner: React.FC = () => {
         setError(null);
         try {
             const token = await getToken();
-            const response = await fetch('/api/generate', {
+            // UPDATED: Point to merged admin endpoint
+            const response = await fetch('/api/admin?action=generate_ai', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -146,7 +63,16 @@ const AdminContentTabInner: React.FC = () => {
                 body: JSON.stringify({ prompt: customPrompt })
             });
 
-            const data = await response.json();
+            // Handle non-JSON responses (which cause "Unexpected token A...")
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (jsonErr) {
+                console.error("Failed to parse JSON:", text);
+                throw new Error("Server returned an error (Check logs/limits).");
+            }
+
             if (!response.ok) throw new Error(data.error || "AI Error");
             setResult(data);
         } catch (e: any) {
