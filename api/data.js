@@ -344,7 +344,7 @@ export default async function handler(req, res) {
                   }
 
                   if (hasAccess) {
-                      // Member Access
+                      // Member Acces 
                       const sanitizedData = sanitizeProjectForUser(projectData, user);
                       query = [{ ...projectRow, data: sanitizedData }];
                   } else if (projectData.publicAccess === 'view') {
