@@ -157,3 +157,23 @@
     *   **Video CDN**: Проверка доступности публичных тестовых файлов (CORS Check).
     *   **Billing Logic**: Симуляция расчета дней подписки.
 3.  **Результат**: Health Score (0-100%) и детальный лог ошибок.
+
+## X. Future Realtime Architecture (Draft)
+
+Архитектурный план для внедрения Realtime-функций (Phase XXIX).
+
+### 1. NLE Live Link (Streaming)
+*   **Задача:** Стрим экрана монтажера с минимальной задержкой.
+*   **Технология:** **Cloudflare RealtimeKit (SFU)**.
+*   **Реализация:**
+    *   WebRTC соединение типа "One-to-Many".
+    *   Сервер Cloudflare выступает как SFU (Selective Forwarding Unit), раздавая поток зрителям.
+    *   Оплата: Pay-as-you-go (за минуты/трафик).
+
+### 2. Anotee Drop (P2P File Transfer)
+*   **Задача:** Передача файлов мимо сервера (Direct Peer-to-Peer).
+*   **Технология:** **WebRTC Data Channels** + **Cloudflare TURN**.
+*   **Реализация:**
+    *   Сигналинг через существующий WebSocket (или Supabase Realtime).
+    *   ICE Candidate Exchange для установки прямого соединения.
+    *   **Fallback:** Если прямой P2P заблокирован (Symmetric NAT), используется TURN-сервер Cloudflare для ретрансляции трафика.
