@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Project, ProjectAsset, Comment, CommentStatus, User } from '../types';
+import { Project, ProjectAsset, Comment, CommentStatus, User, AppConfig } from '../types';
 import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor, formatTimecode } from '../services/utils';
@@ -11,6 +11,8 @@ import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
+import { useAppConfig } from '../hooks/useAppConfig';
+import { isFeatureEnabled } from '../services/entitlements';
 
 interface PlayerProps {
   asset: ProjectAsset;
@@ -128,7 +130,7 @@ const PlayerSidebar = React.memo(({
                     </div>
                 )}
                 
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-950 z-0 relative">
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 overflow-x-hidden bg-zinc-50 dark:bg-zinc-900 z-0 relative">
                     {sidebarTab === 'comments' && filteredComments.map((comment: any) => {
                         const isSelected = selectedCommentId === comment.id; const a = {name: comment.authorName || 'User', role: 'Viewer'}; const isCO = comment.userId === currentUser.id; const canR = isManager; const isE = editingCommentId === comment.id; 
                         
@@ -196,7 +198,8 @@ const PlayerSidebar = React.memo(({
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
   const { t } = useLanguage();
   const { organization } = useOrganization();
-  const { isPro } = useSubscription();
+  const { plan } = useSubscription(); // Use generic plan
+  const { config } = useAppConfig();
   const { getToken } = useAuth(); // Needed for Presigned URLs
 
   const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);
@@ -546,8 +549,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
   
   const handleExport = (format: 'xml' | 'csv' | 'edl') => { 
-      if (!isPro && !isDemo) { notify(t('upsell.founder.feat2') + " (Pro Feature)", "warning"); return; }
-      let content = ''; let mime = 'text/plain'; let ext = ''; if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); setShowExportMenu(false); 
+      // REFACTORED: Check entitlements instead of hardcoded isPro check
+      const entitlementKey = format === 'xml' ? 'export_xml' : 'export_csv'; // EDL currently falls under CSV-tier or XML-tier depending on policy. Using CSV for basic text formats.
+      const allowed = isFeatureEnabled(config, entitlementKey, plan);
+
+      if (!allowed && !isDemo) { 
+          notify(t('upsell.founder.feat2') + " (Upgrade Required)", "warning"); 
+          return; 
+      }
+
+      let content = ''; let mime = 'text/plain'; let ext = ''; 
+      if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } 
+      else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } 
+      else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } 
+      
+      downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); 
+      setShowExportMenu(false); 
   };
   
   const handleSelectCompareVersion = (idx: number | null) => { setCompareVersionIdx(idx); if (idx !== null) setViewMode('side-by-side'); else setViewMode('single'); setShowCompareMenu(false); };

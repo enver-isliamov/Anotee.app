@@ -14,6 +14,7 @@ import { mapClerkUserToAppUser, isOrgAdmin } from '../services/userUtils';
 import logo from '../logo.svg';
 import { useSubscription } from '../hooks/useSubscription';
 import { useAppConfig } from '../hooks/useAppConfig';
+import { isFeatureEnabled } from '../services/entitlements';
 
 interface ProjectViewProps {
   project: Project;
@@ -32,7 +33,7 @@ interface ProjectViewProps {
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks, onStartTour }) => {
   const { t } = useLanguage();
-  const { isPro } = useSubscription();
+  const { plan } = useSubscription(); // Use generic plan
   const { config } = useAppConfig();
   const { getToken } = useAuth();
   
@@ -74,9 +75,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const canDeleteAssets = (isProjectOwner || isAdmin || (isProjectMember && project.orgId)) && !isRestrictedUser;
   const isLocked = project.isLocked;
 
-  // SHARE PERMISSION CHECKS (Granular)
-  const canInviteTeam = isPro ? config.sharing_project.enabledForPro : config.sharing_project.enabledForFree;
-  const canSharePublicLink = isPro ? config.sharing_public_link.enabledForPro : config.sharing_public_link.enabledForFree;
+  // SHARE PERMISSION CHECKS (Refactored)
+  const canInviteTeam = isFeatureEnabled(config, 'sharing_project', plan);
+  const canSharePublicLink = isFeatureEnabled(config, 'sharing_public_link', plan);
 
   // Delete State
   const [deleteModalState, setDeleteModalState] = useState<{ isOpen: boolean, asset: ProjectAsset | null }>({ isOpen: false, asset: null });
@@ -249,7 +250,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleShareProject = () => {
     if (isLocked) return;
     if (!canInviteTeam && !project.orgId) {
-        notify("Invite feature is locked. Upgrade to Pro.", "warning");
+        notify("Invite feature is locked for your plan.", "warning");
         return;
     }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
@@ -264,7 +265,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         return;
     }
     if (!canSharePublicLink) {
-        notify("Public Links are locked. Upgrade to Pro.", "warning");
+        notify("Public Links are locked for your plan.", "warning");
         return;
     }
     setShareTarget({ type: 'asset', id: asset.id, name: asset.title });
@@ -872,7 +873,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                 <div className="mt-4 border-t border-zinc-800 pt-4">
                                     <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2 flex items-center gap-2">
                                         Invite via Email
-                                        {!canInviteTeam && <span className="px-1.5 py-0.5 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-500/20 flex items-center gap-1"><Crown size={8} /> PRO</span>}
+                                        {!canInviteTeam && <span className="px-1.5 py-0.5 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-500/20 flex items-center gap-1"><Crown size={8} /> UPGRADE</span>}
                                     </div>
                                     
                                     {canInviteTeam ? (

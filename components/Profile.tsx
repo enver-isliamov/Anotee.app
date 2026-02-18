@@ -8,6 +8,7 @@ import { useAuth, useUser } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
 import { useDrive } from '../services/driveContext';
 import { useAppConfig } from '../hooks/useAppConfig';
+import { isFeatureEnabled } from '../services/entitlements';
 
 interface ProfileProps {
   currentUser: User;
@@ -111,7 +112,7 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout }) => {
   const { t } = useLanguage();
   const { getToken } = useAuth();
-  const { isPro, expiresAt, checkStatus } = useSubscription();
+  const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
   const { user } = useUser();
   const { isDriveReady, checkDriveConnection } = useDrive();
   const { config } = useAppConfig();
@@ -171,7 +172,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const isAutoRenew = !!(user?.publicMetadata as any)?.yookassaPaymentMethodId;
   const role = (user?.publicMetadata as any)?.role;
   const isAdmin = role === 'admin' || role === 'superadmin';
-  const canUseWhiteLabel = isPro ? config.s3_custom_domain.enabledForPro : config.s3_custom_domain.enabledForFree;
+  const canUseWhiteLabel = isFeatureEnabled(config, 's3_custom_domain', plan);
 
   const toggleEdit = (field: keyof typeof editingFields) => {
       setEditingFields(prev => ({ ...prev, [field]: !prev[field] }));
@@ -479,6 +480,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       );
   };
 
+  const statusText = isLifetime ? "Lifetime Founder" : (isPro ? "Pro Plan" : "Free Plan");
+
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
             {/* Header */}
@@ -511,7 +514,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         <div>
                             <div className="flex justify-between items-center mb-2 relative z-10">
                                 <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border flex items-center gap-2 ${isPro ? 'bg-indigo-900/30 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
-                                    {isPro ? "Pro Plan" : "Free Plan"}
+                                    {statusText}
                                 </span>
                                 {isPro && isAutoRenew && <button onClick={handleCancelSubscription} className="text-[10px] text-zinc-500 hover:text-red-400 underline">{isCanceling ? '...' : 'Отменить подписку'}</button>}
                             </div>

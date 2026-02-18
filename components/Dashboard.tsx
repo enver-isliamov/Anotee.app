@@ -11,6 +11,7 @@ import { useOrganization, useUser, useAuth } from '@clerk/clerk-react';
 import { isOrgAdmin } from '../services/userUtils';
 import { useSubscription } from '../hooks/useSubscription';
 import { useAppConfig } from '../hooks/useAppConfig';
+import { isFeatureEnabled, getFeatureLimit } from '../services/entitlements';
 
 interface DashboardProps {
   projects: Project[];
@@ -35,7 +36,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
-  const { isPro } = useSubscription();
+  const { plan, isPaid } = useSubscription(); // Use generic plan and paid status
   const { config, loading: configLoading } = useAppConfig();
   
   // CLERK ORG CONTEXT
@@ -72,8 +73,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [client, setClient] = useState('');
   const [description, setDescription] = useState('');
 
-  // --- CONFIG CHECKS ---
-  const canShareProject = isPro ? config.sharing_project.enabledForPro : config.sharing_project.enabledForFree;
+  // --- CONFIG CHECKS (Refactored) ---
+  const canShareProject = isFeatureEnabled(config, 'sharing_project', plan);
+  const showUpsellBanner = isFeatureEnabled(config, 'ui_upsell_banner', plan);
 
   // --- FILTERING LOGIC (SEPARATE OWNED VS SHARED) ---
   const activeOrgId = organization?.id;
@@ -95,9 +97,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       return !isOwner && isInTeam;
   });
 
-  // DYNAMIC LIMIT CHECK
+  // DYNAMIC LIMIT CHECK (Refactored)
   const freeLimit = config.max_projects.limitFree || 3;
-  const currentLimit = isPro ? (config.max_projects.limitPro || 1000) : freeLimit;
+  const currentLimit = getFeatureLimit(config, 'max_projects', plan);
   const createdProjectsCount = ownedProjects.length;
   const canCreate = createdProjectsCount < currentLimit; 
 
@@ -112,7 +114,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     if (!name || !client) return;
 
     if (!canCreate) {
-        notify(`Limit reached (${currentLimit}). Upgrade to Pro.`, "error");
+        notify(`Limit reached (${currentLimit}). Upgrade plan.`, "error");
         return;
     }
 
@@ -223,7 +225,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
 
       if (!canShareProject) {
-          notify("Sharing is locked. Upgrade to Pro.", "warning");
+          notify("Sharing is locked for your plan.", "warning");
           // Optionally redirect to pricing
           return;
       }
@@ -454,7 +456,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                         <button 
                                             onClick={(e) => handleShareClick(e, project)}
                                             className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProject || project.isLocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
-                                            title={!canShareProject ? "Upgrade to Share" : t('common.share')}
+                                            title={!canShareProject ? "Locked" : t('common.share')}
                                             disabled={!canShareProject}
                                         >
                                             <Share2 size={14} />
@@ -512,7 +514,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 
                 {!canCreate && (
                     <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl p-3 text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
-                        You have reached the limit of <strong>{currentLimit} personal projects</strong> on your current plan. <span className="text-indigo-400 font-bold block mt-1">Upgrade to Pro for unlimited access.</span>
+                        You have reached the limit of <strong>{currentLimit} personal projects</strong> on your current plan. <span className="text-indigo-400 font-bold block mt-1">Upgrade for unlimited access.</span>
                     </div>
                 )}
             </div>
@@ -537,48 +539,50 @@ export const Dashboard: React.FC<DashboardProps> = ({
           )
       )}
       
-      <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
-          <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-50 dark:from-indigo-900/10 to-transparent pointer-events-none"></div>
-          
-          <div className="relative z-10">
-              <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2">
-                   <Zap size={20} className="text-yellow-500" fill="currentColor"/> {t('upsell.title')}
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
-                  <div className="space-y-4 opacity-60 grayscale">
-                       <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-bold uppercase text-xs tracking-wider border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                           <Lock size={12} /> {t('upsell.free.title')}
-                       </div>
-                       <ul className="space-y-3 text-sm text-zinc-600 dark:text-zinc-500 font-medium">
-                           <li className="flex items-center gap-2"><Check size={14}/> {t('upsell.free.feat1')}</li>
-                           <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><Check size={14}/> Max {freeLimit} Projects</li>
-                           <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><X size={14}/> {t('upsell.free.feat3')}</li>
-                       </ul>
-                  </div>
+      {showUpsellBanner && (
+        <div className="mt-12 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-sm">
+            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-50 dark:from-indigo-900/10 to-transparent pointer-events-none"></div>
+            
+            <div className="relative z-10">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2">
+                    <Zap size={20} className="text-yellow-500" fill="currentColor"/> {t('upsell.title')}
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
+                    <div className="space-y-4 opacity-60 grayscale">
+                        <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 font-bold uppercase text-xs tracking-wider border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                            <Lock size={12} /> {t('upsell.free.title')}
+                        </div>
+                        <ul className="space-y-3 text-sm text-zinc-600 dark:text-zinc-500 font-medium">
+                            <li className="flex items-center gap-2"><Check size={14}/> {t('upsell.free.feat1')}</li>
+                            <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><Check size={14}/> Max {freeLimit} Projects</li>
+                            <li className="flex items-center gap-2 text-zinc-500 dark:text-zinc-600"><X size={14}/> {t('upsell.free.feat3')}</li>
+                        </ul>
+                    </div>
 
-                  <div className="space-y-4">
-                       <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-xs tracking-wider border-b border-indigo-200 dark:border-indigo-500/30 pb-2">
-                           <Crown size={12} fill="currentColor"/> {t('upsell.founder.title')}
-                       </div>
-                       <ul className="space-y-3 text-sm text-zinc-800 dark:text-zinc-300 font-medium">
-                           <li className="flex items-center gap-2"><Check size={14} className="text-green-500 dark:text-green-400"/> {t('upsell.founder.feat1')}</li>
-                           <li className="flex items-center gap-2"><Check size={14} className="text-green-500 dark:text-green-400"/> {t('upsell.founder.feat2')}</li>
-                           <li className="flex items-center gap-2"><Shield size={14} className="text-indigo-600 dark:text-indigo-400"/> {t('upsell.founder.feat3')}</li>
-                       </ul>
-                       
-                       <div className="pt-2 flex gap-3">
-                           <button onClick={() => onNavigate('PRICING')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all">
-                               {t('upsell.cta')} <ArrowRight size={14} />
-                           </button>
-                           <button onClick={handlePayment} disabled={isBuying} className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg text-sm font-bold border border-zinc-200 dark:border-zinc-700 flex items-center gap-2 disabled:opacity-70">
-                               {isBuying ? <Loader2 size={14} className="animate-spin"/> : t('upsell.donate')}
-                           </button>
-                       </div>
-                  </div>
-              </div>
-          </div>
-      </div>
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-xs tracking-wider border-b border-indigo-200 dark:border-indigo-500/30 pb-2">
+                            <Crown size={12} fill="currentColor"/> {t('upsell.founder.title')}
+                        </div>
+                        <ul className="space-y-3 text-sm text-zinc-800 dark:text-zinc-300 font-medium">
+                            <li className="flex items-center gap-2"><Check size={14} className="text-green-500 dark:text-green-400"/> {t('upsell.founder.feat1')}</li>
+                            <li className="flex items-center gap-2"><Check size={14} className="text-green-500 dark:text-green-400"/> {t('upsell.founder.feat2')}</li>
+                            <li className="flex items-center gap-2"><Shield size={14} className="text-indigo-600 dark:text-indigo-400"/> {t('upsell.founder.feat3')}</li>
+                        </ul>
+                        
+                        <div className="pt-2 flex gap-3">
+                            <button onClick={() => onNavigate('PRICING')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all">
+                                {t('upsell.cta')} <ArrowRight size={14} />
+                            </button>
+                            <button onClick={handlePayment} disabled={isBuying} className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg text-sm font-bold border border-zinc-200 dark:border-zinc-700 flex items-center gap-2 disabled:opacity-70">
+                                {isBuying ? <Loader2 size={14} className="animate-spin"/> : t('upsell.donate')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

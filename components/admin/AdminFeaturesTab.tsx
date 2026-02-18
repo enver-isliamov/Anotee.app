@@ -259,65 +259,77 @@ export const AdminFeaturesTab: React.FC = () => {
                     {meta.description}
                 </p>
 
-                {/* Toggles Grid */}
-                <div className="grid grid-cols-2 gap-2 mt-auto">
+                {/* Toggles Grid (3 Columns now) */}
+                <div className="grid grid-cols-3 gap-2 mt-auto">
                     
-                    {/* FREE TIER TOGGLE */}
+                    {/* FREE TIER */}
                     <div 
                         onClick={() => handleConfigChange(key as keyof AppConfig, 'enabledForFree', !rule.enabledForFree)}
-                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none ${
+                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none flex flex-col items-center justify-center text-center ${
                             rule.enabledForFree 
                                 ? 'bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600' 
                                 : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-100 dark:border-zinc-900 opacity-60 grayscale'
                         }`}
                     >
-                        <div className="flex items-center justify-between mb-1">
-                            <span className={`text-[10px] font-bold uppercase ${rule.enabledForFree ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400'}`}>Free</span>
-                            {rule.enabledForFree ? <Check size={12} className="text-zinc-600 dark:text-zinc-400"/> : <X size={12} className="text-zinc-300"/>}
-                        </div>
+                        <span className={`text-[9px] font-bold uppercase mb-1 ${rule.enabledForFree ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400'}`}>Free</span>
+                        {rule.enabledForFree ? <Check size={12} className="text-zinc-600 dark:text-zinc-400"/> : <X size={12} className="text-zinc-300"/>}
                         
-                        {rule.limitFree !== undefined ? (
-                            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                        {rule.limitFree !== undefined && (
+                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
                                 <input 
                                     type="number"
-                                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 text-xs font-mono text-center outline-none focus:border-zinc-400"
+                                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-700 rounded px-1 py-0.5 text-[10px] font-mono text-center outline-none focus:border-zinc-400 h-5"
                                     value={rule.limitFree}
                                     onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitFree', parseInt(e.target.value))}
                                 />
                             </div>
-                        ) : (
-                            <div className="flex items-center gap-1 mt-1 text-[10px] text-zinc-400">
-                                <Infinity size={12} /> Unlimited
-                            </div>
                         )}
                     </div>
 
-                    {/* PRO TIER TOGGLE */}
+                    {/* PRO TIER */}
                     <div 
                         onClick={() => handleConfigChange(key as keyof AppConfig, 'enabledForPro', !rule.enabledForPro)}
-                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none ${
+                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none flex flex-col items-center justify-center text-center ${
                             rule.enabledForPro 
                                 ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/30' 
                                 : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-100 dark:border-zinc-900 opacity-60 grayscale'
                         }`}
                     >
-                        <div className="flex items-center justify-between mb-1">
-                            <span className={`text-[10px] font-bold uppercase ${rule.enabledForPro ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-400'}`}>Pro</span>
-                            {rule.enabledForPro ? <Check size={12} className="text-indigo-500"/> : <X size={12} className="text-zinc-300"/>}
-                        </div>
+                        <span className={`text-[9px] font-bold uppercase mb-1 ${rule.enabledForPro ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-400'}`}>Pro</span>
+                        {rule.enabledForPro ? <Check size={12} className="text-indigo-500"/> : <X size={12} className="text-zinc-300"/>}
 
-                        {rule.limitPro !== undefined ? (
-                            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                        {rule.limitPro !== undefined && (
+                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
                                 <input 
                                     type="number"
-                                    className="w-full bg-white dark:bg-black border border-indigo-100 dark:border-indigo-900/50 rounded px-1.5 py-0.5 text-xs font-mono text-center outline-none focus:border-indigo-500 text-indigo-900 dark:text-indigo-100"
+                                    className="w-full bg-white dark:bg-black border border-indigo-100 dark:border-indigo-900/50 rounded px-1 py-0.5 text-[10px] font-mono text-center outline-none focus:border-indigo-500 text-indigo-900 dark:text-indigo-100 h-5"
                                     value={rule.limitPro}
                                     onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitPro', parseInt(e.target.value))}
                                 />
                             </div>
-                        ) : (
-                            <div className="flex items-center gap-1 mt-1 text-[10px] text-indigo-400/70">
-                                <Infinity size={12} /> Unlimited
+                        )}
+                    </div>
+
+                    {/* LIFETIME TIER */}
+                    <div 
+                        onClick={() => handleConfigChange(key as keyof AppConfig, 'enabledForLifetime', !rule.enabledForLifetime)}
+                        className={`cursor-pointer rounded-lg p-2 border transition-all relative group select-none flex flex-col items-center justify-center text-center ${
+                            rule.enabledForLifetime 
+                                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-500/30' 
+                                : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-100 dark:border-zinc-900 opacity-60 grayscale'
+                        }`}
+                    >
+                        <span className={`text-[9px] font-bold uppercase mb-1 ${rule.enabledForLifetime ? 'text-amber-600 dark:text-amber-300' : 'text-zinc-400'}`}>Life</span>
+                        {rule.enabledForLifetime ? <Check size={12} className="text-amber-500"/> : <X size={12} className="text-zinc-300"/>}
+
+                        {rule.limitLifetime !== undefined && (
+                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                                <input 
+                                    type="number"
+                                    className="w-full bg-white dark:bg-black border border-amber-100 dark:border-amber-900/50 rounded px-1 py-0.5 text-[10px] font-mono text-center outline-none focus:border-amber-500 text-amber-900 dark:text-amber-100 h-5"
+                                    value={rule.limitLifetime}
+                                    onChange={(e) => handleConfigChange(key as keyof AppConfig, 'limitLifetime', parseInt(e.target.value))}
+                                />
                             </div>
                         )}
                     </div>
@@ -374,7 +386,7 @@ export const AdminFeaturesTab: React.FC = () => {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
                 {CONFIG_GROUPS[settingsSubTab as keyof typeof CONFIG_GROUPS].map((key) => renderConfigCard(key, config[key as keyof AppConfig]))}
             </div>
 
