@@ -159,7 +159,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       if (!isMockMode && !isDriveReady && !isS3Configured) {
-          notify("No storage connected. Please connect Google Drive or configure S3.", "error");
+          notify(t('pv.warn.no_storage'), "error");
           return;
       }
       onUploadAsset(e.target.files[0], project.id, true);
@@ -170,7 +170,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleVersionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && uploadingVersionFor) {
         if (!isMockMode && !isDriveReady && !isS3Configured) {
-            notify("No storage connected. Upload disabled.", "error");
+            notify(t('pv.warn.no_storage'), "error");
             return;
         }
         onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor);
@@ -250,7 +250,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleShareProject = () => {
     if (isLocked) return;
     if (!canInviteTeam && !project.orgId) {
-        notify("Invite feature is locked for your plan.", "warning");
+        notify(t('pv.warn.invite_locked'), "warning");
         return;
     }
     setShareTarget({ type: 'project', id: project.id, name: project.name });
@@ -265,7 +265,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
         return;
     }
     if (!canSharePublicLink) {
-        notify("Public Links are locked for your plan.", "warning");
+        notify(t('pv.warn.public_locked'), "warning");
         return;
     }
     setShareTarget({ type: 'asset', id: asset.id, name: asset.title });
@@ -275,7 +275,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const handleAddVersionClick = (e: React.MouseEvent, assetId: string) => {
       e.stopPropagation();
       if (!isMockMode && !isDriveReady && !isS3Configured) {
-          notify("Connect Storage to upload new versions", "warning");
+          notify(t('pv.warn.no_storage'), "warning");
           return;
       }
       setUploadingVersionFor(assetId);
@@ -407,7 +407,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
           if (!canEditProject || isLocked) return;
           if (!isMockMode && !isDriveReady && !isS3Configured) {
-              notify("No storage connected. Upload disabled.", "error");
+              notify(t('pv.warn.no_storage'), "error");
               return;
           }
 
@@ -415,7 +415,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           const videoFiles = files.filter(f => f.type.startsWith('video/'));
           
           if (videoFiles.length === 0) {
-              if (files.length > 0) notify("Only video files supported", "warning");
+              if (files.length > 0) notify(t('pv.warn.only_video'), "warning");
               return;
           }
           onUploadAsset(videoFiles[0], project.id, true);
@@ -424,7 +424,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       const handleClick = () => {
           if (!canEditProject || isLocked) return;
           if (!isMockMode && !isDriveReady && !isS3Configured) {
-              notify("No storage connected. Upload disabled.", "error");
+              notify(t('pv.warn.no_storage'), "error");
               return;
           }
           fileInputRef.current?.click();
@@ -454,7 +454,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                           <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                               <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${activeUpload.progress}%` }}></div>
                           </div>
-                          <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">{activeUpload.progress}% Uploading</div>
+                          <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">{activeUpload.progress}% {t('common.uploading')}</div>
                       </div>
                   </div>
               ) : (
@@ -462,8 +462,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       <div className={`p-3 rounded-full mb-3 transition-transform ${isDragOver ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110'}`}>
                           <Plus size={24} />
                       </div>
-                      <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? 'Drop to Upload' : t('pv.upload_asset')}</h3>
-                      <p className="text-[10px] text-zinc-400 mt-1">Drag & Drop or Click</p>
+                      <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? t('pv.upload.drop_here') : t('pv.upload_asset')}</h3>
+                      <p className="text-[10px] text-zinc-400 mt-1">{t('pv.upload.drag_drop')}</p>
                   </>
               )}
           </div>
@@ -485,7 +485,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           return (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-900/30 text-indigo-400 border border-indigo-800" title="Files stored in your S3 Bucket">
                 <Server size={14} />
-                <span className="hidden md:inline">S3 Active</span>
+                <span className="hidden md:inline">{t('pv.storage.active')}</span>
             </div>
           );
       }
@@ -520,7 +520,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           return (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900/30 text-blue-400 border border-blue-800">
                 {loadingStorage ? <Loader2 size={14} className="animate-spin"/> : <HardDrive size={14} />}
-                <span className="hidden md:inline">Drive Ready</span>
+                <span className="hidden md:inline">{t('pv.storage.drive')}</span>
             </div>
           );
       }
@@ -528,7 +528,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       return (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-900/20 text-red-400 border border-red-800" title="Please connect Google Drive in Profile">
             <AlertCircle size={14} />
-            <span className="hidden md:inline">No Storage</span>
+            <span className="hidden md:inline">{t('pv.storage.none')}</span>
         </div>
       );
   };
@@ -542,7 +542,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           </button>
           <div className="flex flex-col truncate">
             <span className="font-bold text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                Anotee <span className="text-zinc-600">/</span> <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>
+                {t('app.name')} <span className="text-zinc-600">/</span> <span className="cursor-pointer hover:text-zinc-200 transition-colors" onClick={onBack}>{t('nav.dashboard')}</span>
             </span>
             <div className="flex items-center gap-2 font-semibold text-sm md:text-base leading-tight text-zinc-100 truncate">
                <span className="truncate">{project.name}</span>
@@ -615,7 +615,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         id="tour-share-btn"
                         onClick={handleShareProject}
                         className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-colors shadow-lg shadow-indigo-900/20"
-                        title={project.orgId ? "Manage Access" : t('pv.invite')}
+                        title={project.orgId ? t('pv.btn.manage_access') : t('pv.invite')}
                     >
                         <UserPlus size={14} />
                     </button>
@@ -723,7 +723,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
                   <div className="flex items-center gap-3 mb-4 text-red-500">
                       <AlertTriangle size={32} />
-                      <h3 className="text-lg font-bold text-white">Delete Asset?</h3>
+                      <h3 className="text-lg font-bold text-white">{t('delete')} {t('pv.assets')}?</h3>
                   </div>
                   <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
                       You are about to delete <strong>{deleteModalState.asset.title}</strong>. 
@@ -740,7 +740,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                           <X size={18} className="text-zinc-400 group-hover:text-white transition-colors"/>
                       </button>
                   </div>
-                  <button onClick={() => setDeleteModalState({ isOpen: false, asset: null })} className="mt-6 w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 font-medium">Cancel</button>
+                  <button onClick={() => setDeleteModalState({ isOpen: false, asset: null })} className="mt-6 w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 font-medium">{t('cancel')}</button>
               </div>
           </div>
       )}
@@ -758,7 +758,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                           {shareTarget.type === 'project' ? <UserPlus size={18} /> : <Eye size={18} />}
                       </div>
                       <h2 className="text-lg font-bold text-white">
-                          Share "{shareTarget.name}"
+                          {t('common.share')} "{shareTarget.name}"
                       </h2>
                   </div>
                   
@@ -766,7 +766,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                       <div className="mt-4">
                           <p className="text-xs text-zinc-400 mb-4">This project belongs to an organization. Manage access in settings.</p>
                           <button onClick={() => { setIsShareModalOpen(false); setIsOrgSettingsOpen(true); }} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
-                              <Settings size={14} /> Open Org Settings
+                              <Settings size={14} /> {t('pv.btn.org_settings')}
                           </button>
                       </div>
                   ) : (
@@ -897,7 +897,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
 
               {isParticipantsModalOpen && !project.orgId && (
                   <>
-                    <h2 className="text-lg font-bold text-white mb-4">Project Team</h2>
+                    <h2 className="text-lg font-bold text-white mb-4">{t('pv.team')}</h2>
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {displayTeam.map(member => (
                             <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-zinc-800/50 group">

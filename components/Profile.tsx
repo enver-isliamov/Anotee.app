@@ -589,10 +589,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             <div className="col-span-2 flex justify-between items-center border-b border-zinc-800 pb-2 mb-2">
                                                 <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
-                                                    Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
+                                                    {t('profile.s3.config_header')} {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
                                                 <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
-                                                    <HelpCircle size={10} /> Инструкция по получению ключей
+                                                    <HelpCircle size={10} /> {t('profile.s3.guide_btn')}
                                                 </button>
                                             </div>
 
@@ -721,7 +721,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         disabled={isSavingS3 || isTestingS3}
                                                         className="px-4 py-2 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
                                                     >
-                                                        {isTestingS3 ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Проверить
+                                                        {isTestingS3 ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {t('profile.s3.test_btn')}
                                                     </button>
                                                     <button 
                                                         onClick={handleSaveAndActivate}
@@ -733,7 +733,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         }`}
                                                     >
                                                         {isSavingS3 ? <Loader2 size={14} className="animate-spin" /> : (activeProvider === selectedTab ? <Check size={14} /> : <Power size={14} />)}
-                                                        {activeProvider === selectedTab ? 'Сохранить изменения' : `Активировать ${S3_PRESETS[selectedTab]?.provider || 'S3'}`}
+                                                        {activeProvider === selectedTab ? t('profile.save_changes') : `${t('profile.activate')} ${S3_PRESETS[selectedTab]?.provider || 'S3'}`}
                                                     </button>
                                                 </div>
                                             </div>
