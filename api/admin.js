@@ -435,10 +435,19 @@ export default async function handler(req, res) {
             if (!userId) return res.status(400).json({ error: "Missing userId" });
 
             let expiresAt = null;
+            let plan = 'pro';
+            
             if (days && typeof days === 'number') {
-                expiresAt = days === 0 ? new Date('2099-12-31').getTime() : Date.now() + (days * 24 * 60 * 60 * 1000);
+                if (days === 0) {
+                    // LIFETIME GRANT
+                    expiresAt = new Date('2099-12-31').getTime();
+                    plan = 'lifetime';
+                } else {
+                    expiresAt = Date.now() + (days * 24 * 60 * 60 * 1000);
+                }
             } else {
                 expiresAt = new Date('2099-12-31').getTime();
+                plan = 'lifetime';
             }
 
             // SAFE MERGE
@@ -448,13 +457,13 @@ export default async function handler(req, res) {
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
                     ...currentMeta, // PRESERVE EXISTING DATA
-                    plan: 'pro',
+                    plan: plan,
                     status: 'active',
                     expiresAt: expiresAt,
-                    yookassaPaymentMethodId: null
+                    yookassaPaymentMethodId: null // Clear recurring payment for granted pro
                 }
             });
-            return res.status(200).json({ success: true, message: `Pro granted to ${userId}` });
+            return res.status(200).json({ success: true, message: `Granted ${plan} to ${userId}` });
         }
 
         // --- REVOKE PRO ---
