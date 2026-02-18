@@ -108,8 +108,10 @@ export interface UploadTask {
 export interface FeatureRule {
     enabledForFree: boolean;
     enabledForPro: boolean;
-    limitFree?: number; // e.g., 3 projects
-    limitPro?: number;  // e.g., 1000 projects
+    enabledForLifetime: boolean; // New Lifetime tier
+    limitFree?: number; 
+    limitPro?: number;  
+    limitLifetime?: number; // New Lifetime limit
 }
 
 export interface AppConfig {
@@ -142,30 +144,37 @@ export interface AppConfig {
 
 export const DEFAULT_CONFIG: AppConfig = {
     // Core Features
-    max_projects: { enabledForFree: true, enabledForPro: true, limitFree: 3, limitPro: 1000 },
-    export_xml: { enabledForFree: false, enabledForPro: true },
-    export_csv: { enabledForFree: false, enabledForPro: true },
-    google_drive: { enabledForFree: false, enabledForPro: true }, 
-    ai_transcription: { enabledForFree: true, enabledForPro: true },
+    max_projects: { 
+        enabledForFree: true, 
+        enabledForPro: true, 
+        enabledForLifetime: true,
+        limitFree: 3, 
+        limitPro: 1000,
+        limitLifetime: 10000 
+    },
+    export_xml: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true },
+    export_csv: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true },
+    google_drive: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true }, 
+    ai_transcription: { enabledForFree: true, enabledForPro: true, enabledForLifetime: true },
     
     // Sharing Defaults (Strict for Free)
-    sharing_project: { enabledForFree: false, enabledForPro: true }, 
-    sharing_public_link: { enabledForFree: false, enabledForPro: true },
+    sharing_project: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true }, 
+    sharing_public_link: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true },
     
-    local_file_link: { enabledForFree: true, enabledForPro: true },
-    high_res_proxies: { enabledForFree: false, enabledForPro: true },
-    project_locking: { enabledForFree: false, enabledForPro: true },
-    version_comparison: { enabledForFree: true, enabledForPro: true },
+    local_file_link: { enabledForFree: true, enabledForPro: true, enabledForLifetime: true },
+    high_res_proxies: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true },
+    project_locking: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true },
+    version_comparison: { enabledForFree: true, enabledForPro: true, enabledForLifetime: true },
     
     // White Label
-    s3_custom_domain: { enabledForFree: false, enabledForPro: true },
+    s3_custom_domain: { enabledForFree: false, enabledForPro: true, enabledForLifetime: true },
 
     // UI Defaults
-    ui_upsell_banner: { enabledForFree: true, enabledForPro: false },
-    ui_roadmap_block: { enabledForFree: true, enabledForPro: false },
-    ui_help_button: { enabledForFree: true, enabledForPro: true },
-    ui_footer: { enabledForFree: true, enabledForPro: true },
-    ui_drive_connect: { enabledForFree: true, enabledForPro: true },
+    ui_upsell_banner: { enabledForFree: true, enabledForPro: false, enabledForLifetime: false },
+    ui_roadmap_block: { enabledForFree: true, enabledForPro: false, enabledForLifetime: false },
+    ui_help_button: { enabledForFree: true, enabledForPro: true, enabledForLifetime: true },
+    ui_footer: { enabledForFree: true, enabledForPro: true, enabledForLifetime: true },
+    ui_drive_connect: { enabledForFree: true, enabledForPro: true, enabledForLifetime: true },
 };
 
 // --- PAYMENT INTEGRATION CONFIG ---

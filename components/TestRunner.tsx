@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Play, CheckCircle2, XCircle, Loader2, Terminal, AlertTriangle, Bug, Activity, ShieldCheck } from 'lucide-react';
 import { TEST_SUITE, TestGroup, TestResult } from '../services/testSuite';
@@ -152,7 +151,7 @@ export const TestRunner: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                         <div className="flex items-center gap-2">
                                             {groupResults && (
                                                 <span className={`text-xs font-mono px-2 py-0.5 rounded border ${hasFailures ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-green-900/30 text-green-400 border-green-800'}`}>
-                                                    {groupResults.filter(r => r.passed).length}/{groupResults.length}
+                                                    {groupResults.filter((r: TestResult) => r.passed).length}/{groupResults.length}
                                                 </span>
                                             )}
                                             <button onClick={() => runTests(group)} disabled={isRunning} className="p-1.5 hover:bg-white/10 rounded text-zinc-500 hover:text-white transition-colors" title="Run this group">
