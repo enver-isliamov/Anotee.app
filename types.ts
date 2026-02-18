@@ -28,6 +28,11 @@ export interface AdminUser {
     isAutoRenew: boolean;
     lastActive: number;
     isAdmin: boolean;
+    
+    // Enrichment fields (Server-computed)
+    planLabel?: string;
+    isPaidPlan?: boolean;
+    isRecurringEligible?: boolean;
 }
 
 export interface Comment {

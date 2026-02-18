@@ -46,8 +46,12 @@ export default async function handler(req, res) {
     }
 
     // 2. Get App Config
+    // ALLOWED FOR ALL AUTHENTICATED USERS
     if (action === 'get_config') {
         try {
+            const user = await verifyUser(req); 
+            if (!user) return res.status(401).json({ error: "Unauthorized" });
+
             await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
             const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'feature_flags'`;
             return res.status(200).json(rows.length > 0 ? rows[0].value : {});
@@ -410,6 +414,8 @@ export default async function handler(req, res) {
                     const meta = u.publicMetadata || {};
                     const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
                     const plan = meta.plan || 'free';
+                    const isPaidPlan = plan === 'lifetime' || plan === 'pro';
+                    
                     return {
                         id: u.id,
                         name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
@@ -418,7 +424,8 @@ export default async function handler(req, res) {
                         plan: plan,
                         // Normalization fields for API
                         planLabel: plan === 'lifetime' ? 'Founder' : (plan === 'pro' ? 'Pro' : 'Free'),
-                        isPaid: plan === 'lifetime' || plan === 'pro',
+                        isPaidPlan,
+                        isRecurringEligible: plan === 'pro' && !!meta.yookassaPaymentMethodId && !!meta.expiresAt,
                         expiresAt: meta.expiresAt,
                         isAutoRenew: !!meta.yookassaPaymentMethodId,
                         lastActive: u.lastSignInAt,

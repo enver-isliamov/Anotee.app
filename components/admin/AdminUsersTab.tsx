@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { AdminUser, UserPlan } from '../../types';
-import { RefreshCw, Search, Crown, CheckCircle, Zap, Shield, Filter } from 'lucide-react';
+import { RefreshCw, Search, Crown, CheckCircle, Zap, Shield, Filter, Repeat } from 'lucide-react';
 import { getPlanLabel, getPlanBadgeClass, getPlanIcon } from '../../services/planLabels';
 
 export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined }> = ({ currentUserId }) => {
@@ -20,12 +20,11 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
     const [grantDuration, setGrantDuration] = useState<number>(30); // days
     const [isGranting, setIsGranting] = useState(false);
 
-    // Stats
+    // Stats based on enriched fields if available, or fallback
     const totalUsers = users.length;
     const proUsers = users.filter(u => u.plan === 'pro').length;
     const lifetimeUsers = users.filter(u => u.plan === 'lifetime').length;
-    const freeUsers = users.filter(u => u.plan === 'free').length;
-
+    
     const fetchUsers = async () => {
         setUsersLoading(true);
         setUserError('');
@@ -186,9 +185,17 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                                             </div>
                                         </td>
                                         <td className="px-6 py-3">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${getPlanBadgeClass(user.plan)}`}>
-                                                <PlanIcon size={10} fill="currentColor" /> {getPlanLabel(user.plan).toUpperCase()}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${getPlanBadgeClass(user.plan)}`}>
+                                                    <PlanIcon size={10} fill="currentColor" /> {user.planLabel ? user.planLabel.toUpperCase() : getPlanLabel(user.plan).toUpperCase()}
+                                                </span>
+                                                {/* Show Auto-Renew Indicator using the new field */}
+                                                {user.isRecurringEligible && (
+                                                    <div className="p-1 text-indigo-500 dark:text-indigo-400" title="Auto-Renew Active">
+                                                        <Repeat size={12} />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-3">
                                             {user.isAdmin && (
