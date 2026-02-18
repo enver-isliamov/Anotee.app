@@ -525,7 +525,38 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleVideoDragMove = (e: React.PointerEvent) => { if (!videoScrubRef.current.isPressed) return; const { startX, startTime, isDragging } = videoScrubRef.current; if (!isDragging) { if (Math.abs(e.clientX - startX) > 10) { videoScrubRef.current.isDragging = true; setIsVideoScrubbing(true); if (isPlaying) togglePlay(); } else { return; } } const deltaX = e.clientX - startX; const pixelsPerFrame = 5; const framesMoved = deltaX / pixelsPerFrame; const timeChange = framesMoved * (1 / videoFps); const newTime = Math.max(0, Math.min(duration, startTime + timeChange)); setCurrentTime(newTime); if(videoRef.current) videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
   const handleVideoDragEnd = (e: React.PointerEvent) => { if (videoScrubRef.current.isPressed && !videoScrubRef.current.isDragging) { togglePlay(); } setIsVideoScrubbing(false); videoScrubRef.current.isDragging = false; videoScrubRef.current.isPressed = false; (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); };
 
-  const toggleFullScreen = () => { if (!document.fullscreenElement) playerContainerRef.current?.requestFullscreen(); else document.exitFullscreen(); };
+  const toggleFullScreen = () => { 
+      const container = playerContainerRef.current as any;
+      const doc = document as any;
+
+      // 1. Enter Fullscreen
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+          // Standard API
+          if (container.requestFullscreen) {
+              container.requestFullscreen().catch(() => {
+                  // Fallback if API fails (rare, but possible)
+                  setIsFullscreen(true);
+              });
+          }
+          // Safari / iOS / Old Chrome
+          else if (container.webkitRequestFullscreen) {
+              container.webkitRequestFullscreen();
+          } 
+          // iOS Fallback (Force CSS Fullscreen)
+          else {
+              setIsFullscreen(true);
+          }
+      } 
+      // 2. Exit Fullscreen
+      else {
+          if (doc.exitFullscreen) doc.exitFullscreen();
+          else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+          
+          // Reset CSS fallback state just in case
+          setIsFullscreen(false);
+      }
+  };
+
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
   const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
   const handleDragMove = (e: React.PointerEvent) => { if (isDraggingControls.current) { setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y }); } };
@@ -661,7 +692,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
              {/* ... Fullscreen button ... */}
-             <div className="absolute bottom-4 right-4 z-50 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300">
+             <div className="absolute bottom-4 right-4 z-50 opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100 transition-opacity duration-300">
                 <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
              </div>
              
