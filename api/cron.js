@@ -24,6 +24,9 @@ export default async function handler(req, res) {
 
         for (const user of users.data) {
             const meta = user.publicMetadata;
+            
+            // Only renew active 'pro' plans (monthly). 
+            // Explicitly ignore 'lifetime' plans or users without payment method.
             if (meta.plan === 'pro' && meta.yookassaPaymentMethodId && meta.expiresAt) {
                 if (meta.expiresAt < tomorrow) {
                     renewals.push(user);
@@ -38,6 +41,12 @@ export default async function handler(req, res) {
 
         for (const user of renewals) {
             try {
+                // Double check to ensure we don't charge lifetime users by accident
+                if (user.publicMetadata.plan === 'lifetime') {
+                    console.warn(`Skipping renewal for lifetime user ${user.id}`);
+                    continue;
+                }
+
                 const paymentRes = await fetch('https://api.yookassa.ru/v3/payments', {
                     method: 'POST',
                     headers: {
@@ -46,7 +55,7 @@ export default async function handler(req, res) {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        amount: { value: '2900.00', currency: 'RUB' },
+                        amount: { value: '2900.00', currency: 'RUB' }, // Should fetch from dynamic config in real world
                         capture: true,
                         payment_method_id: user.publicMetadata.yookassaPaymentMethodId,
                         description: `Auto-renewal for ${user.id}`,

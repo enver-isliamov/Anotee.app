@@ -8,6 +8,8 @@ import { useAuth, useUser } from '@clerk/clerk-react';
 import { useSubscription } from '../hooks/useSubscription';
 import { useDrive } from '../services/driveContext';
 import { useAppConfig } from '../hooks/useAppConfig';
+import { isFeatureEnabled } from '../services/entitlements';
+import { getPlanLabel, getPlanBadgeClass } from '../services/planLabels';
 
 interface ProfileProps {
   currentUser: User;
@@ -111,7 +113,7 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout }) => {
   const { t } = useLanguage();
   const { getToken } = useAuth();
-  const { isPro, expiresAt, checkStatus } = useSubscription();
+  const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
   const { user } = useUser();
   const { isDriveReady, checkDriveConnection } = useDrive();
   const { config } = useAppConfig();
@@ -171,7 +173,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const isAutoRenew = !!(user?.publicMetadata as any)?.yookassaPaymentMethodId;
   const role = (user?.publicMetadata as any)?.role;
   const isAdmin = role === 'admin' || role === 'superadmin';
-  const canUseWhiteLabel = isPro ? config.s3_custom_domain.enabledForPro : config.s3_custom_domain.enabledForFree;
+  const canUseWhiteLabel = isFeatureEnabled(config, 's3_custom_domain', plan);
 
   const toggleEdit = (field: keyof typeof editingFields) => {
       setEditingFields(prev => ({ ...prev, [field]: !prev[field] }));
@@ -479,6 +481,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       );
   };
 
+  // New visual logic using helper
+  const planLabel = getPlanLabel(plan);
+  const planBadgeClass = getPlanBadgeClass(plan);
+
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
             {/* Header */}
@@ -506,19 +512,22 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 {/* COLUMN 1: SETTINGS */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* Subscription */}
-                    <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
+                    <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro || isLifetime ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div></div>
                         <div>
                             <div className="flex justify-between items-center mb-2 relative z-10">
-                                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border flex items-center gap-2 ${isPro ? 'bg-indigo-900/30 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
-                                    {isPro ? "Pro Plan" : "Free Plan"}
+                                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border flex items-center gap-2 ${planBadgeClass}`}>
+                                    {planLabel}
                                 </span>
-                                {isPro && isAutoRenew && <button onClick={handleCancelSubscription} className="text-[10px] text-zinc-500 hover:text-red-400 underline">{isCanceling ? '...' : 'Отменить подписку'}</button>}
+                                {plan === 'pro' && isAutoRenew && <button onClick={handleCancelSubscription} className="text-[10px] text-zinc-500 hover:text-red-400 underline">{isCanceling ? '...' : 'Отменить подписку'}</button>}
                             </div>
-                            <h3 className="text-xl font-bold text-white">{isPro ? "Подписка активна" : "Базовый тариф"}</h3>
+                            <h3 className="text-xl font-bold text-white">
+                                {isLifetime ? "Пожизненный доступ" : (isPro ? "Подписка активна" : "Базовый тариф")}
+                            </h3>
                             {isPro && expiresAt && <p className="text-xs text-zinc-500 mt-1">Истекает: {expiresAt.toLocaleDateString()}</p>}
+                            {isLifetime && <p className="text-xs text-zinc-500 mt-1">Лимиты: {config.max_projects.limitLifetime || '∞'} проектов</p>}
                         </div>
-                        {!isPro && <button onClick={() => document.getElementById('roadmap-block')?.scrollIntoView({ behavior: 'smooth' })} className="mt-4 w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2"><ArrowUpCircle size={14} /> Обновиться</button>}
+                        {plan === 'free' && <button onClick={() => document.getElementById('roadmap-block')?.scrollIntoView({ behavior: 'smooth' })} className="mt-4 w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2"><ArrowUpCircle size={14} /> Обновиться</button>}
                     </div>
 
                     {/* STORAGE CONFIGURATION */}
@@ -865,7 +874,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 </div>
             </div>
 
-            {!isPro && (
+            {!isPro && !isLifetime && (
                 <div className="mt-12">
                     <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                         <ArrowUpCircle className="text-indigo-500" />

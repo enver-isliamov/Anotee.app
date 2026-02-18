@@ -409,12 +409,16 @@ export default async function handler(req, res) {
                 const data = usersList.data.map(u => {
                     const meta = u.publicMetadata || {};
                     const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
+                    const plan = meta.plan || 'free';
                     return {
                         id: u.id,
                         name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
                         email: email,
                         avatar: u.imageUrl,
-                        plan: meta.plan || 'free',
+                        plan: plan,
+                        // Normalization fields for API
+                        planLabel: plan === 'lifetime' ? 'Founder' : (plan === 'pro' ? 'Pro' : 'Free'),
+                        isPaid: plan === 'lifetime' || plan === 'pro',
                         expiresAt: meta.expiresAt,
                         isAutoRenew: !!meta.yookassaPaymentMethodId,
                         lastActive: u.lastSignInAt,
@@ -428,17 +432,71 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- GRANT PRO ---
+        // --- SET PLAN (UNIFIED ENDPOINT) ---
+        // Replaces grant_pro and revoke_pro
+        if (action === 'set_plan') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const { userId, plan, days } = req.body;
+            
+            if (!userId || !plan) return res.status(400).json({ error: "Missing required fields" });
+            if (!['free', 'pro', 'lifetime'].includes(plan)) return res.status(400).json({ error: "Invalid plan type" });
+
+            // Fetch current metadata to preserve other fields
+            const targetUser = await clerk.users.getUser(userId);
+            const currentMeta = targetUser.publicMetadata || {};
+            
+            // Log old plan for Audit
+            const oldPlan = currentMeta.plan || 'free';
+            console.log(`[ADMIN AUDIT] User ${userId} plan changed: ${oldPlan} -> ${plan} by Admin ${user.userId}`);
+
+            let newMeta = { ...currentMeta };
+            newMeta.plan = plan;
+
+            if (plan === 'free') {
+                newMeta.expiresAt = null;
+                newMeta.yookassaPaymentMethodId = null; // Clear payment method on downgrade
+                newMeta.billingStatus = 'inactive';
+            } else if (plan === 'lifetime') {
+                newMeta.expiresAt = new Date('2099-12-31').getTime();
+                newMeta.yookassaPaymentMethodId = null; // Lifetime doesn't need auto-renew
+                newMeta.billingStatus = 'active';
+            } else if (plan === 'pro') {
+                const duration = days || 30; // Default 30 days if not provided
+                newMeta.expiresAt = Date.now() + (duration * 24 * 60 * 60 * 1000);
+                newMeta.billingStatus = 'active';
+                // Keep existing yookassaPaymentMethodId if present
+            }
+
+            await clerk.users.updateUser(userId, { publicMetadata: newMeta });
+            
+            return res.status(200).json({ 
+                success: true, 
+                message: `Set ${plan} for ${userId}`,
+                planAssigned: plan,
+                expiresAt: newMeta.expiresAt
+            });
+        }
+
+        // --- GRANT PRO (LEGACY WRAPPER) ---
         if (action === 'grant_pro') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId, days } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
 
             let expiresAt = null;
+            let plan = 'pro';
+            
             if (days && typeof days === 'number') {
-                expiresAt = days === 0 ? new Date('2099-12-31').getTime() : Date.now() + (days * 24 * 60 * 60 * 1000);
+                if (days === 0) {
+                    // LIFETIME GRANT
+                    expiresAt = new Date('2099-12-31').getTime();
+                    plan = 'lifetime';
+                } else {
+                    expiresAt = Date.now() + (days * 24 * 60 * 60 * 1000);
+                }
             } else {
                 expiresAt = new Date('2099-12-31').getTime();
+                plan = 'lifetime';
             }
 
             // SAFE MERGE
@@ -448,16 +506,16 @@ export default async function handler(req, res) {
             await clerk.users.updateUser(userId, {
                 publicMetadata: {
                     ...currentMeta, // PRESERVE EXISTING DATA
-                    plan: 'pro',
+                    plan: plan,
                     status: 'active',
                     expiresAt: expiresAt,
-                    yookassaPaymentMethodId: null
+                    yookassaPaymentMethodId: null // Clear recurring payment for granted pro
                 }
             });
-            return res.status(200).json({ success: true, message: `Pro granted to ${userId}` });
+            return res.status(200).json({ success: true, message: `Granted ${plan} to ${userId}` });
         }
 
-        // --- REVOKE PRO ---
+        // --- REVOKE PRO (LEGACY WRAPPER) ---
         if (action === 'revoke_pro') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId } = req.body;
