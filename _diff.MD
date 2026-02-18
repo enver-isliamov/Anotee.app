@@ -1,192 +1,150 @@
-подробный diff‑план “без боли” для миграции локализации на стандартный стек (бесплатно), с минимальным риском для продакшна.
+Ниже — полная версия Diff‑плана, уже с учетом причин текущей поломки (когда вместо текста отображаются ключи вроде page.workflow.title).
 
-Навыки не применял: задача про архитектурный migration plan, а доступные skills (skill-creator, skill-installer) про создание/установку skills и здесь не подходят.
+Почему сломалось (корневая причина)
+StaticPages и другие компоненты рендерят ключи через t('...') (например page.workflow.title, page.docs.title). 
 
-Цель миграции
-Перевести текущую локализацию с монолитного services/i18n.tsx на i18next + react-i18next + JSON namespaces, сохранив:
+В новом адаптере t стал прямым вызовом i18n.t(key) без “legacy fallback” на старый словарь. Если ключа нет в JSON, в UI уходит сам key. 
 
-текущий UX выбора языка,
+Миграция словарей сделана неполной: часть языков сильно урезана (например es.json очень короткий), поэтому ключи не резолвятся. 
 
-fallback поведение,
+Полный “безболезненный” Diff‑план (как делать заново)
+PR‑0 (подготовка и safety net, обязательно)
+Файлы
+services/i18n.tsx
 
-cloud sync через Clerk.
+services/i18n.legacy.ts (новый)
 
-Текущая база уже хорошая: key-based t('...'), localStorage + browser fallback + cloud sync уже реализованы. 
+scripts/i18n/ (новые скрипты)
 
-Текущее состояние (на что опираемся)
-Языки: en/ru/es/ja/ko/pt. 
+Изменения
+Вынести текущий “старый” словарь в services/i18n.legacy.ts как LEGACY_DICTIONARIES (en/ru/...).
 
-Огромный встроенный словарь DICTIONARIES в TSX. 
+Сделать функцию legacyT(lang, key), которая дает старое поведение fallback (lang -> en -> key).
 
-Fallback цепочка: lang -> en -> key. 
+В useLanguage().t временно включить двойной fallback:
 
-Есть не локализованные хардкоды в UI (важно закрыть в миграции):
+сначала i18next.t(key),
 
-Player: “Access Restricted”, “Fix Permissions…” и т.д. 
+если вернулся key/пусто — брать legacyT(language, key).
 
-ProjectView: уведомления “Invite feature is locked…” и т.п. 
+Добавить runtime warning в dev: если сработал legacy fallback, логировать missing key.
 
-Пошаговый diff‑план (без боли), по PR
-PR-1 (Инфраструктура, без массового переписывания UI)
-1) Установка бесплатного стандарта
-Файлы:
+Зачем
+Даже при неполных JSON интерфейс не ломается и показывает прежний текст.
 
+PR‑1 (инфраструктура i18next, но без риска для UI)
+Файлы
 package.json
 
-Изменения:
-
-добавить зависимости:
-
-i18next
-
-react-i18next
-
-dev:
-
-i18next-parser (для extraction/валидации ключей)
-
-Риск: низкий, код UI пока не трогаем.
-
-2) Создать новую структуру переводов JSON
-Файлы (новые):
-
-locales/en/common.json
-
-locales/ru/common.json
-
-locales/es/common.json
-
-locales/ja/common.json
-
-locales/ko/common.json
-
-locales/pt/common.json
-
-Изменения:
-
-вынести из DICTIONARIES ключи в JSON (пока один namespace common, чтобы не раздувать PR).
-
-ключи оставить те же, чтобы не ломать текущие t('...') вызовы.
-
-Риск: низкий, при сохранении ключей поведение одинаковое.
-
-3) Добавить новый i18n-инициализатор
-Файлы (новые):
-
-services/i18n.config.ts (или services/i18next.ts)
-
-Изменения:
-
-resources из JSON;
-
-fallbackLng: 'en';
-
-supportedLngs: ['en','ru','es','ja','ko','pt'];
-
-lng брать из localStorage('anotee_lang') или browser language (как сейчас). 
-
-4) Встроить i18next в текущий провайдер (адаптерный режим)
-Файлы:
+services/i18n.config.ts
 
 services/i18n.tsx
 
-Изменения:
+App.tsx (если нужно только проверить подключение)
 
-не удалять useLanguage API.
+Изменения
+Подключить i18next + react-i18next. 
 
-внутри LanguageProvider использовать i18next.changeLanguage(language).
+Инициализировать i18n.config.ts с:
 
-t(key) проксировать в i18next.t(key).
+fallbackLng: 'en',
 
-сохранить localStorage и cloud sync логику как есть. 
+supportedLngs,
 
-Почему это “без боли”:
+lng из localStorage/browser (как сейчас). 
 
-компоненты продолжают импортировать useLanguage() без изменений.
+В LanguageProvider оставить текущий API (language, setLanguage, t) — чтобы не трогать все компоненты. 
 
-5) Быстрая проверка совместимости
-все экраны рендерятся как раньше;
+Сохранить cloud sync с Clerk без изменений. 
 
-переключение языка работает;
+PR‑2 (контент: полный перенос ключей, без “обрезаний”)
+Файлы
+services/locales/en.json
 
-fallback ключей работает.
+services/locales/ru.json
 
-PR-2 (Стабилизация качества переводов, минимальный UI-touch)
-6) Убрать очевидные хардкоды в критичных местах
-Файлы:
+services/locales/es.json
 
+services/locales/ja.json
+
+services/locales/ko.json
+
+services/locales/pt.json
+
+Изменения
+100% ключей из legacy словаря перенести в en.json и ru.json.
+
+Для es/ja/ko/pt на первом этапе:
+
+либо тоже полный перенос,
+
+либо временно копия en.json (лучше чем raw keys).
+
+Ввести правило: если ключ есть в коде, он обязан быть в en.json.
+
+Критично
+Нельзя мержить PR, если page.workflow.*/page.docs.* и др. не присутствуют (иначе снова увидишь ключи в UI). 
+
+PR‑3 (контроль качества, чтобы больше не повторялось)
+Файлы
+package.json
+
+.i18next-parser.config.(js|cjs) (новый)
+
+scripts/i18n/* (новые)
+
+Изменения 
+Добавить скрипты:
+
+i18n:extract (вытаскивает ключи из t('...'))
+
+i18n:check (падает, если в en.json не хватает ключей)
+
+CI gate:
+
+PR не проходит без зеленого i18n:check.
+
+Доп. check:
+
+smoke-поиск “key-like strings” в собранном UI (например page./pv.).
+
+PR‑4 (только после стабильности): удалить legacy fallback
+Файлы
+services/i18n.tsx
+
+services/i18n.legacy.ts (удалить)
+
+docs
+
+Изменения
+Убрать fallback на старый словарь из t().
+
+Оставить только i18next JSON source.
+
+Зафиксировать в документации “как добавлять ключи”.
+
+Дополнительно (параллельно): убрать hardcoded строки
+Файлы
 components/Player.tsx
 
 components/ProjectView.tsx
 
-Изменения:
+соответствующие locale JSON
 
-заменить хардкод строки на t('...') ключи:
+Что исправить
+Заменить хардкодные строки на t('...'), чтобы не было смешения языков:
 
-Player: “Access Restricted”, “You need public access...”, “Fix Permissions...” и т.д. 
+"Upgrade Required", "Comments locked" в Player. 
 
-ProjectView: “Invite feature is locked…”, “Public Links are locked…” и т.д. 
+уже начатые предупреждения в ProjectView продолжить в таком же стиле. 
 
-Риск: низкий, локальные текстовые замены.
+Definition of Done (что считать “сделано правильно”)
+На страницах, где раньше было page.workflow.title, отображается нормальный текст (не key).
 
-7) Добавить автоматическую проверку ключей
-Файлы:
+en.json покрывает 100% используемых ключей.
 
-package.json
+CI блокирует PR при missing keys.
 
-(опц.) .i18next-parser.config.cjs
+Язык сохраняется в localStorage и синхронизируется с Clerk как раньше.
 
-Изменения:
-
-scripts:
-
-i18n:extract (парсит t('...') из компонентов)
-
-i18n:check (сравнивает missing keys)
-
-запуск в CI (или pre-merge check).
-
-8) Документация для команды
-Файлы (новый):
-
-docs/i18n.md
-
-Что прописать:
-
-как добавлять ключи;
-
-нейминг (player.*, dash.*, profile.*);
-
-запрет новых хардкодов;
-
-как проверять missing translations локально.
-
-PR-3 (опционально, когда будет время) — разбивка на namespaces
-9) Разделить common.json на доменные namespace
-Файлы:
-
-locales/*/{common,dashboard,player,project,profile,admin}.json
-
-выборочные компоненты (меняем useTranslation('player') и т.д.)
-
-Зачем:
-
-ускоряет работу переводчиков и ревью;
-
-уменьшает конфликты в PR.
-
-Acceptance criteria (чтобы считать миграцию успешной)
-Переключение языка и сохранение в localStorage работают как раньше. 
-
-Cloud sync языка с Clerk не сломан. 
-
-Fallback на en сохранён. 
-
-Нет новых хардкод-строк в измененных компонентах.
-
-Есть автоматическая проверка missing keys.
-
-Почему это лучше и бесплатно
-i18next/react-i18next/i18next-parser — open-source, бесплатные, индустриальный стандарт.
-
-Миграция по адаптерной схеме не ломает текущие компоненты (рефактор можно делать постепенно).
+Сообщить о готовности каждого этапа и отмечать выполненные пункты.
