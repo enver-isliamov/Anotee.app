@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { AdminUser } from '../../types';
-import { RefreshCw, Search, Crown, CheckCircle, Zap, Shield } from 'lucide-react';
+import { AdminUser, UserPlan } from '../../types';
+import { RefreshCw, Search, Crown, CheckCircle, Zap, Shield, Filter } from 'lucide-react';
+import { getPlanLabel, getPlanBadgeClass, getPlanIcon } from '../../services/planLabels';
 
 export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined }> = ({ currentUserId }) => {
     const { getToken } = useAuth();
@@ -11,15 +12,19 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
     const [searchQuery, setSearchQuery] = useState('');
     const [usersLoading, setUsersLoading] = useState(true);
     const [userError, setUserError] = useState('');
+    const [filterPlan, setFilterPlan] = useState<'all' | UserPlan>('all');
     
     // Modal State
     const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+    const [targetPlan, setTargetPlan] = useState<UserPlan>('pro'); // default
     const [grantDuration, setGrantDuration] = useState<number>(30); // days
     const [isGranting, setIsGranting] = useState(false);
 
     // Stats
     const totalUsers = users.length;
-    const proUsers = users.filter(u => u.plan === 'pro' || u.plan === 'lifetime').length;
+    const proUsers = users.filter(u => u.plan === 'pro').length;
+    const lifetimeUsers = users.filter(u => u.plan === 'lifetime').length;
+    const freeUsers = users.filter(u => u.plan === 'free').length;
 
     const fetchUsers = async () => {
         setUsersLoading(true);
@@ -45,54 +50,55 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
     }, []);
 
     useEffect(() => {
-        if (!searchQuery) {
-            setFilteredUsers(users);
-        } else {
+        let result = users;
+
+        if (searchQuery) {
             const lower = searchQuery.toLowerCase();
-            setFilteredUsers(users.filter(u => 
+            result = result.filter(u => 
                 u.name.toLowerCase().includes(lower) || 
                 u.email.toLowerCase().includes(lower)
-            ));
+            );
         }
-    }, [searchQuery, users]);
 
-    const handleGrantPro = async () => {
+        if (filterPlan !== 'all') {
+            result = result.filter(u => u.plan === filterPlan);
+        }
+
+        setFilteredUsers(result);
+    }, [searchQuery, users, filterPlan]);
+
+    const handleSetPlan = async () => {
         if (!selectedUser) return;
         setIsGranting(true);
         try {
             const token = await getToken();
-            await fetch('/api/admin?action=grant_pro', {
-                method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ userId: selectedUser.id, days: grantDuration })
-            });
+            
+            // Logic mapping for backward compatibility with grant_pro endpoint
+            // In PR2 we will introduce set_plan action, for now we map to grant_pro logic
+            let days = 0;
+            if (targetPlan === 'lifetime') days = 0; // Backend handles 0 as lifetime
+            if (targetPlan === 'pro') days = grantDuration;
+            
+            if (targetPlan === 'free') {
+                await fetch('/api/admin?action=revoke_pro', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: selectedUser.id })
+                });
+            } else {
+                await fetch('/api/admin?action=grant_pro', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: selectedUser.id, days: days })
+                });
+            }
+
             setSelectedUser(null);
             fetchUsers();
         } catch (e) {
-            alert("Ошибка при выдаче Pro");
+            alert("Ошибка при изменении плана");
         } finally {
             setIsGranting(false);
-        }
-    };
-
-    const handleRevokePro = async (userId: string) => {
-        if (!confirm("Вы уверены, что хотите понизить пользователя до Free?")) return;
-        try {
-            const token = await getToken();
-            await fetch('/api/admin?action=revoke_pro', {
-                method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ userId })
-            });
-            fetchUsers();
-        } catch (e) {
-            alert("Ошибка при отзыве Pro");
         }
     };
 
@@ -124,13 +130,13 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                     <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Всего</div>
                     <div className="text-3xl font-bold">{totalUsers}</div>
                 </div>
-                <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-4 rounded-xl shadow-sm">
-                    <div className="text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-1">Pro Users</div>
-                    <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{proUsers}</div>
+                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-500/20 p-4 rounded-xl shadow-sm">
+                    <div className="text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider mb-1">Lifetime</div>
+                    <div className="text-3xl font-bold text-amber-700 dark:text-amber-300">{lifetimeUsers}</div>
                 </div>
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl shadow-sm hidden md:block">
-                    <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Free Users</div>
-                    <div className="text-3xl font-bold text-zinc-400">{totalUsers - proUsers}</div>
+                <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-500/20 p-4 rounded-xl shadow-sm hidden md:block">
+                    <div className="text-indigo-600 dark:text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-1">Pro Sub</div>
+                    <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{proUsers}</div>
                 </div>
                 <div className="col-span-2 md:col-span-1 flex items-center justify-center p-3">
                      <button onClick={fetchUsers} className="w-full h-full flex items-center justify-center gap-2 px-4 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-sm font-bold transition-colors text-zinc-600 dark:text-zinc-300">
@@ -139,16 +145,25 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                 </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="relative mb-6">
-                <input 
-                    type="text" 
-                    placeholder="Поиск по имени или email..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-indigo-500 transition-colors shadow-sm"
-                />
-                <Search size={18} className="absolute left-3 top-3 text-zinc-400" />
+            {/* Filter Bar */}
+            <div className="flex flex-col md:flex-row gap-3 mb-6">
+                <div className="relative flex-1">
+                    <input 
+                        type="text" 
+                        placeholder="Поиск по имени или email..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none focus:border-indigo-500 transition-colors shadow-sm"
+                    />
+                    <Search size={18} className="absolute left-3 top-2.5 text-zinc-400" />
+                </div>
+                
+                <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+                    <button onClick={() => setFilterPlan('all')} className={`px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap border ${filterPlan === 'all' ? 'bg-zinc-800 text-white border-zinc-800' : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-800'}`}>All</button>
+                    <button onClick={() => setFilterPlan('lifetime')} className={`px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap border ${filterPlan === 'lifetime' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-800'}`}>Lifetime</button>
+                    <button onClick={() => setFilterPlan('pro')} className={`px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap border ${filterPlan === 'pro' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-800'}`}>Pro</button>
+                    <button onClick={() => setFilterPlan('free')} className={`px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap border ${filterPlan === 'free' ? 'bg-zinc-200 text-zinc-700 border-zinc-300' : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-800'}`}>Free</button>
+                </div>
             </div>
 
             {userError && <div className="p-4 bg-red-100 text-red-700 rounded-lg mb-4 text-xs">{userError}</div>}
@@ -160,15 +175,14 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                         <thead className="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
                             <tr>
                                 <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Пользователь</th>
-                                <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Статус</th>
+                                <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">План</th>
                                 <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs">Роль</th>
                                 <th className="px-6 py-3 font-bold text-zinc-500 uppercase text-xs text-right">Действия</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                             {filteredUsers.map((user) => {
-                                const isPro = user.plan === 'pro' || user.plan === 'lifetime';
-                                const isLifetime = user.plan === 'lifetime';
+                                const PlanIcon = getPlanIcon(user.plan);
                                 
                                 return (
                                     <tr key={user.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
@@ -182,13 +196,9 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                                             </div>
                                         </td>
                                         <td className="px-6 py-3">
-                                            {isPro ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-500/20">
-                                                    <Zap size={10} fill="currentColor" /> {isLifetime ? 'LIFETIME' : 'PRO'}
-                                                </span>
-                                            ) : (
-                                                <span className="text-zinc-500 text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">FREE</span>
-                                            )}
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${getPlanBadgeClass(user.plan)}`}>
+                                                <PlanIcon size={10} fill="currentColor" /> {getPlanLabel(user.plan).toUpperCase()}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-3">
                                             {user.isAdmin && (
@@ -198,15 +208,10 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                                             )}
                                         </td>
                                         <td className="px-6 py-3 text-right flex justify-end gap-2">
-                                            {isPro ? (
-                                                <button onClick={() => handleRevokePro(user.id)} className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors">Снять Pro</button>
-                                            ) : (
-                                                <button onClick={() => setSelectedUser(user)} className="px-3 py-1 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold hover:opacity-80 transition-opacity">
-                                                    Выдать Pro
-                                                </button>
-                                            )}
+                                            <button onClick={() => setSelectedUser(user)} className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-bold transition-colors">
+                                                Изменить план
+                                            </button>
                                             
-                                            {/* Role Toggle */}
                                             {user.id !== currentUserId && (
                                                 <button 
                                                     onClick={() => handleToggleAdmin(user)} 
@@ -229,13 +234,13 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
             {selectedUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
-                        <div className="flex items-center gap-3 mb-4 text-indigo-600 dark:text-indigo-400">
-                            <Crown size={24} />
-                            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Выдать Pro доступ</h2>
+                        <div className="flex items-center gap-3 mb-4 text-zinc-900 dark:text-white">
+                            <Crown size={24} className="text-indigo-500"/>
+                            <h2 className="text-lg font-bold">Назначить план</h2>
                         </div>
                         
                         <div className="mb-6 bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                            <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-3 mb-4">
                                 <img src={selectedUser.avatar} className="w-8 h-8 rounded-full" alt="" />
                                 <div className="min-w-0">
                                     <div className="font-bold text-xs text-zinc-900 dark:text-white truncate">{selectedUser.name}</div>
@@ -243,23 +248,48 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                                 </div>
                             </div>
                             
-                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1.5 mt-4">Срок действия</label>
-                            <select 
-                                value={grantDuration} 
-                                onChange={(e) => setGrantDuration(parseInt(e.target.value))}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500 transition-colors"
-                            >
-                                <option value={7}>7 Дней (Триал)</option>
-                                <option value={30}>1 Месяц</option>
-                                <option value={365}>1 Год</option>
-                                <option value={0}>Навсегда (Lifetime)</option>
-                            </select>
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1.5">Выберите план</label>
+                            <div className="grid grid-cols-3 gap-2 mb-4">
+                                <button 
+                                    onClick={() => setTargetPlan('free')}
+                                    className={`py-2 text-xs font-bold rounded-lg border ${targetPlan === 'free' ? 'bg-zinc-200 border-zinc-300 text-black' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}
+                                >
+                                    Free
+                                </button>
+                                <button 
+                                    onClick={() => setTargetPlan('pro')}
+                                    className={`py-2 text-xs font-bold rounded-lg border ${targetPlan === 'pro' ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}
+                                >
+                                    Pro
+                                </button>
+                                <button 
+                                    onClick={() => setTargetPlan('lifetime')}
+                                    className={`py-2 text-xs font-bold rounded-lg border ${targetPlan === 'lifetime' ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}
+                                >
+                                    Lifetime
+                                </button>
+                            </div>
+
+                            {targetPlan === 'pro' && (
+                                <>
+                                    <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1.5">Срок действия</label>
+                                    <select 
+                                        value={grantDuration} 
+                                        onChange={(e) => setGrantDuration(parseInt(e.target.value))}
+                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500 transition-colors"
+                                    >
+                                        <option value={7}>7 Дней (Триал)</option>
+                                        <option value={30}>1 Месяц</option>
+                                        <option value={365}>1 Год</option>
+                                    </select>
+                                </>
+                            )}
                         </div>
 
                         <div className="flex gap-3">
                             <button onClick={() => setSelectedUser(null)} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">Отмена</button>
-                            <button onClick={handleGrantPro} disabled={isGranting} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all">
-                                {isGranting ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle size={14}/>} Подтвердить
+                            <button onClick={handleSetPlan} disabled={isGranting} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all">
+                                {isGranting ? <RefreshCw size={14} className="animate-spin"/> : <CheckCircle size={14}/>} Сохранить
                             </button>
                         </div>
                     </div>

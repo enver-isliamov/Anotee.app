@@ -4,6 +4,9 @@ export enum CommentStatus {
   RESOLVED = 'resolved'
 }
 
+// Unified Plan Type
+export type UserPlan = 'free' | 'pro' | 'lifetime';
+
 export interface User {
   id: string;
   name: string;
@@ -20,7 +23,7 @@ export interface AdminUser {
     name: string;
     email: string;
     avatar: string;
-    plan: 'free' | 'pro' | 'lifetime';
+    plan: UserPlan; // Use consolidated type
     expiresAt: number | null;
     isAutoRenew: boolean;
     lastActive: number;

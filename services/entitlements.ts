@@ -1,7 +1,7 @@
 
-import { AppConfig } from '../types';
+import { AppConfig, UserPlan } from '../types';
 
-export type UserPlan = 'free' | 'pro' | 'lifetime';
+export type { UserPlan };
 
 /**
  * Determines if a feature is enabled for a specific plan based on configuration.
