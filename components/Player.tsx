@@ -390,7 +390,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setComments(version?.comments || []); 
   }, [version?.id, version?.comments]);
 
-  const handleRemoveDeadVersion = async () => { if (!confirm(t('player.action.remove_version') + "?")) return; const uV = asset.versions.filter(v => v.id !== version.id); if (uV.length === 0) { onBack(); return; } let newIdx = Math.min(currentVersionIdx, uV.length - 1); if (newIdx < 0) newIdx = 0; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a); setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(newIdx); onUpdateProject({ ...project, assets: uA }); notify("Version removed", "info"); };
+  const handleRemoveDeadVersion = async () => { if (!confirm("Remove version?")) return; const uV = asset.versions.filter(v => v.id !== version.id); if (uV.length === 0) { onBack(); return; } let newIdx = Math.min(currentVersionIdx, uV.length - 1); if (newIdx < 0) newIdx = 0; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a); setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(newIdx); onUpdateProject({ ...project, assets: uA }); notify("Version removed", "info"); };
 
   // DRIVE & S3 LOADING (UPDATED)
   useEffect(() => {
@@ -505,7 +505,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
-  const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify(t('player.action.fix_permissions') + "...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
+  const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
   const handleVideoError = async () => { 
       if (loadingDrive) return; 
       if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
@@ -579,8 +579,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const getSourceBadge = () => {
       if (localFileName) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20"><HardDrive size={10} /> Local</div>);
-      if (version?.storageType === 's3' && !isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20"><Server size={10} /> {t('pv.storage.active')}</div>);
-      if (version?.storageType === 'drive' && !isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"><HardDrive size={10} /> {t('pv.storage.drive')}</div>);
+      if (version?.storageType === 's3' && !isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20"><Server size={10} /> S3</div>);
+      if (version?.storageType === 'drive' && !isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"><HardDrive size={10} /> Drive</div>);
       if (isMockMode) return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20"><HardDrive size={10} /> Mock</div>);
       return (<div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20"><Cloud size={10} /> Cloud</div>);
   };
@@ -611,7 +611,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                             </button>
                             {showVersionSelector && (
                                 <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-[100] py-2 max-h-80 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
-                                    <div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/50 mb-1">{t('player.select_version')}</div>
+                                    <div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/50 mb-1">Select Version</div>
                                     {asset.versions.map((v, idx) => {
                                         const isCurrent = idx === currentVersionIdx;
                                         return (
@@ -631,13 +631,13 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                    <div className="flex items-center gap-2">
                        {asset.versions.length > 1 && (
                             <div className="relative hidden md:block">
-                                <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>{compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : t('player.compare_with')} <ChevronDown size={10} /></button>
-                                {showCompareMenu && (<div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 py-2"><div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{t('player.compare_with')}</div><button onClick={() => handleSelectCompareVersion(null)} className="w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300">None (Single View)</button><div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1"></div>{asset.versions.map((v, idx) => (idx !== currentVersionIdx && (<button key={v.id} onClick={() => handleSelectCompareVersion(idx)} className={`w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 flex justify-between ${compareVersionIdx === idx ? 'text-indigo-600 font-bold' : 'text-zinc-600 dark:text-zinc-300'}`}><span>Version {v.versionNumber}</span>{compareVersionIdx === idx && <CheckCircle size={12} />}</button>)))}</div>)}
+                                <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>{compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : 'Compare'} <ChevronDown size={10} /></button>
+                                {showCompareMenu && (<div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 py-2"><div className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Compare With</div><button onClick={() => handleSelectCompareVersion(null)} className="w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300">None (Single View)</button><div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1"></div>{asset.versions.map((v, idx) => (idx !== currentVersionIdx && (<button key={v.id} onClick={() => handleSelectCompareVersion(idx)} className={`w-full text-left px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 flex justify-between ${compareVersionIdx === idx ? 'text-indigo-600 font-bold' : 'text-zinc-600 dark:text-zinc-300'}`}><span>Version {v.versionNumber}</span>{compareVersionIdx === idx && <CheckCircle size={12} />}</button>)))}</div>)}
                                 {showCompareMenu && <div className="fixed inset-0 z-40" onClick={() => setShowCompareMenu(false)}></div>}
                             </div>
                         )}
                        {isSyncing ? <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500 animate-pulse text-[10px]" title={t('player.syncing')}><Cloud size={12} /></div> : <div className="flex items-center gap-1 text-green-500 dark:text-green-500/80 text-[10px]" title={t('player.saved')}><CheckCircle size={12} /></div>}
-                       <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 transition-colors text-[10px] font-medium cursor-pointer" title={localFileName ? "Replace Local File" : "Link Local File to play without internet"}><Link size={10} /><span className="hidden md:inline">{localFileName ? t('player.replace_local') : t('player.link_local')}</span></button>
+                       <button onClick={(e) => { e.stopPropagation(); localFileRef.current?.click(); }} className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 transition-colors text-[10px] font-medium cursor-pointer" title={localFileName ? "Replace Local File" : "Link Local File to play without internet"}><Link size={10} /><span className="hidden md:inline">{localFileName ? 'Replace Source' : 'Link File'}</span></button>
                    </div>
               </div>
             )}
@@ -708,21 +708,21 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     
                     {version.storageType === 's3' ? (
                         <>
-                            <p className="text-zinc-300 font-bold text-lg mb-2">{t('player.error.s3_connection')}</p>
+                            <p className="text-zinc-300 font-bold text-lg mb-2">S3 Connection Error</p>
                             <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
-                                {t('player.error.s3_desc')}
+                                Unable to load file from S3 Bucket. This is usually due to CORS misconfiguration or missing permissions.
                             </p>
                             {isManager && (
                                 <button onClick={() => onBack()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
-                                    <Settings2 size={16} /> {t('player.action.check_s3')}
+                                    <Settings2 size={16} /> Check S3 Settings
                                 </button>
                             )}
                         </>
                     ) : (
                         <>
-                            <p className="text-zinc-300 font-bold text-lg mb-2">{drivePermissionError ? t('player.error.access_restricted') : t('player.media_offline')}</p>
-                            <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">{drivePermissionError ? t('player.error.public_needed') : t('player.offline_desc')}</p>
-                            {drivePermissionError && isManager && (<button onClick={(e) => { e.stopPropagation(); handleFixPermissions(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2"><Unlock size={16} /> {t('player.action.fix_permissions')}</button>)}
+                            <p className="text-zinc-300 font-bold text-lg mb-2">{drivePermissionError ? "Access Restricted" : t('player.media_offline')}</p>
+                            <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">{drivePermissionError ? "You need public access to view this Drive file in the player." : t('player.offline_desc')}</p>
+                            {drivePermissionError && isManager && (<button onClick={(e) => { e.stopPropagation(); handleFixPermissions(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2"><Unlock size={16} /> Fix Permissions (Make Public)</button>)}
                         </>
                     )}
                     
@@ -733,11 +733,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              {driveFileMissing && (
                  <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-red-950/80 backdrop-blur-md p-6 text-center animate-in fade-in duration-300">
                      <div className="bg-red-900/50 p-4 rounded-full mb-4 ring-1 ring-red-700/50 text-red-300"><Trash2 size={32} /></div>
-                     <h3 className="text-xl font-bold text-white mb-2">{t('player.error.file_deleted')}</h3>
-                     <p className="text-sm text-zinc-300 max-w-sm mb-6 leading-relaxed">{t('player.error.file_deleted_desc').replace('{{version}}', version.versionNumber.toString())}</p>
+                     <h3 className="text-xl font-bold text-white mb-2">File Deleted from Drive</h3>
+                     <p className="text-sm text-zinc-300 max-w-sm mb-6 leading-relaxed">The source file for <strong>Version {version.versionNumber}</strong> was removed from Google Drive.</p>
                      <div className="flex gap-3">
-                         {isManager && (<button onClick={handleRemoveDeadVersion} className="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-colors">{t('player.action.remove_version')}</button>)}
-                         <button onClick={onBack} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg font-bold text-sm border border-zinc-700 transition-colors">{t('back')}</button>
+                         {isManager && (<button onClick={handleRemoveDeadVersion} className="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-colors">Remove Version from App</button>)}
+                         <button onClick={onBack} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg font-bold text-sm border border-zinc-700 transition-colors">Go Back</button>
                      </div>
                  </div>
              )}
