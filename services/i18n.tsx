@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useTranslation } from 'react-i18next';
 import './i18n.config';
@@ -26,10 +26,10 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t: originalT, i18n } = useTranslation();
 
-  const changeLanguage = (lang: Language) => {
+  const changeLanguage = useCallback((lang: Language) => {
     i18n.changeLanguage(lang);
     localStorage.setItem('anotee_lang', lang);
-  };
+  }, [i18n]);
 
   // Safe wrapper to prevent raw keys from appearing in UI
   const t = (key: string): string => {
@@ -66,18 +66,21 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 export const LanguageCloudSync: React.FC = () => {
     const { user, isSignedIn } = useUser();
     const { language, setLanguage } = useLanguage();
+    const hasHydratedFromCloud = useRef(false);
 
-    // Sync from Cloud
+    // Sync from Cloud ONLY once on initial auth load to avoid overriding manual selection.
     useEffect(() => {
-        if (isSignedIn && user) {
-            const cloudLang = (user.unsafeMetadata?.settings as any)?.language;
-            if (cloudLang && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(cloudLang)) {
-                if (cloudLang !== language) {
-                    setLanguage(cloudLang as Language);
-                }
+        if (!isSignedIn || !user || hasHydratedFromCloud.current) return;
+
+        const cloudLang = (user.unsafeMetadata?.settings as any)?.language;
+        if (cloudLang && ['en', 'ru', 'es', 'ja', 'ko', 'pt'].includes(cloudLang)) {
+            if (cloudLang !== language) {
+                setLanguage(cloudLang as Language);
             }
         }
-    }, [isSignedIn, user, setLanguage]);
+
+        hasHydratedFromCloud.current = true;
+    }, [isSignedIn, user, language, setLanguage]);
 
     // Save to Cloud
     useEffect(() => {
