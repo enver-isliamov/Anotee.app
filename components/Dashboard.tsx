@@ -12,6 +12,7 @@ import { isOrgAdmin } from '../services/userUtils';
 import { useSubscription } from '../hooks/useSubscription';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { isFeatureEnabled, getFeatureLimit } from '../services/entitlements';
+import { getPlanLabel, getPlanBadgeClass } from '../services/planLabels';
 
 interface DashboardProps {
   projects: Project[];
@@ -470,7 +471,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-950 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-800">
+                                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-900 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-800">
                                         <FileVideo size={12} />
                                         <span>{project.assets.length}</span>
                                     </div>
@@ -487,14 +488,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <>
       <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight hidden lg:block">
+            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight hidden lg:flex items-center gap-3">
                 {activeOrgId ? (
                     <span className="flex items-center gap-2">
                         <Building2 size={24} className="text-indigo-600 dark:text-indigo-400" />
                         {organization?.name}
                     </span>
                 ) : (
-                    t('nav.dashboard')
+                    <>
+                        {t('nav.dashboard')}
+                        {/* PLAN BADGE */}
+                        {!configLoading && (
+                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${getPlanBadgeClass(plan)} ml-2`}>
+                                {getPlanLabel(plan)}
+                            </span>
+                        )}
+                    </>
                 )}
             </h2>
              

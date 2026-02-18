@@ -409,12 +409,16 @@ export default async function handler(req, res) {
                 const data = usersList.data.map(u => {
                     const meta = u.publicMetadata || {};
                     const email = u.emailAddresses.find(e => e.id === u.primaryEmailAddressId)?.emailAddress || 'No Email';
+                    const plan = meta.plan || 'free';
                     return {
                         id: u.id,
                         name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
                         email: email,
                         avatar: u.imageUrl,
-                        plan: meta.plan || 'free',
+                        plan: plan,
+                        // Normalization fields for API
+                        planLabel: plan === 'lifetime' ? 'Founder' : (plan === 'pro' ? 'Pro' : 'Free'),
+                        isPaid: plan === 'lifetime' || plan === 'pro',
                         expiresAt: meta.expiresAt,
                         isAutoRenew: !!meta.yookassaPaymentMethodId,
                         lastActive: u.lastSignInAt,
@@ -440,6 +444,10 @@ export default async function handler(req, res) {
             // Fetch current metadata to preserve other fields
             const targetUser = await clerk.users.getUser(userId);
             const currentMeta = targetUser.publicMetadata || {};
+            
+            // Log old plan for Audit
+            const oldPlan = currentMeta.plan || 'free';
+            console.log(`[ADMIN AUDIT] User ${userId} plan changed: ${oldPlan} -> ${plan} by Admin ${user.userId}`);
 
             let newMeta = { ...currentMeta };
             newMeta.plan = plan;
