@@ -23,6 +23,15 @@ i18n
       pt: { translation: pt },
     },
     fallbackLng: 'en',
+    
+    // CRITICAL for flat keys with dots (e.g. "nav.dashboard")
+    keySeparator: false,
+    nsSeparator: false,
+    
+    // Safety flags
+    returnNull: false,
+    returnEmptyString: false,
+
     interpolation: {
       escapeValue: false, // React handles XSS
     },

@@ -24,11 +24,35 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 // 1. Pure Provider (No Clerk Dependency)
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { t, i18n } = useTranslation();
+  const { t: originalT, i18n } = useTranslation();
 
   const changeLanguage = (lang: Language) => {
     i18n.changeLanguage(lang);
     localStorage.setItem('anotee_lang', lang);
+  };
+
+  // Safe wrapper to prevent raw keys from appearing in UI
+  const t = (key: string): string => {
+      const result = originalT(key);
+      
+      // If result is the key itself (missing translation)
+      if (result === key) {
+          // 1. Log warning in dev
+          // Cast import.meta to any to avoid TS error if types are missing
+          if ((import.meta as any).env?.DEV) {
+              console.warn(`[i18n] Missing key: "${key}" in language: ${i18n.language}`);
+          }
+          
+          // 2. Try English fallback explicitly if current lang is not English
+          if (i18n.language !== 'en') {
+              const enResult = i18n.getFixedT('en')(key);
+              // If English has it, return English text instead of raw key
+              if (enResult !== key) {
+                  return enResult;
+              }
+          }
+      }
+      return result;
   };
 
   return (
