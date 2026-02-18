@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff, CircleHelp } from 'lucide-react';
@@ -635,7 +634,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       {isRestrictedUser && (
         <div className="bg-orange-900/20 border-b border-orange-900/30 text-orange-400 text-xs py-1 text-center font-medium flex items-center justify-center gap-2">
             <Info size={12} />
-            Review Mode: Access limited to specific assets.
+            {t('pv.review_mode_banner')}
         </div>
       )}
 
