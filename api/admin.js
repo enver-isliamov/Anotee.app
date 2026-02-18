@@ -428,7 +428,48 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- GRANT PRO ---
+        // --- SET PLAN (UNIFIED ENDPOINT) ---
+        // Replaces grant_pro and revoke_pro
+        if (action === 'set_plan') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            const { userId, plan, days } = req.body;
+            
+            if (!userId || !plan) return res.status(400).json({ error: "Missing required fields" });
+            if (!['free', 'pro', 'lifetime'].includes(plan)) return res.status(400).json({ error: "Invalid plan type" });
+
+            // Fetch current metadata to preserve other fields
+            const targetUser = await clerk.users.getUser(userId);
+            const currentMeta = targetUser.publicMetadata || {};
+
+            let newMeta = { ...currentMeta };
+            newMeta.plan = plan;
+
+            if (plan === 'free') {
+                newMeta.expiresAt = null;
+                newMeta.yookassaPaymentMethodId = null; // Clear payment method on downgrade
+                newMeta.billingStatus = 'inactive';
+            } else if (plan === 'lifetime') {
+                newMeta.expiresAt = new Date('2099-12-31').getTime();
+                newMeta.yookassaPaymentMethodId = null; // Lifetime doesn't need auto-renew
+                newMeta.billingStatus = 'active';
+            } else if (plan === 'pro') {
+                const duration = days || 30; // Default 30 days if not provided
+                newMeta.expiresAt = Date.now() + (duration * 24 * 60 * 60 * 1000);
+                newMeta.billingStatus = 'active';
+                // Keep existing yookassaPaymentMethodId if present
+            }
+
+            await clerk.users.updateUser(userId, { publicMetadata: newMeta });
+            
+            return res.status(200).json({ 
+                success: true, 
+                message: `Set ${plan} for ${userId}`,
+                planAssigned: plan,
+                expiresAt: newMeta.expiresAt
+            });
+        }
+
+        // --- GRANT PRO (LEGACY WRAPPER) ---
         if (action === 'grant_pro') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId, days } = req.body;
@@ -466,7 +507,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, message: `Granted ${plan} to ${userId}` });
         }
 
-        // --- REVOKE PRO ---
+        // --- REVOKE PRO (LEGACY WRAPPER) ---
         if (action === 'revoke_pro') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             const { userId } = req.body;

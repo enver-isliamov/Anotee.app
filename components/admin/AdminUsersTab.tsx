@@ -73,25 +73,15 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
         try {
             const token = await getToken();
             
-            // Logic mapping for backward compatibility with grant_pro endpoint
-            // In PR2 we will introduce set_plan action, for now we map to grant_pro logic
-            let days = 0;
-            if (targetPlan === 'lifetime') days = 0; // Backend handles 0 as lifetime
-            if (targetPlan === 'pro') days = grantDuration;
-            
-            if (targetPlan === 'free') {
-                await fetch('/api/admin?action=revoke_pro', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: selectedUser.id })
-                });
-            } else {
-                await fetch('/api/admin?action=grant_pro', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: selectedUser.id, days: days })
-                });
-            }
+            await fetch('/api/admin?action=set_plan', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    userId: selectedUser.id, 
+                    plan: targetPlan,
+                    days: targetPlan === 'pro' ? grantDuration : undefined
+                })
+            });
 
             setSelectedUser(null);
             fetchUsers();
