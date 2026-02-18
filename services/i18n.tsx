@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useTranslation } from 'react-i18next';
-import './i18n.config'; // Import init side effects
-import { LEGACY_DICTIONARIES } from './i18n.legacy';
+import './i18n.config';
 
 export type Language = 'en' | 'ru' | 'es' | 'ja' | 'ko' | 'pt';
 
@@ -25,33 +24,11 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 // 1. Pure Provider (No Clerk Dependency)
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { t: i18nT, i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const changeLanguage = (lang: Language) => {
     i18n.changeLanguage(lang);
     localStorage.setItem('anotee_lang', lang);
-  };
-
-  // Hybrid Translate Function with Legacy Fallback
-  const t = (key: string): string => {
-    // 1. Try i18next (checks loaded JSONs)
-    if (i18n.exists(key)) {
-      return i18nT(key);
-    }
-
-    // 2. Legacy Fallback (Safety Net)
-    const currentLang = i18n.language as Language;
-    const legacyValue = LEGACY_DICTIONARIES[currentLang]?.[key] || LEGACY_DICTIONARIES['en']?.[key];
-
-    if (legacyValue) {
-      if ((import.meta as any).env.DEV) {
-        console.warn(`[i18n] Missing key in JSON "${key}", using legacy fallback.`);
-      }
-      return legacyValue;
-    }
-
-    // 3. Return key if nothing found
-    return key;
   };
 
   return (
