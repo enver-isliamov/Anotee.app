@@ -471,22 +471,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // ... (Rest of Player Handlers, Render logic unchanged) ...
   // Player Handlers
-  useEffect(() => {
-      const handleFsChange = () => {
-          const doc = document as any;
-          const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
-          setIsFullscreen(isFs);
-          if (!isFs) setShowVoiceModal(false);
-      };
-
-      document.addEventListener('fullscreenchange', handleFsChange);
-      document.addEventListener('webkitfullscreenchange', handleFsChange as EventListener);
-
-      return () => {
-          document.removeEventListener('fullscreenchange', handleFsChange);
-          document.removeEventListener('webkitfullscreenchange', handleFsChange as EventListener);
-      };
-  }, []);
+  useEffect(() => { const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); }; document.addEventListener('fullscreenchange', handleFsChange); return () => document.removeEventListener('fullscreenchange', handleFsChange); }, []);
   
   // REAL FRAME RATE DETECTION (Unchanged)
   useEffect(() => {
@@ -542,33 +527,33 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const toggleFullScreen = () => { 
       const container = playerContainerRef.current as any;
-      const video = videoRef.current as any;
       const doc = document as any;
 
-      const hasNativeFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement || video?.webkitDisplayingFullscreen);
-      const isCssFullscreen = isFullscreen && !hasNativeFullscreen;
-
-      // Exit from whichever fullscreen mode we are in (native or CSS fallback)
-      if (hasNativeFullscreen || isCssFullscreen) {
+      // 1. Enter Fullscreen
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+          // Standard API
+          if (container.requestFullscreen) {
+              container.requestFullscreen().catch(() => {
+                  // Fallback if API fails (rare, but possible)
+                  setIsFullscreen(true);
+              });
+          }
+          // Safari / iOS / Old Chrome
+          else if (container.webkitRequestFullscreen) {
+              container.webkitRequestFullscreen();
+          } 
+          // iOS Fallback (Force CSS Fullscreen)
+          else {
+              setIsFullscreen(true);
+          }
+      } 
+      // 2. Exit Fullscreen
+      else {
           if (doc.exitFullscreen) doc.exitFullscreen();
           else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
-          else if (video?.webkitDisplayingFullscreen && video.webkitExitFullscreen) video.webkitExitFullscreen();
-
+          
+          // Reset CSS fallback state just in case
           setIsFullscreen(false);
-          return;
-      }
-
-      // Enter native fullscreen when possible, otherwise fallback to CSS fullscreen
-      if (container?.requestFullscreen) {
-          container.requestFullscreen().catch(() => {
-              setIsFullscreen(true);
-          });
-      } else if (container?.webkitRequestFullscreen) {
-          container.webkitRequestFullscreen();
-      } else if (video?.webkitEnterFullscreen) {
-          video.webkitEnterFullscreen();
-      } else {
-          setIsFullscreen(true);
       }
   };
 
