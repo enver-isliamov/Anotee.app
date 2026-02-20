@@ -471,7 +471,26 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // ... (Rest of Player Handlers, Render logic unchanged) ...
   // Player Handlers
-  useEffect(() => { const handleFsChange = () => { const isFs = !!document.fullscreenElement; setIsFullscreen(isFs); if (!isFs) setShowVoiceModal(false); }; document.addEventListener('fullscreenchange', handleFsChange); return () => document.removeEventListener('fullscreenchange', handleFsChange); }, []);
+  useEffect(() => { 
+      const handleFsChange = () => { 
+          const doc = document as any;
+          const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+          setIsFullscreen(isFs); 
+          if (!isFs) setShowVoiceModal(false); 
+      }; 
+      
+      document.addEventListener('fullscreenchange', handleFsChange);
+      document.addEventListener('webkitfullscreenchange', handleFsChange);
+      document.addEventListener('mozfullscreenchange', handleFsChange);
+      document.addEventListener('msfullscreenchange', handleFsChange);
+      
+      return () => {
+          document.removeEventListener('fullscreenchange', handleFsChange);
+          document.removeEventListener('webkitfullscreenchange', handleFsChange);
+          document.removeEventListener('mozfullscreenchange', handleFsChange);
+          document.removeEventListener('msfullscreenchange', handleFsChange);
+      };
+  }, []);
   
   // REAL FRAME RATE DETECTION (Unchanged)
   useEffect(() => {
@@ -529,12 +548,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       const container = playerContainerRef.current as any;
       const doc = document as any;
 
-      // 1. Enter Fullscreen
-      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+      // Use state to decide action, ensuring we can exit CSS fallback mode
+      if (isFullscreen) {
+          // 2. Exit Fullscreen
+          if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
+          else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+          else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+          else if (doc.msExitFullscreen) doc.msExitFullscreen();
+          
+          // Always reset state (handles CSS fallback case)
+          setIsFullscreen(false);
+      } else {
+          // 1. Enter Fullscreen
           // Standard API
           if (container.requestFullscreen) {
               container.requestFullscreen().catch(() => {
-                  // Fallback if API fails (rare, but possible)
+                  // Fallback if API fails
                   setIsFullscreen(true);
               });
           }
@@ -546,14 +575,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           else {
               setIsFullscreen(true);
           }
-      } 
-      // 2. Exit Fullscreen
-      else {
-          if (doc.exitFullscreen) doc.exitFullscreen();
-          else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
-          
-          // Reset CSS fallback state just in case
-          setIsFullscreen(false);
       }
   };
 
