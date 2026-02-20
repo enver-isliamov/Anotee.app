@@ -17,6 +17,15 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+
+    const sanitizeAssetName = (name: string): string => {
+        const normalized = name.normalize('NFC').trim();
+        const cleaned = normalized
+            .replace(/[^\p{L}\p{N}\s._()-]/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        return cleaned || 'Video_Asset';
+    };
     
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
@@ -65,12 +74,11 @@ export const useUploadManager = (
             let nextVersionNumber = 1;
             
             // Extract base name and extension
-            let rawTitle = file.name.replace(/\.[^/.]+$/, "");
-            // Sanitize: Keep alphanumeric, spaces, dashes, underscores.
-            let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
-            if (!assetTitle) assetTitle = "Video_Asset";
+            const rawTitle = file.name.replace(/\.[^/.]+$/, "");
+            const assetTitle = sanitizeAssetName(rawTitle);
 
-            const ext = file.name.split('.').pop();
+            const extFromName = file.name.split('.').pop()?.trim();
+            const ext = extFromName ? extFromName : 'mp4';
 
             if (targetAssetId && project) {
                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
@@ -195,7 +203,7 @@ export const useUploadManager = (
                         let folderName = assetTitle;
                         if (targetAssetId && project) {
                                 const existingAsset = project.assets.find(a => a.id === targetAssetId);
-                                if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+                                if (existingAsset) folderName = sanitizeAssetName(existingAsset.title);
                         }
 
                         const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
