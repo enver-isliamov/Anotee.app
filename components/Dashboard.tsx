@@ -35,7 +35,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     onEditProject, onNavigate, notify, isMockMode = false,
     isCreateModalOpen, setCreateModalOpen, highlightNewProject
 }) => {
-  const DONATE_URL = 'https://pay.cloudtips.ru/p/71defd27';
   const [isCreating, setIsCreating] = useState(false);
   const { t } = useLanguage();
   const { plan, isPaid } = useSubscription(); // Use generic plan and paid status
@@ -146,9 +145,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setDescription('');
   };
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
       setIsBuying(true);
-      window.location.href = DONATE_URL;
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/payment?action=init', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          
+          if (res.ok && data.confirmationUrl) {
+              window.location.href = data.confirmationUrl;
+          } else {
+              notify("Payment failed: " + (data.error || "Unknown"), "error");
+              setIsBuying(false);
+          }
+      } catch (e) {
+          notify("Network error", "error");
+          setIsBuying(false);
+      }
   };
 
   const handleOpenEdit = (e: React.MouseEvent, project: Project) => {

@@ -111,7 +111,6 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
 };
 
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout }) => {
-  const DONATE_URL = 'https://pay.cloudtips.ru/p/71defd27';
   const { t } = useLanguage();
   const { getToken } = useAuth();
   const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
@@ -399,9 +398,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       } catch (e) { alert("Ошибка сети"); } finally { setIsCanceling(false); }
   };
 
-  const handleDonate = () => {
+  const handleDonate = async () => {
       setIsDonating(true);
-      window.location.href = DONATE_URL;
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/payment?action=init', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          if (res.ok && data.confirmationUrl) window.location.href = data.confirmationUrl;
+          else alert("Ошибка инициализации платежа");
+      } catch (e) { alert("Network error"); } finally { setIsDonating(false); }
   };
 
   const copyToClipboard = (text: string) => {
