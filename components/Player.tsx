@@ -193,6 +193,70 @@ const PlayerSidebar = React.memo(({
     );
 });
 
+// --- OPTIMIZATION: Floating Controls Component ---
+const FloatingControls = React.memo(({ 
+    initialPos, onPositionChange, isLocked, t, 
+    handleDragStart, handleDragMove, handleDragEnd, // We'll handle drag internally
+    handleQuickMarker, seek, handleSetInPoint, handleSetOutPoint, 
+    markerInPoint, markerOutPoint, clearMarkers 
+}: any) => {
+    const [pos, setPos] = useState(initialPos);
+    const dragRef = useRef<{ isDragging: boolean, startX: number, startY: number, initialX: number, initialY: number }>({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
+
+    const onPointerDown = (e: React.PointerEvent) => {
+        e.preventDefault();
+        dragRef.current = {
+            isDragging: true,
+            startX: e.clientX,
+            startY: e.clientY,
+            initialX: pos.x,
+            initialY: pos.y
+        };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    };
+
+    const onPointerMove = (e: React.PointerEvent) => {
+        if (!dragRef.current.isDragging) return;
+        const dx = e.clientX - dragRef.current.startX;
+        const dy = e.clientY - dragRef.current.startY;
+        
+        // Update local state for smooth animation without re-rendering parent
+        setPos({
+            x: dragRef.current.initialX + dx,
+            y: dragRef.current.initialY + dy
+        });
+    };
+
+    const onPointerUp = (e: React.PointerEvent) => {
+        if (dragRef.current.isDragging) {
+            dragRef.current.isDragging = false;
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            onPositionChange(pos); // Persist position
+        }
+    };
+
+    return (
+        <div className="fixed z-[9999] floating-controls touch-none transition-transform duration-75 ease-out will-change-transform" style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, bottom: 'calc(80px + env(safe-area-inset-bottom))', right: '16px', left: 'auto' }}>
+            <div className={`flex flex-row items-center gap-2 md:gap-1 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md rounded-xl p-2 md:p-1.5 border border-zinc-200 dark:border-zinc-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-opacity ${isLocked ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                <div onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing border-r border-zinc-200 dark:border-zinc-800 mr-1 pointer-events-auto"><GripVertical size={14} /></div>
+                
+                <div className="flex items-center gap-1">
+                    <button onClick={handleQuickMarker} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title={t('player.marker.quick')}><MapPin size={20} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); seek(-5); }} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors pointer-events-auto"><RotateCcw size={20} /></button>
+                    <div className="hidden md:block w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-0.5"></div>
+                    <button onClick={(e) => { e.stopPropagation(); seek(5); }} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors pointer-events-auto"><RotateCw size={20} /></button>
+                </div>
+
+                <div className="flex items-center gap-1 w-auto justify-center">
+                    <button onClick={handleSetInPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
+                    <button onClick={handleSetOutPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
+                    {(markerInPoint !== null || markerOutPoint !== null) && (<button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>)}
+                </div>
+            </div>
+        </div>
+    );
+});
+
 // ... (Rest of file unchanged, just export Player) ...
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
   const { t } = useLanguage();
@@ -471,20 +535,24 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // ... (Rest of Player Handlers, Render logic unchanged) ...
   // Player Handlers
-  useEffect(() => {
-      const handleFsChange = () => {
+  useEffect(() => { 
+      const handleFsChange = () => { 
           const doc = document as any;
-          const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
-          setIsFullscreen(isFs);
-          if (!isFs) setShowVoiceModal(false);
-      };
-
+          const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+          setIsFullscreen(isFs); 
+          if (!isFs) setShowVoiceModal(false); 
+      }; 
+      
       document.addEventListener('fullscreenchange', handleFsChange);
-      document.addEventListener('webkitfullscreenchange', handleFsChange as EventListener);
-
+      document.addEventListener('webkitfullscreenchange', handleFsChange);
+      document.addEventListener('mozfullscreenchange', handleFsChange);
+      document.addEventListener('msfullscreenchange', handleFsChange);
+      
       return () => {
           document.removeEventListener('fullscreenchange', handleFsChange);
-          document.removeEventListener('webkitfullscreenchange', handleFsChange as EventListener);
+          document.removeEventListener('webkitfullscreenchange', handleFsChange);
+          document.removeEventListener('mozfullscreenchange', handleFsChange);
+          document.removeEventListener('msfullscreenchange', handleFsChange);
       };
   }, []);
   
@@ -542,40 +610,40 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const toggleFullScreen = () => { 
       const container = playerContainerRef.current as any;
-      const video = videoRef.current as any;
       const doc = document as any;
 
-      const hasNativeFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement || video?.webkitDisplayingFullscreen);
-      const isCssFullscreen = isFullscreen && !hasNativeFullscreen;
-
-      // Exit from whichever fullscreen mode we are in (native or CSS fallback)
-      if (hasNativeFullscreen || isCssFullscreen) {
-          if (doc.exitFullscreen) doc.exitFullscreen();
+      // Use state to decide action, ensuring we can exit CSS fallback mode
+      if (isFullscreen) {
+          // 2. Exit Fullscreen
+          if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
           else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
-          else if (video?.webkitDisplayingFullscreen && video.webkitExitFullscreen) video.webkitExitFullscreen();
-
+          else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+          else if (doc.msExitFullscreen) doc.msExitFullscreen();
+          
+          // Always reset state (handles CSS fallback case)
           setIsFullscreen(false);
-          return;
-      }
-
-      // Enter native fullscreen when possible, otherwise fallback to CSS fullscreen
-      if (container?.requestFullscreen) {
-          container.requestFullscreen().catch(() => {
-              setIsFullscreen(true);
-          });
-      } else if (container?.webkitRequestFullscreen) {
-          container.webkitRequestFullscreen();
-      } else if (video?.webkitEnterFullscreen) {
-          video.webkitEnterFullscreen();
       } else {
-          setIsFullscreen(true);
+          // 1. Enter Fullscreen
+          // Standard API
+          if (container.requestFullscreen) {
+              container.requestFullscreen().catch(() => {
+                  // Fallback if API fails
+                  setIsFullscreen(true);
+              });
+          }
+          // Safari / iOS / Old Chrome
+          else if (container.webkitRequestFullscreen) {
+              container.webkitRequestFullscreen();
+          } 
+          // iOS Fallback (Force CSS Fullscreen)
+          else {
+              setIsFullscreen(true);
+          }
       }
   };
 
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
-  const handleDragStart = (e: React.PointerEvent) => { isDraggingControls.current = true; dragStartPos.current = { x: e.clientX - controlsPos.x, y: e.clientY - controlsPos.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleDragMove = (e: React.PointerEvent) => { if (isDraggingControls.current) { setControlsPos({ x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y }); } };
-  const handleDragEnd = (e: React.PointerEvent) => { isDraggingControls.current = false; (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+  // Drag handlers moved to FloatingControls component
   const seek = (delta: number) => { if (videoRef.current) { const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); videoRef.current.currentTime = t; setCurrentTime(t); } };
   const handleAddComment = () => { if (!newCommentText.trim()) return; const cId = generateId(); syncCommentAction('create', { id: cId, text: newCommentText, timestamp: markerInPoint !== null ? markerInPoint : currentTime, duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
   const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
@@ -585,7 +653,24 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const saveEdit = (id: string) => { syncCommentAction('update', { id, text: editText }); setEditingCommentId(null); setEditText(''); };
   const handleBulkResolve = () => { comments.filter(c => c.status === CommentStatus.OPEN).forEach(c => syncCommentAction('update', { id: c.id, status: CommentStatus.RESOLVED })); };
   const handleToggleLock = () => { const updatedVersions = [...asset.versions]; const versionToUpdate = { ...updatedVersions[currentVersionIdx] }; versionToUpdate.isLocked = !versionToUpdate.isLocked; updatedVersions[currentVersionIdx] = versionToUpdate; const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); onUpdateProject({ ...project, assets: updatedAssets }); notify(versionToUpdate.isLocked ? t('player.lock_ver') : t('player.unlock_ver'), "info"); };
-  const startListening = () => { if (!('webkitSpeechRecognition' in window)) { notify("Speech recognition not supported in this browser.", "error"); return; } const SpeechRecognition = (window as any).webkitSpeechRecognition; recognitionRef.current = new SpeechRecognition(); recognitionRef.current.continuous = false; recognitionRef.current.interimResults = false; recognitionRef.current.lang = 'en-US'; recognitionRef.current.onstart = () => setIsListening(true); recognitionRef.current.onend = () => setIsListening(false); recognitionRef.current.onresult = (event: any) => { const t = event.results[0][0].transcript; setNewCommentText(prev => prev ? `${prev} ${t}` : t); }; recognitionRef.current.start(); };
+  const startListening = () => { 
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { 
+          notify("Speech recognition not supported in this browser.", "error"); 
+          return; 
+      } 
+      recognitionRef.current = new SpeechRecognition(); 
+      recognitionRef.current.continuous = false; 
+      recognitionRef.current.interimResults = false; 
+      recognitionRef.current.lang = 'en-US'; 
+      recognitionRef.current.onstart = () => setIsListening(true); 
+      recognitionRef.current.onend = () => setIsListening(false); 
+      recognitionRef.current.onresult = (event: any) => { 
+          const t = event.results[0][0].transcript; 
+          setNewCommentText(prev => prev ? `${prev} ${t}` : t); 
+      }; 
+      recognitionRef.current.start(); 
+  };
   const toggleListening = () => { if (isListening) recognitionRef.current?.stop(); else startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
   const handleQuickMarker = () => { setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
@@ -836,24 +921,19 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         )}
       </div>
 
-      <div className="fixed z-[9999] floating-controls touch-none transition-all duration-300" style={{ transform: `translate(${controlsPos.x}px, ${controlsPos.y}px)`, bottom: 'calc(80px + env(safe-area-inset-bottom))', right: '16px', left: 'auto' }}>
-        <div className={`flex flex-col md:flex-row items-center gap-2 md:gap-1 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md rounded-xl p-2 md:p-1.5 border border-zinc-200 dark:border-zinc-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-opacity ${isLocked ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-            <div onPointerDown={handleDragStart} onPointerMove={handleDragMove} onPointerUp={handleDragEnd} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800 md:mr-1 pointer-events-auto"><GripVertical size={14} /></div>
-            
-            <div className="flex items-center gap-1">
-                <button onClick={handleQuickMarker} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title={t('player.marker.quick')}><MapPin size={20} /></button>
-                <button onClick={(e) => { e.stopPropagation(); seek(-5); }} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors pointer-events-auto"><RotateCcw size={20} /></button>
-                <div className="hidden md:block w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-0.5"></div>
-                <button onClick={(e) => { e.stopPropagation(); seek(5); }} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors pointer-events-auto"><RotateCw size={20} /></button>
-            </div>
-
-            <div className="flex items-center gap-1 w-full md:w-auto justify-center">
-                <button onClick={handleSetInPoint} className={`flex-1 md:flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
-                <button onClick={handleSetOutPoint} className={`flex-1 md:flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
-                {(markerInPoint !== null || markerOutPoint !== null) && (<button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>)}
-            </div>
-        </div>
-      </div>
+      <FloatingControls 
+        initialPos={controlsPos}
+        onPositionChange={setControlsPos}
+        isLocked={isLocked}
+        t={t}
+        handleQuickMarker={handleQuickMarker}
+        seek={seek}
+        handleSetInPoint={handleSetInPoint}
+        handleSetOutPoint={handleSetOutPoint}
+        markerInPoint={markerInPoint}
+        markerOutPoint={markerOutPoint}
+        clearMarkers={clearMarkers}
+      />
     </div>
   );
 };
