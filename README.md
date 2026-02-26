@@ -98,7 +98,6 @@
 *   **Styling:** Tailwind CSS, Lucide Icons
 *   **Auth:** Clerk (Organizations, Metadata sync, RBAC)
 *   **Backend:** Vercel Serverless Functions, Vercel Postgres (Neon)
-*   **Performance:** Smart Polling Engine (Adaptive Sync Interval)
 *   **Storage:** Google Drive API (Primary) + S3 (Yandex/AWS/R2)
 *   **Payments:** ЮKassa API v3, Prodamus (Multi-provider)
 *   **AI:** HuggingFace Transformers.js (In-browser execution)

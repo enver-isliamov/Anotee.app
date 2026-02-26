@@ -24,7 +24,6 @@ interface PlayerProps {
   notify: (msg: string, type: ToastType) => void;
   isDemo?: boolean;
   isMockMode?: boolean;
-  setIsPlayerActive?: (active: boolean) => void; // Smart Polling Control
 }
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
@@ -197,39 +196,12 @@ const PlayerSidebar = React.memo(({
 // --- OPTIMIZATION: Floating Controls Component ---
 const FloatingControls = React.memo(({ 
     initialPos, onPositionChange, isLocked, t, 
+    handleDragStart, handleDragMove, handleDragEnd, // We'll handle drag internally
     handleQuickMarker, seek, handleSetInPoint, handleSetOutPoint, 
-    markerInPoint, markerOutPoint, clearMarkers,
-    startListening, isListening, toggleListening, isFullscreen // Add props for voice
+    markerInPoint, markerOutPoint, clearMarkers 
 }: any) => {
-    // Clamp initial position to be safe
-    const getSafePos = (p: {x: number, y: number}) => {
-        const padding = 16;
-        const width = 300; // Approx width
-        const height = 60; // Approx height
-        const maxX = window.innerWidth - width - padding;
-        const maxY = window.innerHeight - height - padding;
-        return {
-            x: Math.min(Math.max(padding, p.x), maxX), // Clamp X (left to right)
-            y: Math.min(Math.max(padding, p.y), maxY)  // Clamp Y (top to bottom)
-        };
-    };
-
-    const [pos, setPos] = useState(() => getSafePos(initialPos));
+    const [pos, setPos] = useState(initialPos);
     const dragRef = useRef<{ isDragging: boolean, startX: number, startY: number, initialX: number, initialY: number }>({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
-    const controlsRef = useRef<HTMLDivElement>(null);
-
-    // Re-clamp on resize
-    useEffect(() => {
-        const handleResize = () => {
-             setPos(prev => {
-                 const safe = getSafePos(prev);
-                 if (safe.x !== prev.x || safe.y !== prev.y) return safe;
-                 return prev;
-             });
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     const onPointerDown = (e: React.PointerEvent) => {
         e.preventDefault();
@@ -248,21 +220,11 @@ const FloatingControls = React.memo(({
         const dx = e.clientX - dragRef.current.startX;
         const dy = e.clientY - dragRef.current.startY;
         
-        let newX = dragRef.current.initialX + dx;
-        let newY = dragRef.current.initialY + dy;
-
-        // Clamp to screen bounds
-        const el = controlsRef.current;
-        if (el) {
-            const rect = el.getBoundingClientRect();
-            const maxX = window.innerWidth - rect.width - 16; // 16px padding
-            const maxY = window.innerHeight - rect.height - 16;
-            newX = Math.min(Math.max(16, newX), maxX);
-            newY = Math.min(Math.max(16, newY), maxY);
-        }
-
         // Update local state for smooth animation without re-rendering parent
-        setPos({ x: newX, y: newY });
+        setPos({
+            x: dragRef.current.initialX + dx,
+            y: dragRef.current.initialY + dy
+        });
     };
 
     const onPointerUp = (e: React.PointerEvent) => {
@@ -274,7 +236,7 @@ const FloatingControls = React.memo(({
     };
 
     return (
-        <div ref={controlsRef} className="fixed z-[9999] floating-controls touch-none transition-transform duration-75 ease-out will-change-transform" style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, bottom: 'auto', right: 'auto', left: '0', top: '0' }}>
+        <div className="fixed z-[9999] floating-controls touch-none transition-transform duration-75 ease-out will-change-transform" style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, bottom: 'calc(80px + env(safe-area-inset-bottom))', right: '16px', left: 'auto' }}>
             <div className={`flex flex-row items-center gap-2 md:gap-1 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md rounded-xl p-2 md:p-1.5 border border-zinc-200 dark:border-zinc-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-opacity ${isLocked ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                 <div onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing border-r border-zinc-200 dark:border-zinc-800 mr-1 pointer-events-auto"><GripVertical size={14} /></div>
                 
@@ -288,14 +250,7 @@ const FloatingControls = React.memo(({
                 <div className="flex items-center gap-1 w-auto justify-center">
                     <button onClick={handleSetInPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
                     <button onClick={handleSetOutPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
-                    {(markerInPoint !== null || markerOutPoint !== null) && (
-                        <>
-                            {isFullscreen && (
-                                <button onClick={toggleListening} className={`ml-1 p-2 md:p-1.5 rounded-lg transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`} title="Voice Comment"><Mic size={16} /></button>
-                            )}
-                            <button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>
-                        </>
-                    )}
+                    {(markerInPoint !== null || markerOutPoint !== null) && (<button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>)}
                 </div>
             </div>
         </div>
@@ -303,38 +258,8 @@ const FloatingControls = React.memo(({
 });
 
 // ... (Rest of file unchanged, just export Player) ...
-export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive }) => {
+export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
   const { t } = useLanguage();
-  
-  // Smart Polling: Activate on Mount, Deactivate on Unmount
-  useEffect(() => {
-      if (setIsPlayerActive) setIsPlayerActive(true);
-      return () => { if (setIsPlayerActive) setIsPlayerActive(false); };
-  }, []);
-
-  // Activity Tracker for Smart Polling
-  useEffect(() => {
-      if (!setIsPlayerActive) return;
-      
-      let idleTimer: NodeJS.Timeout;
-      
-      const goActive = () => {
-          setIsPlayerActive(true);
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(() => setIsPlayerActive(false), 60000); // Go idle after 60s of no interaction
-      };
-
-      const events = ['mousemove', 'keydown', 'click', 'touchstart'];
-      events.forEach(e => window.addEventListener(e, goActive));
-      
-      // Initial activation
-      goActive();
-
-      return () => {
-          events.forEach(e => window.removeEventListener(e, goActive));
-          clearTimeout(idleTimer);
-      };
-  }, []);
   const { organization } = useOrganization();
   const { plan } = useSubscription(); // Use generic plan
   const { config } = useAppConfig();
@@ -1008,10 +933,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         markerInPoint={markerInPoint}
         markerOutPoint={markerOutPoint}
         clearMarkers={clearMarkers}
-        startListening={startListening}
-        isListening={isListening}
-        toggleListening={toggleListening}
-        isFullscreen={isFullscreen}
       />
     </div>
   );

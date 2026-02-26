@@ -353,9 +353,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {projectList.map((project) => {
-                        const isOwner = project.ownerId === currentUser.id;
-                        // Fix: Owners never expire. Only guests do.
-                        const expired = isOwner ? false : (project.createdAt ? isExpired(project.createdAt) : false);
+                        const expired = project.createdAt ? isExpired(project.createdAt) : false;
                         const daysLeft = project.createdAt ? getDaysRemaining(project.createdAt) : 7;
                         const locked = project.isLocked;
                         const canManage = canManageProject(project);
