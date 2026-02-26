@@ -160,9 +160,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Track the last local modification to prevent server overwrites
   const lastLocalUpdateRef = useRef<number>(0);
   
-  // Smart Polling State
-  const [isPlayerActive, setIsPlayerActive] = useState(false);
-
   // SWR Key Generation
   const getKey = () => {
       if (!currentUser) return null;
@@ -180,10 +177,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined, directAssetId || undefined);
   };
 
-  // Smart Polling Logic: 
-  // - If Player is ACTIVE (playing/interacting): Poll every 15s
-  // - If Player is IDLE or Dashboard: Poll every 5 minutes (300s) to save resources
-  const pollingInterval = isPlayerActive ? 15000 : 300000;
+  const pollingInterval = view.type === 'PLAYER' ? 15000 : 0;
 
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
       refreshInterval: pollingInterval, 
@@ -712,7 +706,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 isSyncing={isSyncing}
                 notify={notify}
                 isMockMode={isMockMode}
-                setIsPlayerActive={setIsPlayerActive} // Pass Smart Polling Control
             />
           </ErrorBoundary>
         )}
