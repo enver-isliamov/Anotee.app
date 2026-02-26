@@ -24,6 +24,7 @@ interface PlayerProps {
   notify: (msg: string, type: ToastType) => void;
   isDemo?: boolean;
   isMockMode?: boolean;
+  setIsPlayerActive?: (active: boolean) => void; // Smart Polling Control
 }
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
@@ -302,8 +303,38 @@ const FloatingControls = React.memo(({
 });
 
 // ... (Rest of file unchanged, just export Player) ...
-export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false }) => {
+export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive }) => {
   const { t } = useLanguage();
+  
+  // Smart Polling: Activate on Mount, Deactivate on Unmount
+  useEffect(() => {
+      if (setIsPlayerActive) setIsPlayerActive(true);
+      return () => { if (setIsPlayerActive) setIsPlayerActive(false); };
+  }, []);
+
+  // Activity Tracker for Smart Polling
+  useEffect(() => {
+      if (!setIsPlayerActive) return;
+      
+      let idleTimer: NodeJS.Timeout;
+      
+      const goActive = () => {
+          setIsPlayerActive(true);
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => setIsPlayerActive(false), 60000); // Go idle after 60s of no interaction
+      };
+
+      const events = ['mousemove', 'keydown', 'click', 'touchstart'];
+      events.forEach(e => window.addEventListener(e, goActive));
+      
+      // Initial activation
+      goActive();
+
+      return () => {
+          events.forEach(e => window.removeEventListener(e, goActive));
+          clearTimeout(idleTimer);
+      };
+  }, []);
   const { organization } = useOrganization();
   const { plan } = useSubscription(); // Use generic plan
   const { config } = useAppConfig();
