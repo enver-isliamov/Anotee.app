@@ -3,6 +3,8 @@ import { sql } from '@vercel/postgres';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { GoogleGenAI, Type } from "@google/genai";
 import { encrypt, decrypt } from './_crypto.js';
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
 
 export default async function handler(req, res) {
     const { action } = req.query;
@@ -93,6 +95,105 @@ export default async function handler(req, res) {
 
         if (!isSuperAdmin) {
             return res.status(403).json({ error: "Forbidden: Admins only" });
+        }
+
+        if (action === 'build_project') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+            const {
+                targetStatic = true,
+                targetIOS = false,
+                targetAndroid = false
+            } = req.body || {};
+
+            if (!targetStatic && !targetIOS && !targetAndroid) {
+                return res.status(400).json({ error: 'Выберите хотя бы один таргет сборки.' });
+            }
+
+            const runCommand = (command, args, cwd = process.cwd()) => {
+                return new Promise((resolve) => {
+                    const child = spawn(command, args, {
+                        cwd,
+                        shell: process.platform === 'win32',
+                        env: process.env
+                    });
+
+                    let stdout = '';
+                    let stderr = '';
+
+                    child.stdout.on('data', (data) => {
+                        stdout += data.toString();
+                    });
+
+                    child.stderr.on('data', (data) => {
+                        stderr += data.toString();
+                    });
+
+                    child.on('close', (code) => {
+                        resolve({
+                            success: code === 0,
+                            code,
+                            stdout: stdout.trim(),
+                            stderr: stderr.trim()
+                        });
+                    });
+
+                    child.on('error', (err) => {
+                        resolve({
+                            success: false,
+                            code: -1,
+                            stdout: '',
+                            stderr: err.message
+                        });
+                    });
+                });
+            };
+
+            const steps = [];
+            const warnings = [];
+
+            if (targetStatic) {
+                const staticBuild = await runCommand('npm', ['run', 'build']);
+                steps.push({
+                    target: 'static',
+                    ...staticBuild
+                });
+
+                if (!staticBuild.success) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Сборка статичного сайта завершилась с ошибкой.',
+                        steps,
+                        warnings
+                    });
+                }
+            }
+
+            const hasCapacitorConfig = existsSync(`${process.cwd()}/capacitor.config.ts`) || existsSync(`${process.cwd()}/capacitor.config.json`);
+
+            if ((targetIOS || targetAndroid) && !hasCapacitorConfig) {
+                warnings.push('Capacitor не настроен (не найден capacitor.config.ts/json). Сборка мобильных пакетов пропущена.');
+            }
+
+            if (targetIOS && hasCapacitorConfig) {
+                const iosSync = await runCommand('npx', ['cap', 'sync', 'ios']);
+                steps.push({ target: 'ios', ...iosSync });
+                if (!iosSync.success) warnings.push('Не удалось подготовить iOS-проект. Проверьте установку @capacitor/ios и Xcode.');
+            }
+
+            if (targetAndroid && hasCapacitorConfig) {
+                const androidSync = await runCommand('npx', ['cap', 'sync', 'android']);
+                steps.push({ target: 'android', ...androidSync });
+                if (!androidSync.success) warnings.push('Не удалось подготовить Android-проект. Проверьте установку @capacitor/android и Android SDK.');
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Сборка завершена.',
+                outputPath: targetStatic ? 'dist/' : null,
+                steps,
+                warnings
+            });
         }
 
         // --- AI CONFIG MANAGEMENT ---
