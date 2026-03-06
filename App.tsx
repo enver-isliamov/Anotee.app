@@ -409,7 +409,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       }
   };
 
-  const { uploadTasks, handleUploadAsset, removeUploadTask } = useUploadManager(
+  const { uploadTasks, handleUploadAsset, removeUploadTask, cancelUpload } = useUploadManager(
       currentUser, projects, setProjects, notify, forceSync, lastLocalUpdateRef, isMockMode, getToken 
   );
 
@@ -696,6 +696,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 isMockMode={isMockMode}
                 onUploadAsset={handleUploadAsset} 
                 uploadTasks={uploadTasks} 
+                cancelUpload={cancelUpload}
                 onStartTour={handleStartTour} // PASSED PROP
             />
           </ErrorBoundary>

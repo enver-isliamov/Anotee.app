@@ -27,10 +27,11 @@ interface ProjectViewProps {
   onUploadAsset: (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => Promise<void>;
   onboardingActiveStep?: number;
   uploadTasks: UploadTask[];
+  cancelUpload: (taskId: string) => void;
   onStartTour?: () => void;
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks, onStartTour }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, onBack, onSelectAsset, onUpdateProject, notify, restrictedAssetId, isMockMode = false, onUploadAsset, uploadTasks, cancelUpload, onStartTour }) => {
   const { t } = useLanguage();
   const { plan } = useSubscription(); // Use generic plan
   const { config } = useAppConfig();
@@ -676,6 +677,21 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                         )}
 
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                            {isLocal && (
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm("Отменить загрузку?")) {
+                                            const task = uploadTasks.find(t => t.tempAssetId === asset.id);
+                                            if (task) cancelUpload(task.id);
+                                        }
+                                    }}
+                                    className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                    title="Cancel Upload"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
                             {!isLocked && canSharePublicLink && !isLocal && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}

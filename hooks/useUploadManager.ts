@@ -41,6 +41,7 @@ export const useUploadManager = (
         const taskId = generateId();
         const tempAssetId = targetAssetId || generateId();
         const tempVersionId = generateId();
+        const abortController = new AbortController();
         
         const newTask: UploadTask = {
             id: taskId,
@@ -48,7 +49,8 @@ export const useUploadManager = (
             projectName: 'Uploading...', // Placeholder
             progress: 0,
             status: 'uploading',
-            tempAssetId // Phase XXX: Link task to optimistic asset
+            tempAssetId, // Phase XXX: Link task to optimistic asset
+            abortController // Phase XXX: Cancel upload
         };
 
         setUploadTasks(prev => [...prev, newTask]);
@@ -201,6 +203,12 @@ export const useUploadManager = (
                         // 2. Upload to S3 directly
                         await new Promise((resolve, reject) => {
                             const xhr = new XMLHttpRequest();
+                            
+                            abortController.signal.addEventListener('abort', () => {
+                                xhr.abort();
+                                reject(new Error("Upload cancelled"));
+                            });
+
                             xhr.open('PUT', uploadUrl);
                             xhr.setRequestHeader('Content-Type', file.type);
                             
@@ -228,7 +236,8 @@ export const useUploadManager = (
                         s3Key = key;
                         s3UploadSuccess = true;
                     } 
-                } catch (e) {
+                } catch (e: any) {
+                    if (e.message === "Upload cancelled") throw e;
                     console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
                     // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
                 }
@@ -254,7 +263,7 @@ export const useUploadManager = (
 
                         const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
 
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName, abortController.signal);
                         googleDriveId = result.id;
                         storageType = 'drive';
                         
@@ -353,9 +362,44 @@ export const useUploadManager = (
         }
     };
 
+    const cancelUpload = (taskId: string) => {
+        const task = uploadTasks.find(t => t.id === taskId);
+        if (task && task.abortController) {
+            task.abortController.abort();
+            
+            // Remove the optimistic asset/version from the project
+            if (task.tempAssetId) {
+                setProjects(currentProjects => {
+                    return currentProjects.map(p => {
+                        const newAssets = p.assets.map(a => {
+                            if (a.id === task.tempAssetId) {
+                                // If it's a new asset (only 1 version), we should remove the whole asset
+                                if (a.versions.length <= 1) {
+                                    return null;
+                                }
+                                // If it's a new version of an existing asset, remove just the last version
+                                return {
+                                    ...a,
+                                    versions: a.versions.slice(0, -1),
+                                    currentVersionIndex: Math.max(0, a.versions.length - 2)
+                                };
+                            }
+                            return a;
+                        }).filter(Boolean) as ProjectAsset[];
+                        return { ...p, assets: newAssets };
+                    });
+                });
+            }
+            
+            removeUploadTask(taskId);
+            notify("Upload cancelled", "info");
+        }
+    };
+
     return {
         uploadTasks,
         handleUploadAsset,
-        removeUploadTask
+        removeUploadTask,
+        cancelUpload
     };
 };
