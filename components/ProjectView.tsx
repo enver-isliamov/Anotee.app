@@ -172,6 +172,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             notify("No storage connected. Upload disabled.", "error");
             return;
         }
+        // Phase XXX: Pass targetAssetId (uploadingVersionFor) to handleUploadAsset
         onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor);
     }
     setUploadingVersionFor(null);
@@ -385,7 +386,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   // --- INLINE UPLOAD TILE COMPONENT ---
   const UploadZoneTile = () => {
       const [isDragOver, setIsDragOver] = useState(false);
-      const isProcessing = activeUpload && activeUpload.status !== 'done' && activeUpload.status !== 'error';
 
       const onDragOver = (e: React.DragEvent) => {
           e.preventDefault();
@@ -432,39 +432,23 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       // Styling
       let borderClass = 'border-zinc-300 dark:border-zinc-800 hover:border-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-900/50';
       if (isDragOver) borderClass = 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 scale-[1.02]';
-      if (isProcessing) borderClass = 'border-indigo-500/50 bg-zinc-50 dark:bg-zinc-900 cursor-default';
 
       if (!canEditProject || isLocked) return null;
 
       return (
           <div 
             id="tour-upload-zone"
-            onClick={!isProcessing ? handleClick : undefined}
+            onClick={handleClick}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onDrop={onDrop}
             className={`aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer group relative overflow-hidden ${borderClass}`}
           >
-              {isProcessing ? (
-                  <div className="flex flex-col items-center gap-3 w-full px-4">
-                      <Loader2 className="animate-spin text-indigo-500" size={32} />
-                      <div className="w-full text-center">
-                          <div className="text-xs font-bold text-zinc-900 dark:text-white truncate mb-1">{activeUpload.file.name}</div>
-                          <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${activeUpload.progress}%` }}></div>
-                          </div>
-                          <div className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">{activeUpload.progress}% Uploading</div>
-                      </div>
-                  </div>
-              ) : (
-                  <>
-                      <div className={`p-3 rounded-full mb-3 transition-transform ${isDragOver ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110'}`}>
-                          <Plus size={24} />
-                      </div>
-                      <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? 'Drop to Upload' : t('pv.upload_asset')}</h3>
-                      <p className="text-[10px] text-zinc-400 mt-1">Drag & Drop or Click</p>
-                  </>
-              )}
+              <div className={`p-3 rounded-full mb-3 transition-transform ${isDragOver ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110'}`}>
+                  <Plus size={24} />
+              </div>
+              <h3 className="font-bold text-zinc-600 dark:text-zinc-400 text-sm">{isDragOver ? 'Drop to Upload' : t('pv.upload_asset')}</h3>
+              <p className="text-[10px] text-zinc-400 mt-1">Drag & Drop or Click</p>
           </div>
       );
   };
@@ -662,25 +646,37 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     const lastVer = asset.versions[asset.versions.length-1];
                     const isDrive = lastVer?.storageType === 'drive';
                     const isS3 = lastVer?.storageType === 's3';
+                    const isLocal = lastVer?.storageType === 'local'; // Phase XXX: Optimistic UI
                     
                     return (
                     <div 
                         key={asset.id}
                         onClick={() => onSelectAsset(asset)}
-                        className="group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 hover:border-indigo-500/50 transition-all shadow-sm relative"
+                        className={`group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 transition-all shadow-sm relative hover:border-indigo-500/50`}
                     >
                         <div className="aspect-video bg-zinc-950 relative overflow-hidden">
                         <img 
                             src={asset.thumbnail} 
                             alt={asset.title} 
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100"
+                            className={`w-full h-full object-cover transition-transform duration-500 opacity-80 ${isLocal ? '' : 'group-hover:scale-105 group-hover:opacity-100'}`}
                             onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
                         />
                         {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
                         {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}
+                        {isLocal && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm flex items-center gap-1"><Loader2 size={10} className="animate-spin"/> <span className="text-[8px] uppercase font-bold">Uploading</span></div>}
                         
+                        {/* Phase XXX: Non-blocking Overlay Progress Bar */}
+                        {isLocal && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800 z-20">
+                                <div 
+                                    className="h-full bg-indigo-500 transition-all duration-300" 
+                                    style={{ width: `${uploadTasks.find(t => t.tempAssetId === asset.id)?.progress || 0}%` }}
+                                ></div>
+                            </div>
+                        )}
+
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                            {!isLocked && canSharePublicLink && (
+                            {!isLocked && canSharePublicLink && !isLocal && (
                                 <button 
                                     onClick={(e) => handleShareAsset(e, asset)}
                                     className="p-1.5 bg-black/60 hover:bg-orange-500 text-white rounded-md backdrop-blur-sm transition-colors"
@@ -689,7 +685,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                     <LinkIcon size={12} />
                                 </button>
                             )}
-                            {canEditProject && !isLocked && (
+                            {canEditProject && !isLocked && !isLocal && (
                                 <>
                                     {isProjectOwner && isDrive && lastVer.googleDriveId && (
                                         <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>

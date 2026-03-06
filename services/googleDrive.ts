@@ -283,6 +283,9 @@ export const GoogleDriveService = {
          const xhr = new XMLHttpRequest();
          xhr.open('PUT', sessionUri);
          
+         // Fix for Large Files (50GB+): Prevent browser from aborting long uploads
+         xhr.timeout = 0;
+         
          if (onProgress) {
              xhr.upload.onprogress = (e) => {
                  if (e.lengthComputable) {

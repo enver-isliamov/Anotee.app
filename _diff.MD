@@ -1,30 +1,26 @@
-# 📉 Resource Optimization & Player UX (Smart Polling)
+# 🚀 Этап XXX: Instant Start (Large File Core)
 
-Текущий статус работ по оптимизации потребления ресурсов и улучшению UX плеера.
+Текущий статус реализации архитектуры "Мгновенного доступа" для работы с большими файлами (50Гб+) без блокировки интерфейса.
 
 ---
 
-## ⚡️ Smart Polling Engine (Vercel Limits Protection)
-*   [x] **Adaptive Interval:** Внедрена логика переключения частоты опроса сервера.
-    *   **Active Mode (15s):** При воспроизведении видео или активности пользователя (мышь/клавиатура).
-    *   **Idle Mode (5m):** Автоматически включается через 60 секунд бездействия.
-*   [x] **Activity Tracker:** Слушатели событий (`mousemove`, `keydown`, `click`) в `Player.tsx` для определения присутствия пользователя.
-*   [x] **State Management:** Состояние `isPlayerActive` поднято в `App.tsx` для управления глобальным SWR конфигом.
+## 1. Архитектура "Мгновенного доступа" (Optimistic UI)
+*   [x] **Local Blob Preview:** Использование `URL.createObjectURL(file)` сразу после выбора файла в `useUploadManager.ts`.
+*   [x] **Zero Latency:** Мгновенное появление видео в интерфейсе (доступно для просмотра во время фоновой загрузки).
 
-## 🎮 Floating Controls V2 (UX Polish)
-*   [x] **Performance:** Компонент вынесен в `React.memo`. Перетаскивание теперь не вызывает ре-рендер всего плеера (60fps drag).
-*   [x] **Boundary Clamp:** Логика `getSafePos` предотвращает утаскивание панели за границы экрана.
-*   [x] **Mobile Layout:** Горизонтальная раскладка (`flex-row`) на мобильных устройствах.
-*   [x] **Voice Integration:** Кнопка голосового ввода добавлена прямо в плавающую панель (доступна в Fullscreen).
+## 2. Защита "Гигантских загрузок" (Resilience)
+*   [x] **Infinity Timeout:** Установка `xhr.timeout = 0` в `services/googleDrive.ts` для предотвращения обрыва долгих загрузок.
+*   [x] **Tab Close Protection:** Слушатель `beforeunload` в `useUploadManager.ts` для защиты от случайного закрытия вкладки при активной загрузке.
 
-## 🎤 Voice Input V2 (Compatibility)
-*   [x] **Standard API:** Добавлена поддержка `window.SpeechRecognition` (помимо `webkitSpeechRecognition`) для улучшения совместимости с iOS/Safari.
+## 3. Visual Feedback & UX
+*   [x] **Asset Binding:** Добавление `tempAssetId` в `types.ts` для связи задачи загрузки с карточкой ассета.
+*   [x] **Non-blocking Overlay:** Отображение прогресс-бара поверх конкретной карточки в `ProjectView.tsx`, а не на весь экран.
 
-## 🐛 Bug Fixes (UX & Admin)
-*   [x] **Project Expiry:** Игнорировать флаг `expiresAt` для владельца проекта (Owner). Срок действия должен работать только для гостей.
-*   [x] **Mobile Admin Panel:** Исправить отображение списка пользователей на мобильных устройствах (CSS/Layout fix).
+## 4. Seamless Swap (Бесшовная подмена)
+*   [x] **State Reconciliation:** Замена временной `blob:` ссылки на реальный `googleDriveId` / `s3Key` по завершении загрузки.
+*   [x] **Background Sync:** Обновление данных проекта в БД без визуального "моргания".
 
 ---
 
 ### ✅ Статус: ОПТИМИЗАЦИЯ ЗАВЕРШЕНА
-Потребление Edge Requests должно снизиться в 10-20 раз при пассивном использовании.
+Реализация пункта 2 (Resilience) и 1 (Optimistic UI) завершена.
