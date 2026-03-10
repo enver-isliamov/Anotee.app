@@ -227,6 +227,58 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                 </div>
             </div>
 
+            {/* MOBILE CARD VIEW */}
+            <div className="md:hidden space-y-3">
+                {filteredUsers.map((user) => {
+                    const PlanIcon = getPlanIcon(user.plan);
+                    return (
+                        <div key={user.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
+                            <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                    <img src={user.avatar} className="w-10 h-10 rounded-full bg-zinc-200 object-cover" alt="" />
+                                    <div>
+                                        <div className="font-bold text-zinc-900 dark:text-white text-sm">{user.name}</div>
+                                        <div className="text-xs text-zinc-500">{user.email}</div>
+                                    </div>
+                                </div>
+                                {user.isAdmin && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold border border-green-200 dark:border-green-800">
+                                        <Shield size={10} /> ADMIN
+                                    </span>
+                                )}
+                            </div>
+                            
+                            <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 pt-3">
+                                <div className="flex items-center gap-2">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${getPlanBadgeClass(user.plan)}`}>
+                                        <PlanIcon size={10} fill="currentColor" /> {user.planLabel ? user.planLabel.toUpperCase() : getPlanLabel(user.plan).toUpperCase()}
+                                    </span>
+                                    {user.isRecurringEligible && (
+                                        <div className="p-1 text-indigo-500 dark:text-indigo-400" title="Auto-Renew Active">
+                                            <Repeat size={12} />
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                    <button onClick={() => setSelectedUser(user)} className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-bold transition-colors">
+                                        Изменить
+                                    </button>
+                                    {user.id !== currentUserId && (
+                                        <button 
+                                            onClick={() => handleToggleAdmin(user)} 
+                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${user.isAdmin ? 'text-red-500' : 'text-zinc-400'}`}
+                                        >
+                                            <Shield size={16} fill={user.isAdmin ? "currentColor" : "none"} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
             {/* Grant Modal */}
             {selectedUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

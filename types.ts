@@ -114,6 +114,31 @@ export interface UploadTask {
   abortController?: AbortController; // Phase XXX: Cancel upload
 }
 
+// --- ROADMAP TYPES ---
+export type RoadmapPostType = 'feature' | 'bug' | 'improvement';
+export type RoadmapPostStatus = 'under_review' | 'planned' | 'in_progress' | 'completed' | 'closed';
+
+export interface RoadmapComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  content: string;
+  createdAt: string; // ISO string
+}
+
+export interface RoadmapPost {
+  id: string;
+  title: string;
+  description: string;
+  type: RoadmapPostType;
+  status: RoadmapPostStatus;
+  authorId: string;
+  createdAt: string; // ISO string
+  voterIds: string[]; // Array of user IDs who voted
+  comments: RoadmapComment[];
+}
+
 // --- FEATURE FLAGS & CONFIG ---
 export interface FeatureRule {
     enabledForFree: boolean;

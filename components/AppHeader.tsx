@@ -41,7 +41,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   const isAdmin = currentUser?.isAdmin;
 
-  const navItems = ['workflow', 'ai', 'pricing', 'about'];
+  const navItems = ['workflow', 'ai', 'pricing', 'about', 'roadmap'];
 
   return (
     <>
