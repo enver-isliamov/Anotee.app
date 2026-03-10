@@ -40,22 +40,22 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+    <div className="w-full py-4 md:py-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 text-sm font-medium text-zinc-600 mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800/50 text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-6">
             Propose a feature, report a bug, or share your ideas
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold text-zinc-900 tracking-tight mb-4">
+          <h1 className="text-4xl sm:text-5xl font-bold text-zinc-900 dark:text-white tracking-tight mb-4">
             Product Roadmap
           </h1>
-          <p className="text-lg text-zinc-500 max-w-2xl mx-auto mb-8">
+          <p className="text-lg text-zinc-500 dark:text-zinc-400 max-w-2xl mx-auto mb-8">
             A place to share your ideas and collaborate on features.
           </p>
           <button 
             onClick={() => setIsSubmitModalOpen(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-900 text-white rounded-xl font-medium hover:bg-zinc-800 transition-all shadow-sm hover:shadow-md"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all shadow-sm hover:shadow-md"
           >
             <PlusCircle size={18} />
             Submit your Post
@@ -64,13 +64,13 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
 
         {/* View Toggle */}
         <div className="flex justify-start mb-8">
-          <div className="inline-flex bg-zinc-100/80 p-1 rounded-xl border border-zinc-200/50 backdrop-blur-sm">
+          <div className="inline-flex bg-zinc-100/80 dark:bg-zinc-800/50 p-1 rounded-xl border border-zinc-200/50 dark:border-zinc-700/50 backdrop-blur-sm">
             <button
               onClick={() => setViewMode('issues')}
               className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                 viewMode === 'issues' 
-                  ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50' 
-                  : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'
+                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm ring-1 ring-zinc-200/50 dark:ring-zinc-600/50' 
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
               }`}
             >
               Issues
@@ -79,8 +79,8 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
               onClick={() => setViewMode('roadmap')}
               className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                 viewMode === 'roadmap' 
-                  ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50' 
-                  : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'
+                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm ring-1 ring-zinc-200/50 dark:ring-zinc-600/50' 
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
               }`}
             >
               Roadmap

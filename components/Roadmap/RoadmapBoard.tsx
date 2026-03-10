@@ -28,14 +28,14 @@ export const RoadmapBoard: React.FC<RoadmapBoardProps> = ({ posts, currentUserId
           <div key={status.value} className="flex-shrink-0 w-80 snap-start">
             <div className="flex items-center gap-2 mb-4">
               <StatusBadge status={status.value} />
-              <span className="text-sm font-medium text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">
+              <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
                 {columnPosts.length}
               </span>
             </div>
             
-            <div className="flex flex-col gap-4 min-h-[200px] bg-zinc-50/50 p-3 rounded-2xl border border-zinc-100">
+            <div className="flex flex-col gap-4 min-h-[200px] bg-zinc-50/50 dark:bg-zinc-900/50 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800">
               {columnPosts.length === 0 ? (
-                <div className="text-center py-8 text-zinc-400 text-sm italic">
+                <div className="text-center py-8 text-zinc-400 dark:text-zinc-600 text-sm italic">
                   No posts yet
                 </div>
               ) : (

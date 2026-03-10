@@ -38,7 +38,7 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto">
       {/* Filters Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
           <input 
@@ -46,7 +46,7 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
             placeholder="Search issues..." 
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            className="w-full pl-10 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all text-zinc-900 dark:text-zinc-100"
           />
         </div>
         
@@ -54,7 +54,7 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
           <select 
             value={typeFilter} 
             onChange={e => setTypeFilter(e.target.value as any)}
-            className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
             <option value="all">All Types</option>
             <option value="feature">Features</option>
@@ -65,7 +65,7 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
           <select 
             value={statusFilter} 
             onChange={e => setStatusFilter(e.target.value as any)}
-            className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
             <option value="all">All Statuses</option>
             <option value="under_review">Under Review</option>
@@ -78,7 +78,7 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
           <select 
             value={sortBy} 
             onChange={e => setSortBy(e.target.value as any)}
-            className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
             <option value="votes">Most Voted</option>
             <option value="recent">Recently Created</option>
@@ -89,8 +89,8 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
       {/* List */}
       <div className="flex flex-col gap-3">
         {filteredPosts.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-2xl border border-zinc-200 border-dashed">
-            <p className="text-zinc-500">No issues found matching your filters.</p>
+          <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 border-dashed">
+            <p className="text-zinc-500 dark:text-zinc-400">No issues found matching your filters.</p>
           </div>
         ) : (
           filteredPosts.map(post => {
@@ -100,15 +100,15 @@ export const RoadmapList: React.FC<RoadmapListProps> = ({ posts, currentUserId, 
               <div 
                 key={post.id}
                 onClick={() => onPostClick(post)}
-                className="group flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between p-5 bg-white rounded-2xl border border-zinc-200 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                className="group flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <StatusBadge status={post.status} />
                     <TypeBadge type={post.type} />
                   </div>
-                  <h3 className="text-lg font-semibold text-zinc-900 mb-1 group-hover:text-indigo-600 transition-colors">{post.title}</h3>
-                  <p className="text-sm text-zinc-500 line-clamp-2">{post.description}</p>
+                  <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{post.title}</h3>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 line-clamp-2">{post.description}</p>
                 </div>
                 
                 <div className="flex items-center shrink-0">
