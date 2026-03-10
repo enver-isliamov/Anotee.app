@@ -110,6 +110,8 @@ export interface UploadTask {
   progress: number;
   status: 'uploading' | 'processing' | 'done' | 'error';
   error?: string;
+  tempAssetId?: string; // Phase XXX: Link task to optimistic asset
+  abortController?: AbortController; // Phase XXX: Cancel upload
 }
 
 // --- FEATURE FLAGS & CONFIG ---

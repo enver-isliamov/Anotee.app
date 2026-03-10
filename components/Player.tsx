@@ -504,6 +504,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     setLoadingDrive(false);
                 }
             } 
+            // LOCAL OPTIMISTIC PATH
+            else if (version?.storageType === 'local' && version.localFileUrl) {
+                setLocalFileSrc(version.localFileUrl);
+                setLocalFileName(version.localFileName || 'Uploading...');
+                setLoadingDrive(false);
+            }
             // GOOGLE DRIVE PATH
             else if (version?.storageType === 'drive' && version.googleDriveId) {
                 setLoadingDrive(true);

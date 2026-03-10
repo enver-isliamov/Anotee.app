@@ -251,7 +251,7 @@ export const GoogleDriveService = {
       }
   },
 
-  uploadFile: async (file: File, folderId: string, onProgress?: (percent: number) => void, customName?: string): Promise<{ id: string, name: string }> => {
+  uploadFile: async (file: File, folderId: string, onProgress?: (percent: number) => void, customName?: string, signal?: AbortSignal): Promise<{ id: string, name: string }> => {
      const accessToken = await GoogleDriveService.getToken();
      if (!accessToken) throw new Error("Google Drive Access Token is missing. Please reconnect Drive in Profile.");
 
@@ -267,7 +267,8 @@ export const GoogleDriveService = {
              'Content-Type': 'application/json',
              'X-Upload-Content-Type': file.type || 'application/octet-stream'
          },
-         body: JSON.stringify(metadata)
+         body: JSON.stringify(metadata),
+         signal
      });
 
      if (!initResponse.ok) {
@@ -281,7 +282,18 @@ export const GoogleDriveService = {
 
      return new Promise((resolve, reject) => {
          const xhr = new XMLHttpRequest();
+         
+         if (signal) {
+             signal.addEventListener('abort', () => {
+                 xhr.abort();
+                 reject(new Error("Upload cancelled"));
+             });
+         }
+
          xhr.open('PUT', sessionUri);
+         
+         // Fix for Large Files (50GB+): Prevent browser from aborting long uploads
+         xhr.timeout = 0;
          
          if (onProgress) {
              xhr.upload.onprogress = (e) => {

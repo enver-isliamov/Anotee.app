@@ -1,6 +1,6 @@
 
-import React, { useState, useRef } from 'react';
-import { Project, ProjectAsset, UploadTask, StorageType, User } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Project, ProjectAsset, UploadTask, StorageType, User, VideoVersion } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
@@ -21,19 +21,36 @@ export const useUploadManager = (
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
 
+    // Phase XXX: Tab Close Protection
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (uploadTasks.some(t => t.status === 'uploading' || t.status === 'processing')) {
+                e.preventDefault();
+                e.returnValue = ''; // Standard way to trigger browser warning
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [uploadTasks]);
+
     const removeUploadTask = (id: string) => {
         setUploadTasks(prev => prev.filter(t => t.id !== id));
     };
 
     const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
         const taskId = generateId();
+        const tempAssetId = targetAssetId || generateId();
+        const tempVersionId = generateId();
+        const abortController = new AbortController();
         
         const newTask: UploadTask = {
             id: taskId,
             file,
             projectName: 'Uploading...', // Placeholder
             progress: 0,
-            status: 'uploading'
+            status: 'uploading',
+            tempAssetId, // Phase XXX: Link task to optimistic asset
+            abortController // Phase XXX: Cancel upload
         };
 
         setUploadTasks(prev => [...prev, newTask]);
@@ -82,10 +99,58 @@ export const useUploadManager = (
             // Construct Filename: {SanitizedName}_v{Number}.{ext}
             const finalFileName = `${assetTitle}_v${nextVersionNumber}.${ext}`;
 
-            // 2. Generate Thumbnail
+            // Phase XXX: Optimistic UI (Zero Latency)
+            // Generate local blob URL immediately
+            const localBlobUrl = URL.createObjectURL(file);
+            
+            // Generate thumbnail early for the optimistic UI
             updateTask({ status: 'processing' });
             const thumbnailDataUrl = await generateVideoThumbnail(file);
             updateTask({ status: 'uploading' });
+
+            const optimisticVersion: VideoVersion = {
+                id: tempVersionId,
+                versionNumber: nextVersionNumber,
+                filename: finalFileName,
+                url: localBlobUrl, // Use local blob temporarily
+                storageType: 'local', // Temporary
+                uploadedAt: 'Just now',
+                comments: [],
+                localFileUrl: localBlobUrl,
+                localFileName: file.name
+            };
+
+            // Inject optimistic asset into state immediately
+            setProjects(currentProjects => {
+                const newAllProjects = [...currentProjects];
+                const idx = newAllProjects.findIndex(p => p.id === projectId);
+                if (idx === -1) return currentProjects;
+                
+                const updatedProject = { ...newAllProjects[idx] };
+                
+                if (targetAssetId) {
+                    const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
+                    if (assetIdx !== -1) {
+                        const asset = { ...updatedProject.assets[assetIdx] };
+                        asset.versions = [...asset.versions, optimisticVersion];
+                        asset.thumbnail = thumbnailDataUrl;
+                        asset.currentVersionIndex = asset.versions.length - 1;
+                        updatedProject.assets[assetIdx] = asset;
+                    }
+                } else {
+                    const newAsset: ProjectAsset = {
+                        id: tempAssetId,
+                        title: assetTitle,
+                        thumbnail: thumbnailDataUrl,
+                        currentVersionIndex: 0,
+                        versions: [optimisticVersion]
+                    };
+                    updatedProject.assets = [...updatedProject.assets, newAsset];
+                }
+                
+                newAllProjects[idx] = updatedProject;
+                return newAllProjects;
+            });
 
             let assetUrl = '';
             let googleDriveId = undefined;
@@ -96,20 +161,8 @@ export const useUploadManager = (
             let useS3 = false;
             
             if (!isMockMode) {
-                // Check if user has S3 configured
-                // Note: We check config for CURRENT user first, but if uploading to shared project, 
-                // the upload will fail if we don't have WRITE access to the owner's bucket.
-                // However, the check here is just "should we use S3?".
-                // Ideally, we should check if the PROJECT uses S3.
-                // For now, let's assume if the current user has S3 set up, they prefer S3.
-                // Or better: try to presign with projectId. If backend says "Owner has S3", use it.
-                
                 try {
                     const token = await getToken();
-                    // We check if we can get a presigned URL for this project.
-                    // Instead of full config check, we'll try the upload flow immediately below.
-                    // But to know *which* flow (Drive vs S3) to pick, we need a hint.
-                    // Let's default to S3 attempt first if not Drive-forced.
                     useS3 = true; 
                 } catch (e) {
                     console.warn("Failed to check token");
@@ -122,7 +175,7 @@ export const useUploadManager = (
                     updateProgress(i);
                     await new Promise(r => setTimeout(r, 200));
                 }
-                assetUrl = URL.createObjectURL(file);
+                assetUrl = localBlobUrl;
                 storageType = 'local';
             } else if (useS3) {
                 let s3UploadSuccess = false;
@@ -150,9 +203,18 @@ export const useUploadManager = (
                         // 2. Upload to S3 directly
                         await new Promise((resolve, reject) => {
                             const xhr = new XMLHttpRequest();
+                            
+                            abortController.signal.addEventListener('abort', () => {
+                                xhr.abort();
+                                reject(new Error("Upload cancelled"));
+                            });
+
                             xhr.open('PUT', uploadUrl);
                             xhr.setRequestHeader('Content-Type', file.type);
                             
+                            // Fix for Large Files (50GB+): Prevent browser from aborting long uploads
+                            xhr.timeout = 0;
+
                             xhr.upload.onprogress = (e) => {
                                 if (e.lengthComputable) {
                                     updateProgress(Math.round((e.loaded / e.total) * 100));
@@ -174,7 +236,8 @@ export const useUploadManager = (
                         s3Key = key;
                         s3UploadSuccess = true;
                     } 
-                } catch (e) {
+                } catch (e: any) {
+                    if (e.message === "Upload cancelled") throw e;
                     console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
                     // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
                 }
@@ -200,7 +263,7 @@ export const useUploadManager = (
 
                         const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
 
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName);
+                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName, abortController.signal);
                         googleDriveId = result.id;
                         storageType = 'drive';
                         
@@ -216,81 +279,127 @@ export const useUploadManager = (
 
             } 
 
-            // 4. Construct New Project State
-            const projIndex = projects.findIndex(p => p.id === projectId);
-            if (projIndex === -1) throw new Error("Project not found during upload finalization");
-
-            const updatedProject = { ...projects[projIndex] };
+            // 4. Construct Final Project State (Seamless Swap)
+            let finalProjectToSync: Project | null = null;
             
-            const newVersion = {
-                id: generateId(),
-                versionNumber: nextVersionNumber, 
-                filename: finalFileName,
-                url: assetUrl, 
-                storageType,
-                googleDriveId,
-                s3Key, // New Field
-                uploadedAt: 'Just now',
-                comments: [],
-                localFileUrl: isMockMode ? URL.createObjectURL(file) : undefined,
-                localFileName: isMockMode ? file.name : undefined
-            };
-
-            if (targetAssetId) {
-                // Adding Version
-                const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
+            setProjects(currentProjects => {
+                const newAllProjects = [...currentProjects];
+                const idx = newAllProjects.findIndex(p => p.id === projectId);
+                if (idx === -1) return currentProjects;
+                
+                const updatedProject = { ...newAllProjects[idx] };
+                
+                const assetIdx = updatedProject.assets.findIndex(a => a.id === tempAssetId);
                 if (assetIdx !== -1) {
                     const asset = { ...updatedProject.assets[assetIdx] };
-                    asset.versions = [...asset.versions, newVersion];
-                    asset.thumbnail = thumbnailDataUrl;
-                    asset.currentVersionIndex = asset.versions.length - 1; 
+                    const versionIdx = asset.versions.findIndex(v => v.id === tempVersionId);
+                    
+                    if (versionIdx !== -1) {
+                        // Replace optimistic properties with real cloud properties
+                        asset.versions[versionIdx] = {
+                            ...asset.versions[versionIdx],
+                            url: assetUrl,
+                            storageType,
+                            googleDriveId,
+                            s3Key
+                        };
+                    }
                     updatedProject.assets[assetIdx] = asset;
                 }
-            } else {
-                // New Asset
-                const newAsset: ProjectAsset = {
-                    id: generateId(),
-                    title: assetTitle,
-                    thumbnail: thumbnailDataUrl,
-                    currentVersionIndex: 0,
-                    versions: [newVersion]
-                };
-                updatedProject.assets = [...updatedProject.assets, newAsset];
-            }
-            
-            updatedProject.updatedAt = 'Just now';
+                
+                updatedProject.updatedAt = 'Just now';
+                newAllProjects[idx] = updatedProject;
+                finalProjectToSync = updatedProject;
+                return newAllProjects;
+            });
 
             // 5. Try Sync
-            try {
-                setProjects(currentProjects => {
-                    const newAllProjects = [...currentProjects];
-                    const idx = newAllProjects.findIndex(p => p.id === projectId);
-                    if (idx !== -1) newAllProjects[idx] = updatedProject;
-                    return newAllProjects;
-                });
+            if (finalProjectToSync) {
+                try {
+                    await forceSync([finalProjectToSync]);
+                    
+                    updateTask({ status: 'done', progress: 100 });
+                    notify("Upload completed", "success");
 
-                await forceSync([updatedProject]);
-                
-                updateTask({ status: 'done', progress: 100 });
-                notify("Upload completed", "success");
-
-            } catch (syncError) {
-                console.error("Sync failed during upload finalization", syncError);
-                setProjects(projects); 
-                throw new Error("Failed to save project data. Upload cancelled.");
+                } catch (syncError) {
+                    console.error("Sync failed during upload finalization", syncError);
+                    throw new Error("Failed to save project data. Upload cancelled.");
+                }
             }
 
         } catch (e: any) {
             console.error("Upload failed", e);
             updateTask({ status: 'error', error: e.message || "Upload Failed" });
             notify(`Upload failed: ${e.message}`, "error");
+            
+            // Revert optimistic UI on failure
+            setProjects(currentProjects => {
+                const newAllProjects = [...currentProjects];
+                const idx = newAllProjects.findIndex(p => p.id === projectId);
+                if (idx === -1) return currentProjects;
+                
+                const updatedProject = { ...newAllProjects[idx] };
+                
+                if (targetAssetId) {
+                    // Remove the failed version
+                    const assetIdx = updatedProject.assets.findIndex(a => a.id === targetAssetId);
+                    if (assetIdx !== -1) {
+                        const asset = { ...updatedProject.assets[assetIdx] };
+                        asset.versions = asset.versions.filter(v => v.id !== tempVersionId);
+                        asset.currentVersionIndex = Math.max(0, asset.versions.length - 1);
+                        updatedProject.assets[assetIdx] = asset;
+                    }
+                } else {
+                    // Remove the whole failed asset
+                    updatedProject.assets = updatedProject.assets.filter(a => a.id !== tempAssetId);
+                }
+                
+                newAllProjects[idx] = updatedProject;
+                return newAllProjects;
+            });
+            
             lastLocalUpdateRef.current = Date.now(); 
+        }
+    };
+
+    const cancelUpload = (taskId: string) => {
+        const task = uploadTasks.find(t => t.id === taskId);
+        if (task && task.abortController) {
+            task.abortController.abort();
+            
+            // Remove the optimistic asset/version from the project
+            if (task.tempAssetId) {
+                setProjects(currentProjects => {
+                    return currentProjects.map(p => {
+                        const newAssets = p.assets.map(a => {
+                            if (a.id === task.tempAssetId) {
+                                // If it's a new asset (only 1 version), we should remove the whole asset
+                                if (a.versions.length <= 1) {
+                                    return null;
+                                }
+                                // If it's a new version of an existing asset, remove just the last version
+                                return {
+                                    ...a,
+                                    versions: a.versions.slice(0, -1),
+                                    currentVersionIndex: Math.max(0, a.versions.length - 2)
+                                };
+                            }
+                            return a;
+                        }).filter(Boolean) as ProjectAsset[];
+                        return { ...p, assets: newAssets };
+                    });
+                });
+            }
+            
+            removeUploadTask(taskId);
+            notify("Upload cancelled", "info");
         }
     };
 
     return {
         uploadTasks,
         handleUploadAsset,
-        removeUploadTask
+        removeUploadTask,
+        cancelUpload
     };
 };

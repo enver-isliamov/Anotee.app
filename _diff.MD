@@ -1,28 +1,26 @@
-# 🛡️ i18n Migration Status Board (Localization Repair)
+# 🚀 Этап XXX: Instant Start (Large File Core)
 
-Текущий статус работ по исправлению проблем с локализацией ("голые" ключи, плоские JSON).
-
----
-
-## 🏗️ PR-1: Critical Hotfix (Стабилизация)
-*   [x] **Config**: Добавить `keySeparator: false` в `services/i18n.config.ts`. Это решает проблему ключей с точками (`nav.dashboard`).
-*   [x] **Wrapper**: Обернуть `t()` в `services/i18n.tsx`. Теперь при отсутствии перевода берется текст из `en` или выводится warning в консоль.
-*   [x] **Safety**: Добавлены флаги `nsSeparator: false`, `returnNull: false`.
-
-## 📝 PR-2: Coverage Fix (Словари)
-*   [x] `services/locales/en.json` (Source of Truth) создан и заполнен.
-*   [x] `services/locales/ru.json` заполнен.
-*   [x] Словари для `es`, `ja`, `ko`, `pt` созданы.
-
-## 🛠️ PR-3: Tooling (Защита)
-*   [x] Скрипты `i18n:extract` и `i18n:check` добавлены в `package.json`.
-*   [x] Config парсера `.i18next-parser.config.js` настроен.
-
-## 🚀 PR-4: UX Polish
-*   [x] Hardcoded строки вынесены из компонентов.
-*   [x] Legacy словарь `i18n.legacy.ts` очищен и отключен.
+Текущий статус реализации архитектуры "Мгновенного доступа" для работы с большими файлами (50Гб+) без блокировки интерфейса.
 
 ---
 
-### ✅ Статус: МИГРАЦИЯ ЗАВЕРШЕНА
-Система работает стабильно. "Сломанные" ключи в интерфейсе должны исчезнуть.
+## 1. Архитектура "Мгновенного доступа" (Optimistic UI)
+*   [x] **Local Blob Preview:** Использование `URL.createObjectURL(file)` сразу после выбора файла в `useUploadManager.ts`.
+*   [x] **Zero Latency:** Мгновенное появление видео в интерфейсе (доступно для просмотра во время фоновой загрузки).
+
+## 2. Защита "Гигантских загрузок" (Resilience)
+*   [x] **Infinity Timeout:** Установка `xhr.timeout = 0` в `services/googleDrive.ts` для предотвращения обрыва долгих загрузок.
+*   [x] **Tab Close Protection:** Слушатель `beforeunload` в `useUploadManager.ts` для защиты от случайного закрытия вкладки при активной загрузке.
+
+## 3. Visual Feedback & UX
+*   [x] **Asset Binding:** Добавление `tempAssetId` в `types.ts` для связи задачи загрузки с карточкой ассета.
+*   [x] **Non-blocking Overlay:** Отображение прогресс-бара поверх конкретной карточки в `ProjectView.tsx`, а не на весь экран.
+
+## 4. Seamless Swap (Бесшовная подмена)
+*   [x] **State Reconciliation:** Замена временной `blob:` ссылки на реальный `googleDriveId` / `s3Key` по завершении загрузки.
+*   [x] **Background Sync:** Обновление данных проекта в БД без визуального "моргания".
+
+---
+
+### ✅ Статус: ОПТИМИЗАЦИЯ ЗАВЕРШЕНА
+Реализация пункта 2 (Resilience) и 1 (Optimistic UI) завершена.
