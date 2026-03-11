@@ -3,6 +3,7 @@ import { RoadmapPost, RoadmapPostStatus } from '../../types';
 import { X, MessageSquare, Send } from 'lucide-react';
 import { StatusBadge, TypeBadge } from './RoadmapBadge';
 import { VoteButton } from './VoteButton';
+import { useLanguage } from '../../services/i18n';
 
 interface PostDetailModalProps {
   post: RoadmapPost | null;
@@ -21,6 +22,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 }) => {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   if (!isOpen || !post) return null;
 
@@ -69,11 +71,11 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   onChange={(e) => onUpdateStatus(post.id, e.target.value as RoadmapPostStatus)}
                   className="px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-sm font-medium text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 >
-                  <option value="under_review">Under Review</option>
-                  <option value="planned">Planned</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="closed">Closed</option>
+                  <option value="under_review">{t('roadmap.status.under_review')}</option>
+                  <option value="planned">{t('roadmap.status.planned')}</option>
+                  <option value="in_progress">{t('roadmap.status.in_progress')}</option>
+                  <option value="completed">{t('roadmap.status.completed')}</option>
+                  <option value="closed">{t('roadmap.status.closed')}</option>
                 </select>
               ) : (
                 <StatusBadge status={post.status} />
@@ -84,12 +86,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           <div className="border-t border-zinc-100 dark:border-zinc-800 pt-6 flex flex-col gap-4">
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
               <MessageSquare size={18} className="text-zinc-400" />
-              Comments ({post.comments.length})
+              {t('roadmap.modal.detail.comments')} ({post.comments.length})
             </h3>
 
             {!currentUserId ? (
               <div className="bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 text-center">
-                <p className="text-zinc-600 dark:text-zinc-400 mb-3 text-sm">Please sign in to leave a comment</p>
+                <p className="text-zinc-600 dark:text-zinc-400 mb-3 text-sm">{t('roadmap.login_required')}</p>
                 <button 
                   onClick={onLoginRequest}
                   className="px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm"
@@ -102,7 +104,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 <textarea 
                   value={newComment}
                   onChange={e => setNewComment(e.target.value)}
-                  placeholder="Comment on this feature..."
+                  placeholder={t('roadmap.modal.detail.add_comment')}
                   className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all min-h-[100px] resize-y text-sm text-zinc-900 dark:text-zinc-100"
                   required
                 />
@@ -113,7 +115,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     className="px-5 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
                   >
                     <Send size={14} />
-                    {isSubmitting ? 'Posting...' : 'Post Comment'}
+                    {isSubmitting ? 'Posting...' : t('roadmap.modal.detail.post_comment')}
                   </button>
                 </div>
               </form>

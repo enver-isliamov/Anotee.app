@@ -1,6 +1,7 @@
 import React from 'react';
 import { RoadmapPostType, RoadmapPostStatus } from '../../types';
 import { Bug, PlusCircle, ArrowUpCircle, CircleDashed, Clock, PlayCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { useLanguage } from '../../services/i18n';
 
 interface TypeBadgeProps {
   type: RoadmapPostType;
@@ -39,40 +40,41 @@ interface StatusBadgeProps {
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
+  const { t } = useLanguage();
   switch (status) {
     case 'under_review':
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-100 dark:border-orange-500/20">
           <CircleDashed size={14} />
-          Under Review
+          {t('roadmap.status.under_review')}
         </span>
       );
     case 'planned':
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border border-yellow-100 dark:border-yellow-500/20">
           <Clock size={14} />
-          Planned
+          {t('roadmap.status.planned')}
         </span>
       );
     case 'in_progress':
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20">
           <PlayCircle size={14} />
-          In Progress
+          {t('roadmap.status.in_progress')}
         </span>
       );
     case 'completed':
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-500/20">
           <CheckCircle2 size={14} />
-          Completed
+          {t('roadmap.status.completed')}
         </span>
       );
     case 'closed':
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
           <XCircle size={14} />
-          Closed
+          {t('roadmap.status.closed')}
         </span>
       );
     default:

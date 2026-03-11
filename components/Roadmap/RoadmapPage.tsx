@@ -6,6 +6,7 @@ import { SubmitPostModal } from './SubmitPostModal';
 import { PostDetailModal } from './PostDetailModal';
 import { RoadmapPost, User } from '../../types';
 import { PlusCircle, Loader2 } from 'lucide-react';
+import { useLanguage } from '../../services/i18n';
 
 interface RoadmapPageProps {
   currentUser: User | null;
@@ -17,6 +18,7 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
   const [viewMode, setViewMode] = useState<'issues' | 'roadmap'>('roadmap');
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<RoadmapPost | null>(null);
+  const { t } = useLanguage();
 
   const handleVote = async (postId: string) => {
     if (!currentUser) {
@@ -41,24 +43,24 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
 
   return (
     <div className="w-full py-4 md:py-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800/50 text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-6">
-            Propose a feature, report a bug, or share your ideas
+            {t('roadmap.badge.propose')}
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-zinc-900 dark:text-white tracking-tight mb-4">
-            Product Roadmap
+            {t('roadmap.title')}
           </h1>
           <p className="text-lg text-zinc-500 dark:text-zinc-400 max-w-2xl mx-auto mb-8">
-            A place to share your ideas and collaborate on features.
+            {t('roadmap.subtitle')}
           </p>
           <button 
             onClick={() => setIsSubmitModalOpen(true)}
             className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all shadow-sm hover:shadow-md"
           >
             <PlusCircle size={18} />
-            Submit your Post
+            {t('roadmap.submit_btn')}
           </button>
         </div>
 
@@ -73,7 +75,7 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
               }`}
             >
-              Issues
+              {t('roadmap.tab.issues')}
             </button>
             <button
               onClick={() => setViewMode('roadmap')}
@@ -83,7 +85,7 @@ export const RoadmapPage: React.FC<RoadmapPageProps> = ({ currentUser, onLoginRe
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'
               }`}
             >
-              Roadmap
+              {t('roadmap.tab.roadmap')}
             </button>
           </div>
         </div>

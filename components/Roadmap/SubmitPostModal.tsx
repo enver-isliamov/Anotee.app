@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RoadmapPostType } from '../../types';
 import { X, Lightbulb, Bug, ArrowUpCircle } from 'lucide-react';
+import { useLanguage } from '../../services/i18n';
 
 interface SubmitPostModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ export const SubmitPostModal: React.FC<SubmitPostModalProps> = ({ isOpen, onClos
   const [description, setDescription] = useState('');
   const [type, setType] = useState<RoadmapPostType>('feature');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   if (!isOpen) return null;
 
@@ -40,7 +42,7 @@ export const SubmitPostModal: React.FC<SubmitPostModalProps> = ({ isOpen, onClos
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-sm">
       <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-zinc-200 dark:border-zinc-800">
         <div className="flex items-center justify-between p-6 border-b border-zinc-100 dark:border-zinc-800">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Submit your Post</h2>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">{t('roadmap.modal.submit.title')}</h2>
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
             <X size={20} />
           </button>
@@ -93,12 +95,12 @@ export const SubmitPostModal: React.FC<SubmitPostModalProps> = ({ isOpen, onClos
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-200">Title</label>
+                <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-200">{t('roadmap.modal.submit.title_label')}</label>
                 <input 
                   type="text" 
                   value={title}
                   onChange={e => setTitle(e.target.value)}
-                  placeholder="Enter a concise title"
+                  placeholder={t('roadmap.modal.submit.title_placeholder')}
                   className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all text-zinc-900 dark:text-zinc-100"
                   required
                 />
@@ -106,11 +108,11 @@ export const SubmitPostModal: React.FC<SubmitPostModalProps> = ({ isOpen, onClos
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-200">Description</label>
+                <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-200">{t('roadmap.modal.submit.desc_label')}</label>
                 <textarea 
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  placeholder="Describe your the issue in detail"
+                  placeholder={t('roadmap.modal.submit.desc_placeholder')}
                   className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all min-h-[120px] resize-y text-zinc-900 dark:text-zinc-100"
                   required
                 />
@@ -123,14 +125,14 @@ export const SubmitPostModal: React.FC<SubmitPostModalProps> = ({ isOpen, onClos
                   onClick={onClose}
                   className="px-5 py-2.5 text-zinc-600 dark:text-zinc-400 font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
                 >
-                  Cancel
+                  {t('roadmap.modal.submit.cancel')}
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSubmitting || !title.trim() || !description.trim()}
                   className="px-6 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                  {isSubmitting ? 'Submitting...' : t('roadmap.modal.submit.submit')}
                 </button>
               </div>
             </form>

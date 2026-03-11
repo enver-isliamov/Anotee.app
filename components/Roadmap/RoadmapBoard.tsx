@@ -2,6 +2,7 @@ import React from 'react';
 import { RoadmapPost, RoadmapPostStatus } from '../../types';
 import { RoadmapCard } from './RoadmapCard';
 import { StatusBadge } from './RoadmapBadge';
+import { useLanguage } from '../../services/i18n';
 
 interface RoadmapBoardProps {
   posts: RoadmapPost[];
@@ -19,6 +20,7 @@ const STATUSES: { value: RoadmapPostStatus; label: string }[] = [
 ];
 
 export const RoadmapBoard: React.FC<RoadmapBoardProps> = ({ posts, currentUserId, onVote, onPostClick }) => {
+  const { t } = useLanguage();
   return (
     <div className="flex gap-6 overflow-x-auto pb-8 snap-x">
       {STATUSES.map(status => {
@@ -36,7 +38,7 @@ export const RoadmapBoard: React.FC<RoadmapBoardProps> = ({ posts, currentUserId
             <div className="flex flex-col gap-4 min-h-[200px] bg-zinc-50/50 dark:bg-zinc-900/50 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800">
               {columnPosts.length === 0 ? (
                 <div className="text-center py-8 text-zinc-400 dark:text-zinc-600 text-sm italic">
-                  No posts yet
+                  {t('roadmap.no_posts')}
                 </div>
               ) : (
                 columnPosts.map(post => (
