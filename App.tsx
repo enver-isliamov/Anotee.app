@@ -8,6 +8,7 @@ import { Profile } from './components/Profile';
 import { AdminPanel } from './components/AdminPanel';
 import { TestRunner } from './components/TestRunner'; // Import the new component
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
+import { RoadmapPage } from './components/Roadmap/RoadmapPage';
 import { LegalPage } from './components/LegalPages';
 import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
@@ -33,6 +34,7 @@ type ViewState =
   | { type: 'PLAYER', assetId: string, projectId: string, restrictedAssetId?: string }
   | { type: 'PROFILE' }
   | { type: 'ADMIN' }
+  | { type: 'ROADMAP' }
   | { type: 'WORKFLOW' }
   | { type: 'ABOUT' }
   | { type: 'PRICING' }
@@ -160,6 +162,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Track the last local modification to prevent server overwrites
   const lastLocalUpdateRef = useRef<number>(0);
   
+  // Smart Polling State
+  const [isPlayerActive, setIsPlayerActive] = useState(false);
+
   // SWR Key Generation
   const getKey = () => {
       if (!currentUser) return null;
@@ -177,7 +182,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return await api.getProjects(currentUser, null, organization?.id, directProjectId || undefined, directAssetId || undefined);
   };
 
-  const pollingInterval = view.type === 'PLAYER' ? 15000 : 0;
+  // Smart Polling Logic: 
+  // - If Player is ACTIVE (playing/interacting): Poll every 15s
+  // - If Player is IDLE or Dashboard: Poll every 5 minutes (300s) to save resources
+  const pollingInterval = isPlayerActive ? 15000 : 300000;
 
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
       refreshInterval: pollingInterval, 
@@ -284,6 +292,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             setView({ type: 'PRICING' });
         } else if (path === '/about') {
             setView({ type: 'ABOUT' });
+        } else if (path === '/roadmap') {
+            setView({ type: 'ROADMAP' });
         } else if (path === '/workflow') {
             setView({ type: 'WORKFLOW' });
         } else if (path === '/ai') {
@@ -466,6 +476,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const handleNavigate = (page: string) => {
       let path = '/';
       switch(page) {
+          case 'ROADMAP': path = '/roadmap'; break;
           case 'WORKFLOW': path = '/workflow'; break;
           case 'ABOUT': path = '/about'; break;
           case 'PRICING': path = '/pricing'; break;
@@ -482,6 +493,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       window.history.pushState({}, '', path);
 
       switch(page) {
+          case 'ROADMAP': setView({ type: 'ROADMAP' }); break;
           case 'WORKFLOW': setView({ type: 'WORKFLOW' }); break;
           case 'ABOUT': setView({ type: 'ABOUT' }); break;
           case 'PRICING': setView({ type: 'PRICING' }); break;
@@ -619,10 +631,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
   if (!currentUser) {
-      if (['WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type)) {
+      if (['ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type)) {
           return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
                 <MainLayout currentUser={null} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}>
+                    {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => setIsAuthModalOpen(true)} />}
                     {view.type === 'WORKFLOW' && <WorkflowPage />}
                     {view.type === 'ABOUT' && <AboutPage />}
                     {view.type === 'PRICING' && <PricingPage />}
@@ -639,7 +652,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></div>;
 
-  const isPlatformView = ['DASHBOARD', 'PROFILE', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
+  const isPlatformView = ['DASHBOARD', 'PROFILE', 'ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
@@ -668,6 +681,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 />
                 )}
                 {view.type === 'PROFILE' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} />}
+                {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => setIsAuthModalOpen(true)} />}
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
                 {view.type === 'ABOUT' && <AboutPage />}
                 {view.type === 'PRICING' && <PricingPage />}
@@ -707,6 +721,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 isSyncing={isSyncing}
                 notify={notify}
                 isMockMode={isMockMode}
+                setIsPlayerActive={setIsPlayerActive} // Pass Smart Polling Control
             />
           </ErrorBoundary>
         )}
