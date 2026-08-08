@@ -121,18 +121,36 @@ export default async function handler(req, res) {
             const user = await verifyUser(req);
             if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-            const { planType } = req.body; 
+            const { planType } = req.body || {}; 
             const config = await getPaymentConfig();
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://anotee.com';
-            
-            const amountVal = config.prices[planType] || 4900;
-            const description = `Anotee ${planType === 'lifetime' ? 'Lifetime' : 'Pro'} Access`;
 
-            console.log(`Creating Payment: ${user.id} -> ${planType} (${amountVal} RUB)`);
+            // 1. If donationUrl is explicitly set in admin config, prefer it for donations
+            if ((planType === 'donation' || !planType) && config.donationUrl && config.donationUrl.trim() !== '') {
+                let url = config.donationUrl.trim();
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
+                return res.status(200).json({ confirmationUrl: url });
+            }
+
+            const effectivePlan = planType || 'donation';
+            const amountVal = (config.prices && config.prices[effectivePlan]) || (effectivePlan === 'donation' ? 500 : 4900);
+            const description = effectivePlan === 'donation' 
+                ? 'Anotee - Поддержка проекта (Донат)' 
+                : `Anotee ${effectivePlan === 'lifetime' ? 'Lifetime' : 'Pro'} Access`;
+
+            console.log(`Creating Payment: ${user.userId || user.id} -> ${effectivePlan} (${amountVal} RUB)`);
 
             // YooKassa Init
             if (config.activeProvider === 'yookassa') {
-                const { shopId, secretKey } = config.yookassa;
+                const { shopId, secretKey } = config.yookassa || {};
+                if (!shopId || !secretKey || shopId === '' || secretKey === '') {
+                    return res.status(400).json({ 
+                        error: "ЮKassa не настроена. Пожалуйста, укажите 'Ссылка для донатов' или Shop ID / Secret Key в Админке (Платежи)." 
+                    });
+                }
+
                 const authString = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
                 
                 const yooRes = await fetch('https://api.yookassa.ru/v3/payments', {
@@ -147,32 +165,49 @@ export default async function handler(req, res) {
                         capture: true,
                         confirmation: { type: 'redirect', return_url: `${appUrl}/?payment=success` },
                         description: description,
-                        metadata: { userId: user.userId, planType },
-                        save_payment_method: planType === 'monthly'
+                        metadata: { userId: user.userId || user.id, planType: effectivePlan },
+                        save_payment_method: effectivePlan === 'monthly'
                     })
                 });
 
                 const yooData = await yooRes.json();
-                if (!yooRes.ok) throw new Error(JSON.stringify(yooData));
+                if (!yooRes.ok) {
+                    console.error("YooKassa error response:", yooData);
+                    return res.status(400).json({ 
+                        error: yooData.description || "Ошибка ЮKassa. Проверьте настройки в Админке." 
+                    });
+                }
                 
                 return res.status(200).json({ 
-                    confirmationUrl: yooData.confirmation.confirmation_url,
+                    confirmationUrl: yooData.confirmation?.confirmation_url,
                     paymentId: yooData.id 
                 });
             }
 
             // Prodamus Init
             if (config.activeProvider === 'prodamus') {
-                const { url } = config.prodamus;
-                // Simplified link generation for Prodamus
-                // In real Prodamus you generate signature, but simple link works for demo
-                const payUrl = `${url.replace(/\/$/, '')}/?order_id=${uuidv4()}&products[0][price]=${amountVal}&products[0][name]=${description}&sys=${JSON.stringify({userId: user.userId, planType})}`;
+                const { url } = config.prodamus || {};
+                if (!url || url === '') {
+                    return res.status(400).json({ 
+                        error: "Prodamus не настроен. Пожалуйста, укажите 'Ссылка для донатов' или URL страницы Prodamus в Админке." 
+                    });
+                }
+                const payUrl = `${url.replace(/\/$/, '')}/?order_id=${uuidv4()}&products[0][price]=${amountVal}&products[0][name]=${encodeURIComponent(description)}&sys=${JSON.stringify({userId: user.userId || user.id, planType: effectivePlan})}`;
                 return res.status(200).json({ confirmationUrl: payUrl });
             }
 
+            // If donationUrl fallback exists
+            if (config.donationUrl && config.donationUrl.trim() !== '') {
+                return res.status(200).json({ confirmationUrl: config.donationUrl });
+            }
+
+            return res.status(400).json({ 
+                error: "Платежный шлюз не настроен. Укажите 'Ссылка для донатов' в Админке." 
+            });
+
         } catch (e) {
             console.error("Init Error:", e);
-            return res.status(500).json({ error: "Payment initialization failed" });
+            return res.status(500).json({ error: e.message || "Payment initialization failed" });
         }
     }
 

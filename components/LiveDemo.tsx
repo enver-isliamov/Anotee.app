@@ -33,23 +33,23 @@ const INITIAL_DEMO_PROJECT: Project = {
     assets: [
         {
             id: 'demo-asset-1',
-            title: 'Big Buck Bunny (Animation Reel)',
-            thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg',
+            title: 'Sintel Open Movie (Animation Reel)',
+            thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop',
             currentVersionIndex: 1, // Start at v2 to showcase version comparison
             versions: [
                 {
                     id: 'v1',
                     versionNumber: 1,
-                    filename: 'big_buck_bunny_v1_rough.mp4',
-                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+                    filename: 'sintel_trailer_v1.mp4',
+                    url: 'https://media.w3.org/2010/05/sintel/trailer.mp4',
                     uploadedAt: 'Вчера',
                     comments: []
                 },
                 {
                     id: 'v2',
                     versionNumber: 2,
-                    filename: 'big_buck_bunny_v2_final.mp4',
-                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+                    filename: 'sintel_trailer_v2_final.mp4',
+                    url: 'https://media.w3.org/2010/05/sintel/trailer.mp4',
                     uploadedAt: 'Сегодня',
                     comments: [
                         {
@@ -77,15 +77,15 @@ const INITIAL_DEMO_PROJECT: Project = {
         },
         {
             id: 'demo-asset-2',
-            title: 'Tears of Steel (VFX Demo)',
-            thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg',
+            title: 'Oceans Nature (HD Commercial Demo)',
+            thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop',
             currentVersionIndex: 0,
             versions: [
                 {
                     id: 'v1_tos',
                     versionNumber: 1,
-                    filename: 'tears_of_steel_1080p.mp4',
-                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+                    filename: 'oceans_hd_commercial.mp4',
+                    url: 'https://vjs.zencdn.net/v/oceans.mp4',
                     uploadedAt: 'Сегодня',
                     comments: [
                         {
@@ -93,7 +93,7 @@ const INITIAL_DEMO_PROJECT: Project = {
                             userId: 'u2',
                             authorName: 'Режиссер (Director)',
                             timestamp: 15,
-                            text: 'Проверьте цветокоррекцию на крупном плане робота в этом файле. Можно использовать инструмент рисования прямо поверх кадра!',
+                            text: 'Проверьте цветокоррекцию подводного кадра в этом ролике. Можно использовать инструмент рисования прямо поверх видео!',
                             status: CommentStatus.OPEN,
                             createdAt: '2 часа назад'
                         }
