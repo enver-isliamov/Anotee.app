@@ -235,6 +235,7 @@ export interface PlanConfig {
 
 export interface PaymentConfig {
     activeProvider: 'yookassa' | 'prodamus';
+    donationUrl?: string;
     // Legacy simple prices (kept for backward compat in API)
     prices: {
         lifetime: number;
@@ -261,6 +262,7 @@ export interface PaymentConfig {
 
 export const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
     activeProvider: 'yookassa',
+    donationUrl: '',
     prices: {
         lifetime: 2900,
         monthly: 490

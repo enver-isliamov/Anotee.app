@@ -404,11 +404,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           const token = await getToken();
           const res = await fetch('/api/payment?action=init', {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: { 
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ planType: 'donation' })
           });
           const data = await res.json();
-          if (res.ok && data.confirmationUrl) window.location.href = data.confirmationUrl;
-          else alert("Ошибка инициализации платежа");
+          if (res.ok && data.confirmationUrl) {
+              window.open(data.confirmationUrl, '_blank') || (window.location.href = data.confirmationUrl);
+          } else {
+              alert(data.error || "Ошибка инициализации платежа. Укажите ссылку на донат в Админке (раздел 'Платежи').");
+          }
       } catch (e) { alert("Network error"); } finally { setIsDonating(false); }
   };
 

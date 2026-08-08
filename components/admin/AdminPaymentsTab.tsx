@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../../types';
-import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check, Lock, Unlock, Hash, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check, Lock, Unlock, Hash, Link as LinkIcon, Eye, EyeOff, Heart } from 'lucide-react';
 
 // --- HELPER COMPONENTS ---
 
@@ -514,6 +514,30 @@ export const AdminPaymentsTab: React.FC = () => {
                                     />
                                 </div>
                             )}
+                        </div>
+                    </div>
+
+                    {/* BLOCK: DONATION LINK CONFIGURATION */}
+                    <div className="bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-indigo-500/10 border border-pink-500/20 rounded-2xl p-6">
+                        <div className="flex items-center justify-between border-b border-pink-500/20 pb-4 mb-4">
+                            <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                                <Heart size={18} className="text-pink-500 fill-pink-500/20" /> Ссылка для Донатов и Поддержки проекта
+                            </h3>
+                            <span className="text-xs bg-pink-500/10 text-pink-500 dark:text-pink-400 font-bold px-2.5 py-1 rounded-full border border-pink-500/20">
+                                Прямая ссылка
+                            </span>
+                        </div>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 leading-relaxed">
+                            Укажите прямую ссылку на страницу чаевых или доната (например, CloudTips, Tinkoff, Boosty, Yoomoney, Telegram или эквайринг). При нажатии на кнопку «Задонатить» пользователи будут перенаправляться по этой ссылке. Если оставить поле пустым, будет использоваться активный платежный шлюз.
+                        </p>
+                        <div className="bg-white dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
+                            <LockedConfigInput 
+                                label="Прямая Ссылка для Донатов (URL)" 
+                                value={paymentConfig.donationUrl || ''} 
+                                onChange={(val) => setPaymentConfig(prev => ({...prev, donationUrl: val}))}
+                                placeholder="https://cloudtips.ru/... или https://tinkoff.ru/..."
+                                icon={LinkIcon}
+                            />
                         </div>
                     </div>
 
