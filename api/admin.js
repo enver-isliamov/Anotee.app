@@ -71,6 +71,26 @@ export default async function handler(req, res) {
         }
     }
 
+    // 4. Get Domain Config
+    if (action === 'get_domains') {
+        try {
+            await sql`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value JSONB);`;
+            const { rows } = await sql`SELECT value FROM system_settings WHERE key = 'domain_config'`;
+            const defaultDomains = {
+                appDomainUrl: 'https://anotee.com',
+                customCdnDomain: 'https://cdn.anotee.com',
+                shareDomainUrl: 'https://anotee.com'
+            };
+            return res.status(200).json(rows.length > 0 ? { ...defaultDomains, ...rows[0].value } : defaultDomains);
+        } catch (e) {
+            return res.status(200).json({
+                appDomainUrl: 'https://anotee.com',
+                customCdnDomain: 'https://cdn.anotee.com',
+                shareDomainUrl: 'https://anotee.com'
+            });
+        }
+    }
+
     // --- STRICT ADMIN ACTIONS ---
     try {
         const user = await verifyUser(req); 
@@ -577,6 +597,12 @@ export default async function handler(req, res) {
         if (action === 'update_version') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
             await sql`INSERT INTO system_settings (key, value) VALUES ('app_version', ${JSON.stringify(req.body)}::jsonb) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(req.body)}::jsonb;`;
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'update_domains') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+            await sql`INSERT INTO system_settings (key, value) VALUES ('domain_config', ${JSON.stringify(req.body)}::jsonb) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(req.body)}::jsonb;`;
             return res.status(200).json({ success: true });
         }
 

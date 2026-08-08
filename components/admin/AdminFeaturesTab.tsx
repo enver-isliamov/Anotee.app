@@ -154,6 +154,14 @@ export const AdminFeaturesTab: React.FC = () => {
     const [appVersion, setAppVersion] = useState('');
     const [isSavingVersion, setIsSavingVersion] = useState(false);
 
+    // Domain Management Data
+    const [domains, setDomains] = useState({
+        appDomainUrl: 'https://anotee.com',
+        customCdnDomain: 'https://cdn.anotee.com',
+        shareDomainUrl: 'https://anotee.com'
+    });
+    const [isSavingDomains, setIsSavingDomains] = useState(false);
+
     useEffect(() => {
         if (fetchedVersion) setAppVersion(fetchedVersion);
     }, [fetchedVersion]);
@@ -176,9 +184,45 @@ export const AdminFeaturesTab: React.FC = () => {
         }
     };
 
+    const fetchDomains = async () => {
+        try {
+            const token = await getToken();
+            const res = await fetch('/api/admin?action=get_domains', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDomains(prev => ({ ...prev, ...data }));
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     useEffect(() => {
         fetchConfig();
+        fetchDomains();
     }, []);
+
+    const handleSaveDomains = async () => {
+        setIsSavingDomains(true);
+        try {
+            const token = await getToken();
+            await fetch('/api/admin?action=update_domains', {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(domains)
+            });
+            alert("Ссылки для доменов успешно обновлены!");
+        } catch (e) {
+            alert("Ошибка сохранения ссылок для доменов");
+        } finally {
+            setIsSavingDomains(false);
+        }
+    };
 
     const handleSaveConfig = async () => {
         setIsSavingConfig(true);
@@ -343,7 +387,7 @@ export const AdminFeaturesTab: React.FC = () => {
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 pb-20">
             
             {/* APP VERSION CONTROL */}
-            <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl mb-8 flex items-center justify-between shadow-sm">
+            <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl mb-6 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-white dark:bg-black rounded-lg shadow-sm">
                         <Tag className="text-indigo-500" size={18} />
@@ -367,6 +411,73 @@ export const AdminFeaturesTab: React.FC = () => {
                     >
                         {isSavingVersion ? <RefreshCw size={16} className="animate-spin"/> : 'Обновить'}
                     </button>
+                </div>
+            </div>
+
+            {/* DOMAIN & LINKS MANAGEMENT CARD */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl mb-8 shadow-sm">
+                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
+                            <Globe size={18} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Настройка Доменов и Ссылок</h3>
+                            <p className="text-xs text-zinc-500">Кастомные адреса для приложения, публичных ссылок и CDN хранилища</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={handleSaveDomains}
+                        disabled={isSavingDomains}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                    >
+                        {isSavingDomains ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                        Сохранить Домены
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Main App Domain (Основной)</label>
+                        <div className="relative">
+                            <Globe size={14} className="absolute left-3 top-3 text-zinc-400" />
+                            <input 
+                                type="text"
+                                value={domains.appDomainUrl}
+                                onChange={(e) => setDomains(p => ({ ...p, appDomainUrl: e.target.value }))}
+                                placeholder="https://anotee.com"
+                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg py-2 pl-9 pr-3 text-xs font-mono text-zinc-900 dark:text-zinc-100 outline-none focus:border-indigo-500"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Share Link Domain (Шеринг)</label>
+                        <div className="relative">
+                            <LinkIcon size={14} className="absolute left-3 top-3 text-zinc-400" />
+                            <input 
+                                type="text"
+                                value={domains.shareDomainUrl}
+                                onChange={(e) => setDomains(p => ({ ...p, shareDomainUrl: e.target.value }))}
+                                placeholder="https://anotee.com"
+                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg py-2 pl-9 pr-3 text-xs font-mono text-zinc-900 dark:text-zinc-100 outline-none focus:border-indigo-500"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">White Label CDN Domain (S3)</label>
+                        <div className="relative">
+                            <HardDrive size={14} className="absolute left-3 top-3 text-zinc-400" />
+                            <input 
+                                type="text"
+                                value={domains.customCdnDomain}
+                                onChange={(e) => setDomains(p => ({ ...p, customCdnDomain: e.target.value }))}
+                                placeholder="https://cdn.anotee.com"
+                                className="w-full bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg py-2 pl-9 pr-3 text-xs font-mono text-zinc-900 dark:text-zinc-100 outline-none focus:border-indigo-500"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 
