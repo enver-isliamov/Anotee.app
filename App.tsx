@@ -762,7 +762,11 @@ const AuthWrapper: React.FC = () => {
 const App: React.FC = () => {
     const env = (import.meta as any).env || {};
     const clerkPubKey = env.VITE_CLERK_PUBLISHABLE_KEY;
-    const isMockMode = !clerkPubKey || clerkPubKey.includes('placeholder');
+    const isMockMode = !clerkPubKey || 
+        clerkPubKey.includes('placeholder') || 
+        clerkPubKey.includes('YOUR_CLERK_KEY') || 
+        clerkPubKey.includes('YOUR_') ||
+        clerkPubKey.length < 20;
 
     if (isMockMode) {
         return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
