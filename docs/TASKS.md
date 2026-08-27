@@ -48,7 +48,7 @@
 - Проблема: `api/data.js:417-456, 459-509` — POST/PATCH не проверяют роль участника; viewer перезаписывает team/assets/name.
 - Цель: матрица прав на сервере: owner/manager — полный PUT; member — комментарии/статусы; viewer/public guest — только comment-action.
 
-### T-07 P1 `todo` Микрофон-флоу: пакет исправлений `[diag]`
+### T-07 P1 `done` Микрофон-флоу: пакет исправлений `[diag]`
 - Проблемы (все подтверждены аудитом):
   - `Player.tsx:746` — `recognition.lang='en-US'` жёстко: русская речь не транскрибируется;
   - `Player.tsx:737-755` — нет `onerror`: отказ в доступе к микрофону = молчаливый провал;
@@ -58,12 +58,14 @@
   - Whisper (`transcriptionWorker.ts`) не используется как fallback там, где SpeechRecognition отсутствует (Firefox).
 - Цель: язык = язык интерфейса (i18n); onerror → понятный toast с причиной (not-allowed/service-not-allowed/network) и подсказкой; кнопка микрофона доступна на мобильных в поле комментария и в плеере; (опц.) fallback на MediaRecorder+Whisper.
 - Acceptance: e2e `voice.spec.ts` зелёный; на iPhone Safari кнопка видна и даёт понятную ошибку при отказе в доступе.
+- Итог (этот коммит): `recognition.lang` = язык интерфейса (маппинг `SPEECH_RECOGNITION_LANGS`: ru→ru-RU, en→en-US, es→es-ES, pt→pt-BR, ja→ja-JP, ko→ko-KR); добавлен `onerror` с i18n-тостами (`player.voice.err_denied` / `err_network` / `err_generic`, `no-speech` — тихо), `isListening` сбрасывается в onend+onerror; `interimResults=true` — interim подставляется в поле комментария поверх накопленных финалов, ручной ввод во время слушания отслеживается в `onChange` и не затирается (логика диктовки — в refs вне setState-updater, чтобы updater оставался чистым); Mic в FloatingControls видим всегда (без fullscreen/маркера) и открывает VoiceModal; VoiceModal рендерится и без fullscreen → доступен на мобильных; при unmount recognition останавливается (try/catch, onend-отключён); `handleQuickMarker` при пустом тексте даёт notify-подсказку (`player.voice.need_text`); «not supported» переведён (`player.voice.unsupported`). Новые ключи en/ru парами. e2e `voice.spec.ts` + mock (interim→final с `resultIndex`) зелёные; вручную на iPhone не проверялось (нет устройства) — механика отказа покрыта кодом onerror.
 
-### T-08 P1 `todo` Мобильная доступность UI: пакет исправлений
+### T-08 P1 `done` Мобильная доступность UI: пакет исправлений
 - Проблемы: hover-only кнопки карточек (`Dashboard.tsx:443-474`, `ProjectView.tsx:679-715, 920`); переключатель вида single/compare скрыт на мобиле (`Player.tsx:861`); `window.innerWidth` в рендере без resize-state (`Player.tsx:811`); `user-scalable=no` (`index.html:6`).
 - Цель: на `<md` все действия видимы и кликабельны (иконки всегда видны или меню «⋯»); сравнение версий доступно на мобильных; innerWidth через хук с resize-листенером; убрать блокировку зума (a11y).
 - Acceptance: e2e mobile-viewport спеки зелёные; ручная проверка 390×844.
 - Примечание (тест-инфраструктура): регрессии уже зафиксированы как `test.fixme('T-08: …')` в `tests/e2e/mobile.spec.ts` (проект Playwright «mobile», Pixel 7 412×915) — при фиксе перевести их в обычные тесты и снять пометки.
+- Итог (этот коммит): кнопки карточек Dashboard и ассетов/участников ProjectView — паттерн `opacity-100 md:opacity-0 md:group-hover:opacity-100`, тач-таргеты `p-2.5 md:p-1.5` (микрофон и view-switcher в плеере — 40×40 на мобиле); view-switcher виден на мобиле (убран `hidden md:block`, меню по тапу работает); `window.innerWidth` в рендере Player заменён на `isDesktopViewport` (state + resize-листенер); viewport = `width=device-width, initial-scale=1, viewport-fit=cover`; 3 fixme из `mobile.spec.ts` разморожены и зелёные; попутно исправлен regex сепарации проектов в `playwright.config.ts` (`/mobile\.spec\.ts/` вместо нерабочего `/.*\.mobile\.spec\.ts/` — раньше mobile-спеки гонялись на десктопе, а проект «mobile» не запускался вовсе). Ручная проверка 390×844 не проводилась (агентская среда), e2e-проект «mobile» (Pixel 7 412×915) зелёный.
 
 ### T-09 P1 `done` TypeScript: tsc --noEmit зелёный
 - Проблема: 4 ошибки: `App.tsx:638,684` — `setIsAuthModalOpen` не существует; `Dashboard.tsx:133` — `string|null` vs `string|undefined`; `transcriptionWorker.ts:18` — `string` vs `PipelineType`.

@@ -20,7 +20,10 @@ export const resetMockData = (page: Page) => {
   });
 };
 
-/** Фейковый SpeechRecognition: start() → ~200мс → onresult с transcript + onend. */
+/**
+ * Фейковый SpeechRecognition: start() → ~200мс → onresult (interim, затем final)
+ * + onend — как в реальном Web Speech API (resultIndex, isFinal).
+ */
 export const installSpeechRecognitionMock = (page: Page, transcript = 'Тестовая голосовая правка') => {
   page.addInitScript((phrase: string) => {
     class FakeSpeechRecognition {
@@ -29,13 +32,16 @@ export const installSpeechRecognitionMock = (page: Page, transcript = 'Тест�
       interimResults = false;
       onstart: (() => void) | null = null;
       onend: (() => void) | null = null;
-      onresult: ((event: { results: Array<Array<{ transcript: string }>> }) => void) | null = null;
+      onresult: ((event: { resultIndex: number; results: Array<Array<{ transcript: string; isFinal?: boolean }>> }) => void) | null = null;
       onerror: ((event: unknown) => void) | null = null;
 
       start() {
         this.onstart?.();
         setTimeout(() => {
-          this.onresult?.({ results: [[{ transcript: phrase }]] });
+          // 1) interim-результат (без isFinal — как в реальном API)
+          this.onresult?.({ resultIndex: 0, results: [[{ transcript: phrase }]] });
+          // 2) тот же результат становится финальным
+          this.onresult?.({ resultIndex: 0, results: [[{ transcript: phrase, isFinal: true }]] });
           this.onend?.();
         }, 200);
       }

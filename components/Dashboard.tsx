@@ -441,32 +441,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 )}
                                 
                                 {canManage ? (
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
+                                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                        <button
                                             onClick={(e) => handleToggleLock(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${project.isLocked ? 'text-red-400' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
+                                            className={`p-2.5 md:p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${project.isLocked ? 'text-red-400' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
                                             title={project.isLocked ? t('common.unlock') : t('common.lock')}
                                         >
                                             {project.isLocked ? <Lock size={14} /> : <Unlock size={14} />}
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={(e) => handleOpenEdit(e, project)}
-                                            className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                                            className="p-2.5 md:p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
                                             title={t('common.edit')}
                                         >
                                             <Edit2 size={14} />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={(e) => handleShareClick(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProject || project.isLocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                            className={`p-2.5 md:p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProject || project.isLocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
                                             title={!canShareProject ? "Locked" : t('common.share')}
                                             disabled={!canShareProject}
                                         >
                                             <Share2 size={14} />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={(e) => handleDeleteClick(e, project)}
-                                            className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded"
+                                            className="p-2.5 md:p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded"
                                             title={t('common.delete')}
                                         >
                                             <Trash2 size={14} />

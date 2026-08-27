@@ -31,3 +31,5 @@ yarn-error.log*
 test-results
 playwright-report
 blob-report
+
+playwright.local.config.ts
