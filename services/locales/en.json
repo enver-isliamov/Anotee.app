@@ -20,6 +20,8 @@
   "common.copied": "Copied",
   "common.link_copied": "Link copied",
   "common.share": "Share",
+  "common.edit": "Edit",
+  "common.delete": "Delete",
   "common.lock": "Lock",
   "common.unlock": "Unlock",
   "common.upload": "Upload",

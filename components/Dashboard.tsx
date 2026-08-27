@@ -130,7 +130,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       updatedAt: 'Just now',
       team: activeOrgId ? [] : [currentUser],
       ownerId: currentUser.id,
-      orgId: activeOrgId || null, 
+      orgId: activeOrgId ?? undefined,
       assets: [],
       isLocked: false,
       publicAccess: 'none'

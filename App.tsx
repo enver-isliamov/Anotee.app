@@ -635,7 +635,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
                 <MainLayout currentUser={null} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}>
-                    {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => setIsAuthModalOpen(true)} />}
+                    {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => {}} />}
                     {view.type === 'WORKFLOW' && <WorkflowPage />}
                     {view.type === 'ABOUT' && <AboutPage />}
                     {view.type === 'PRICING' && <PricingPage />}
@@ -681,7 +681,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 />
                 )}
                 {view.type === 'PROFILE' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} />}
-                {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => setIsAuthModalOpen(true)} />}
+                {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => {}} />}
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
                 {view.type === 'ABOUT' && <AboutPage />}
                 {view.type === 'PRICING' && <PricingPage />}
@@ -769,7 +769,7 @@ const App: React.FC = () => {
         clerkPubKey.length < 20;
 
     if (isMockMode) {
-        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
+        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'u1', fullName: 'Andrey (Creator)', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Andrey', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
     }
     return <ErrorBoundary><ClerkProvider publishableKey={clerkPubKey}><LanguageProvider><ThemeProvider><LanguageCloudSync /><ThemeCloudSync /><DriveProvider isMockMode={false}><AuthWrapper /></DriveProvider></ThemeProvider></LanguageProvider></ClerkProvider></ErrorBoundary>;
 };

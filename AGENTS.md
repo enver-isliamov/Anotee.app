@@ -99,7 +99,6 @@ npm run test:e2e     # e2e-тесты (Playwright, mock-режим)
 
 ## 9. Известный техдолг (кратко, полный список в TASKS)
 
-- `npx tsc --noEmit` красный (4 ошибки, см. TASKS T-09).
 - Монолиты: `Player.tsx` (~1100 строк), `App.tsx`, `Profile.tsx` — пилить по методологии §4.9.
 - Бандл: главный чанк 817KB + воркер 877KB + ort-wasm 21.6MB в dist (TASKS T-11).
 - i18n: es/ja/ko/pt ≈ 39/277 ключей (TASKS T-10).

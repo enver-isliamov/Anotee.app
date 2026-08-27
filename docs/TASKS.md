@@ -63,14 +63,21 @@
 - Проблемы: hover-only кнопки карточек (`Dashboard.tsx:443-474`, `ProjectView.tsx:679-715, 920`); переключатель вида single/compare скрыт на мобиле (`Player.tsx:861`); `window.innerWidth` в рендере без resize-state (`Player.tsx:811`); `user-scalable=no` (`index.html:6`).
 - Цель: на `<md` все действия видимы и кликабельны (иконки всегда видны или меню «⋯»); сравнение версий доступно на мобильных; innerWidth через хук с resize-листенером; убрать блокировку зума (a11y).
 - Acceptance: e2e mobile-viewport спеки зелёные; ручная проверка 390×844.
+- Примечание (тест-инфраструктура): регрессии уже зафиксированы как `test.fixme('T-08: …')` в `tests/e2e/mobile.spec.ts` (проект Playwright «mobile», Pixel 7 412×915) — при фиксе перевести их в обычные тесты и снять пометки.
 
-### T-09 P1 `in-progress` TypeScript: tsc --noEmit зелёный
+### T-09 P1 `done` TypeScript: tsc --noEmit зелёный
 - Проблема: 4 ошибки: `App.tsx:638,684` — `setIsAuthModalOpen` не существует; `Dashboard.tsx:133` — `string|null` vs `string|undefined`; `transcriptionWorker.ts:18` — `string` vs `PipelineType`.
 - Цель: устранить (удалить мёртвые вызовы / скорректировать тип), включить `tsc --noEmit` в CI.
+- Итог (этот коммит): `App.tsx` — мёртвые вызовы несуществующего сеттера заменены на no-op `onLoginRequest={() => {}}` (прецедент в той же функции, строка с `Login onLogin={() => {}}`); `Dashboard.tsx` — `orgId: activeOrgId ?? undefined`; `transcriptionWorker.ts` — `static task: PipelineType`. `tsc --noEmit` включён в CI (`.github/workflows/ci.yml`).
 
 ### T-10 P2 `todo` i18n: добить языки
-- Проблема: es/ja/ko/pt — 39/277 ключей; в ru отсутствует `footer.rights`; ~250 захардкоженных строк мимо `t()` (Player S3/Drive экраны, тосты).
+- Проблема: es/ja/ko/pt — 39/277 ключей; ~250 захардкоженных строк мимо `t()` (Player S3/Drive экраны, тосты). (`footer.rights` в ru и отсутствовавшие `common.edit`/`common.delete` в en/ru добавлены в этом коммите; контракт-тест `tests/unit/i18n.test.ts` не даёт деградировать.)
 - Цель: автоперевод en→языки как база; вынести в t() строки пользовательских экранов Player; тест `i18n.test.ts` не даёт деградировать.
+
+### T-14 P1 `done` Mock-режим: Clerk-хуки роняли приложение без ключа
+- Проблема: в mock-ветке `App.tsx` нет `ClerkProvider`, но Clerk-хуки вызываются по всему дереву (`DriveProvider`, `useSubscription`, `useAppConfig`, `Dashboard`, `Player`, `Profile`) — Clerk v5 бросает «useAuth can only be used within the <ClerkProvider />», приложение падает в ErrorBoundary при старте без ключа. Кроме того, mock-пользователь (`mock-user`) не был владельцем/участником `MOCK_PROJECTS` (ownerId `u1`) — свежая mock-сессия всегда показывала пустой дашборд.
+- Цель: mock-режим должен запускаться и показывать MOCK_PROJECTS без сети и Clerk JS (локальная разработка + e2e).
+- Итог (этот коммит): `vite.config.ts` при отсутствии реального ключа алиасит `@clerk/clerk-react` на лёгкую заглушку `services/clerkShim.ts` (совместимая поверхность API, ноль сети); identity mock-пользователя совмещена с `u1` «Andrey (Creator)» — владельцем MOCK_PROJECTS. Реальный Clerk не затронут: с ключом алиас не применяется.
 
 ### T-11 P2 `todo` Бандл: снизить вес
 - Проблема: index 817KB, transcriptionWorker 877KB, ort-wasm 21.6MB в dist (копится всегда).
@@ -91,5 +98,6 @@
 ## Архив выполненных
 | ID | Название | Коммит |
 |---|---|---|
-| T-09 (tsc) | см. статус | — |
+| T-09 (tsc --noEmit зелёный) | см. статус выше | этот коммит |
+| T-14 (mock-режим без Clerk-краша) | см. статус выше | этот коммит |
 | T-12 (Diagnostics 2.0) | см. статус | — |

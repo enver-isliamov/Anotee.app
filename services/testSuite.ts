@@ -122,7 +122,7 @@ export const TEST_SUITE: TestGroup[] = [
                     failCondition: '404 (Файл не найден) или 500 (Ошибка кода).'
                 });
             } catch (e: any) {
-                res.push({ name: 'Payment Init', passed: false, description: 'Fetch error', received: e.message, expected: '401', passCondition: '', failCondition: '' });
+                res.push({ name: 'Payment Init', passed: false, description: 'Fetch error', received: e.message, expected: '401', passCondition: 'Запрос выполнен, эндпоинт защищен.', failCondition: 'Сетевая ошибка: эндпоинт недоступен или заблокирован.' });
             }
 
             // 2. Webhook Sanity Check
@@ -139,7 +139,7 @@ export const TEST_SUITE: TestGroup[] = [
                     failCondition: '500 (Ошибка импорта/синтаксиса) или 404.'
                 });
             } catch (e: any) {
-                res.push({ name: 'Webhook Check', passed: false, description: 'Fetch error', received: e.message, expected: '400', passCondition: '', failCondition: '' });
+                res.push({ name: 'Webhook Check', passed: false, description: 'Fetch error', received: e.message, expected: '400', passCondition: 'Вебхук обрабатывает запрос и валидирует данные.', failCondition: 'Сетевая ошибка: эндпоинт недоступен или заблокирован.' });
             }
 
             return res;
