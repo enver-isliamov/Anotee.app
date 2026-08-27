@@ -1,4 +1,4 @@
-# TASKS — Бэклог и playbook постановки задач
+﻿# TASKS — Бэклог и playbook постановки задач
 
 > Единый источник задач для агентов и разработчиков. Формат ID: `T-NN`. Приоритеты: **P0** (безопасность/блокер пользователей) → **P1** (критично для продукта) → **P2** (качество). Статусы: `todo` / `in-progress` / `done` / `wontfix`.
 
@@ -84,7 +84,7 @@
 - Цель: `manualChunks` (vendor/react/ai), динамический import AI-транскрипции по клику, воркер+wasm через CDN unpkg/jsdelivr (уже поддерживается transformers.js `env.backends.onnx.wasm.wasmPaths`).
 - Acceptance: `npm run build` — main < 400KB gzip; ort-wasm не в dist.
 
-### T-12 P1 `in-progress` System Diagnostics 2.0 `[diag]`
+### T-12 P1 `done` System Diagnostics 2.0 `[diag]`
 - Проблема: текущий `/test` проверяет только API/billing поверхностно; при падении не отвечает на «что сломалось и что делать».
 - Цель: окружение-панель (версия, mock, auth, браузер, viewport, сеть), группы тестов с серьёзностью, diagnosis+task при падении, мобильные и микрофонные проверки, экспорт отчёта в Markdown.
 - Acceptance: каждый упавший тест даёт готовый текст задачи; прогон на мобильном viewport читабелен.
