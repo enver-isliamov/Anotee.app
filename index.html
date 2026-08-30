@@ -69,68 +69,8 @@
       }
     </style>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              zinc: {
-                950: '#09090b',
-              }
-            },
-            animation: {
-              'gradient-x': 'gradient-x 15s ease infinite',
-            },
-            keyframes: {
-              'gradient-x': {
-                '0%, 100%': {
-                  'background-size': '200% 200%',
-                  'background-position': 'left center'
-                },
-                '50%': {
-                  'background-size': '200% 200%',
-                  'background-position': 'right center'
-                },
-              },
-            }
-          }
-        }
-      }
-    </script>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-    "@clerk/clerk-react": "https://esm.sh/@clerk/clerk-react@5.2.0?external=react,react-dom",
-    "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
-    "@vercel/blob": "https://esm.sh/@vercel/blob@0.22.1",
-    "@vercel/blob/client": "https://esm.sh/@vercel/blob@0.22.1/client",
-    "@vercel/postgres": "https://esm.sh/@vercel/postgres@0.8.0",
-    "vite": "https://esm.sh/vite@5.0.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@4.2.0",
-    "@huggingface/transformers": "https://esm.sh/@huggingface/transformers@3.0.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "@vercel/blob/": "https://esm.sh/@vercel/blob@^2.0.1/",
-    "@clerk/backend": "https://esm.sh/@clerk/backend@^2.29.5",
-    "crypto": "https://esm.sh/crypto@^1.0.1",
-    "node-fetch": "https://esm.sh/node-fetch@^3.3.2",
-    "uuid": "https://esm.sh/uuid@^13.0.0",
-    "swr": "https://esm.sh/swr@2.2.5?external=react",
-    "@aws-sdk/client-s3": "https://esm.sh/@aws-sdk/client-s3@^3.987.0",
-    "@aws-sdk/s3-request-presigner": "https://esm.sh/@aws-sdk/s3-request-presigner@^3.987.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
-    "react-i18next": "https://esm.sh/react-i18next@^16.5.4",
-    "i18next-browser-languagedetector": "https://esm.sh/i18next-browser-languagedetector@^8.2.1",
-    "i18next": "https://esm.sh/i18next@^25.8.11"
-  }
-}
-</script>
+  <!-- Tailwind собирается локально (tailwind.config.js + index.css, см. docs/RF-RESILIENCE.md);
+       внешний Tailwind-CDN и importmap-модули удалены — зависимости бандлит Vite. -->
 </head>
   <body class="bg-zinc-950 text-zinc-100 antialiased">
     <div id="root"></div>
@@ -161,8 +101,8 @@
         // Check if the error came from a script or link tag (resource loading error)
         const isResourceError = e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK');
         
-        // If it's a script error and it's our main bundle or esm.sh dependencies
-        if (isResourceError && (e.target.src.includes('index') || e.target.src.includes('esm.sh'))) {
+        // If it's a script error and it's our main bundle
+        if (isResourceError && e.target.src.includes('index')) {
            const overlay = document.getElementById('network-error-overlay');
            if (overlay) {
                overlay.style.display = 'flex';

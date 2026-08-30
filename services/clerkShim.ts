@@ -17,7 +17,8 @@ const mockUser = {
   id: 'u1',
   fullName: 'Andrey (Creator)',
   firstName: 'Andrey',
-  imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Andrey',
+  // Локальный статичный аватар (замена внешнего сервиса аватаров, недоступного из РФ — T-17)
+  imageUrl: '/img/avatar-mock.svg',
   primaryEmailAddress: { emailAddress: 'mock@example.com' },
   publicMetadata: {},
   unsafeMetadata: {},

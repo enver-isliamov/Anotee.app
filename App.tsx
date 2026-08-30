@@ -14,6 +14,7 @@ import { LiveDemo } from './components/LiveDemo';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId } from './services/utils';
+import { generateInitialsAvatar } from './services/avatarUtils';
 import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
@@ -344,7 +345,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         setCurrentUser({
             id: clerkUser.id,
             name: clerkUser.fullName || clerkUser.firstName || 'User',
-            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
+            avatar: clerkUser.imageUrl || generateInitialsAvatar(clerkUser.fullName || clerkUser.id || 'Dev'),
             email: clerkUser.primaryEmailAddress?.emailAddress,
             isAdmin: role === 'admin' || role === 'superadmin'
         });
@@ -769,7 +770,7 @@ const App: React.FC = () => {
         clerkPubKey.length < 20;
 
     if (isMockMode) {
-        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'u1', fullName: 'Andrey (Creator)', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Andrey', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
+        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'u1', fullName: 'Andrey (Creator)', imageUrl: '/img/avatar-mock.svg', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
     }
     return <ErrorBoundary><ClerkProvider publishableKey={clerkPubKey}><LanguageProvider><ThemeProvider><LanguageCloudSync /><ThemeCloudSync /><DriveProvider isMockMode={false}><AuthWrapper /></DriveProvider></ThemeProvider></LanguageProvider></ClerkProvider></ErrorBoundary>;
 };

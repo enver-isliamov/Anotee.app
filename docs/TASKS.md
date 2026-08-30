@@ -95,6 +95,24 @@
 - Проблема: комментарий пишется и через полный sync проекта, и через comment-endpoint (`Player.tsx:509-525` + `data.js:165`) — возможны дубликаты при гонке.
 - Цель: расследовать; оставить один канал записи, второй — только optimistic UI.
 
+### T-15 P1 `done` Локальная сборка Tailwind: убрать cdn.tailwindcss.com (RF-устойчивость)
+- Проблема: прод-`index.html` грузил Tailwind JIT с `cdn.tailwindcss.com` (inline-конфиг: darkMode class, zinc-950, animation/keyframes gradient-x) и importmap с `esm.sh` — оба хоста заблокированы/нестабильны в РФ, приложение не стартует (см. docs/RF-RESILIENCE.md).
+- Цель: Tailwind собирается Vite-пайплайном; в `dist/index.html` нет внешних CDN-хостов.
+- Acceptance: `npm run build` генерирует CSS в `dist/assets/*.css` с покрытием классов из кода (`bg-zinc-950`, `animate-in`/`fade-in`/`slide-in-from-*` от плагина, keyframes `gradient-x`, `bg-gradient-to-*`); `npm run check:external` (новый скрипт `scripts/check-external.mjs`, шаг в CI после build) — 0.
+- Итог (этот коммит): `tailwind.config.js` (ESM, content: index.html + корень/components/services/hooks `{ts,tsx}`; theme.extend перенесён 1:1; плагин `tailwindcss-animate@^1.0.7` — без него отваливаются animate-in/fade-in/zoom-in/slide-in-from-*), `postcss.config.js` (tailwindcss+autoprefixer), `index.css` (@tailwind base/components/utilities, в корне рядом с index.tsx — папку src/ не создаём, железное правило №6) с `import './index.css'` в `index.tsx`; из `index.html` удалены CDN-скрипт+inline-конфиг (72-101) и importmap esm.sh целиком (активных module-скриптов с голыми импортами не было — единственный module-скрипт `/index.tsx` бандлится Vite), из error-handler убрана мёртвая проверка `esm.sh` (иначе строка оставалась бы в dist и ловилась check:external).
+
+### T-16 P1 `done` Whisper-модель: настраиваемое зеркало (механизм; заливка файлов модели — на владельце)
+- Проблема: `services/transcriptionWorker.ts` грузит `Xenova/whisper-tiny` с HF Hub; бинарники ONNX идут через `cdn-lfs.huggingface.co` — из РФ соединения сбрасываются, AI-транскрибация не работает.
+- Цель: источник модели настраивается без правки кода (инструкция — docs/RF-RESILIENCE.md §4).
+- Acceptance: с заданным `VITE_WHISPER_MODEL_BASE_URL` воркер запрашивает файлы модели с зеркала; без него поведение прежнее; `env.allowLocalModels=false`, `useBrowserCache=true` не тронуты.
+- Итог (этот коммит): воркер читает поле `modelBaseUrl` входящего сообщения; если задано и ≠ дефолта `https://huggingface.co/` — до создания pipeline выставляется `env.remoteHost` (фактическое API transformers.js 3.8.1; `env.remotePathTemplate` остаётся дефолтным `{model}/resolve/{revision}/` — зеркало обязано повторять структуру HF Hub); `TranscriptionPipeline` дополнительно инвалидирует кэш инстанса при смене хоста (аналогично смене модели). `Player.tsx handleTranscribe` передаёт `modelBaseUrl` из `import.meta.env.VITE_WHISPER_MODEL_BASE_URL` (пусто → поле не передаётся). `.env.example` — закомментированная переменная с инструкцией (RU). Контракт воркера для остальных полей не изменён (e2e voice.spec мокает SpeechRecognition, не воркер — ок). Статус `done` относится к механизму; файлы модели на зеркале заливает владелец (список — RF-RESILIENCE.md §4.1).
+
+### T-17 P1 `done` Локализация внешних картинок/аватаров (RF-устойчивость) — 4 из 5 точек; 1 исключение
+- Проблема: фронтенд тянул превью и аватары с `images.unsplash.com` и `api.dicebear.com` — недоступны/нестабильны из РФ (пустые превью/аватары у части пользователей).
+- Цель: все декоративные изображения — из бандла или генерируются локально.
+- Acceptance: в исходниках нет вызовов внешних сервисов картинок/аватаров (кроме задокументированного исключения); e2e зелёные.
+- Итог (этот коммит): скачаны и заменены `LiveDemo.tsx` thumbnails → `public/img/demo-video-1.jpg`, `demo-video-2.jpg`; `ProjectView.tsx` onError-fallback → `public/img/thumbnail-fallback.jpg`; dicebear-аватары (`App.tsx:347` fallback, `LiveDemo.tsx` ×3, `ProjectView.tsx:321` initials) → новый `services/avatarUtils.ts` `generateInitialsAvatar(seed)` — data-URI SVG, инициалы + цвет из существующего `stringToColor`; mock-аватар (`App.tsx:772`, `services/clerkShim.ts:20`) → статичный `public/img/avatar-mock.svg`. **Исключение:** fallback в `services/utils.ts:80,110` (`photo-1574717024653-61fd2cf4d44c`) не заменён — фото удалено из CDN Unsplash (404 от источника, проверено через независимый прокси; соединение с unsplash в этот момент было рабочим на других фото). URL оставлен по инструкции задачи; ⚠ он мёртв и без РФ-блокировки — нужен выбор замены (например `thumbnail-fallback.jpg`) владельцем. Попутно замечено: `constants.ts` (MOCK_PROJECTS) содержит 5 unsplash-URL и `index.html` og:image — тот же мёртвый `photo-1574717024653-61fd2cf4d44c`; вне рамок T-17.
+
 ---
 
 ## Архив выполненных

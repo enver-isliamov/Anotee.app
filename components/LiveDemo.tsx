@@ -4,6 +4,7 @@ import { Player } from './Player';
 import { Project, User, CommentStatus } from '../types';
 import { ToastContainer, ToastMessage, ToastType } from './Toast';
 import { generateId } from '../services/utils';
+import { generateInitialsAvatar } from '../services/avatarUtils';
 import { useLanguage } from '../services/i18n';
 import { Film, Sparkles } from 'lucide-react';
 
@@ -14,7 +15,7 @@ interface LiveDemoProps {
 const DEMO_USER: User = {
     id: 'demo-user',
     name: 'You (Demo User)',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=DemoUser'
+    avatar: generateInitialsAvatar('DemoUser')
 };
 
 const INITIAL_DEMO_PROJECT: Project = {
@@ -27,14 +28,14 @@ const INITIAL_DEMO_PROJECT: Project = {
     ownerId: 'demo-owner',
     team: [
         DEMO_USER,
-        { id: 'u2', name: 'Режиссер (Director)', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Director' },
-        { id: 'u3', name: 'Колорист (Colorist)', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Colorist' }
+        { id: 'u2', name: 'Режиссер (Director)', avatar: generateInitialsAvatar('Режиссер (Director)') },
+        { id: 'u3', name: 'Колорист (Colorist)', avatar: generateInitialsAvatar('Колорист (Colorist)') }
     ],
     assets: [
         {
             id: 'demo-asset-1',
             title: 'Sintel Open Movie (Animation Reel)',
-            thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop',
+            thumbnail: '/img/demo-video-1.jpg', // локальная копия (unsplash недоступен из РФ, T-17)
             currentVersionIndex: 1, // Start at v2 to showcase version comparison
             versions: [
                 {
@@ -78,7 +79,7 @@ const INITIAL_DEMO_PROJECT: Project = {
         {
             id: 'demo-asset-2',
             title: 'Oceans Nature (HD Commercial Demo)',
-            thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop',
+            thumbnail: '/img/demo-video-2.jpg', // локальная копия (unsplash недоступен из РФ, T-17)
             currentVersionIndex: 0,
             versions: [
                 {

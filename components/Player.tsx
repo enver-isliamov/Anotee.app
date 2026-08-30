@@ -13,6 +13,11 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { isFeatureEnabled } from '../services/entitlements';
 
+// Кастомное зеркало Whisper-модели (РФ-устойчивость): Vite подставляет значение
+// VITE_WHISPER_MODEL_BASE_URL на этапе сборки. Пусто/не задано → поле не передаётся
+// в воркер и модель грузится с huggingface.co как раньше (docs/RF-RESILIENCE.md).
+const WHISPER_MODEL_BASE_URL = (import.meta.env.VITE_WHISPER_MODEL_BASE_URL || '').trim();
+
 interface PlayerProps {
   asset: ProjectAsset;
   project: Project;
@@ -492,7 +497,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
         const audioData = await extractAudioFromUrl(sourceUrl, isProxy);
         notify(`Starting AI Model...`, "info");
-        workerRef.current.postMessage({ type: 'transcribe', audio: audioData, language: transcribeLanguage, model: transcribeModel });
+        workerRef.current.postMessage({
+          type: 'transcribe',
+          audio: audioData,
+          language: transcribeLanguage,
+          model: transcribeModel,
+          // Не передаём modelBaseUrl, если зеркало не настроено — воркер ведёт себя как раньше
+          ...(WHISPER_MODEL_BASE_URL ? { modelBaseUrl: WHISPER_MODEL_BASE_URL } : {}),
+        });
     } catch (e: any) { console.error("Transcribe Error:", e); notify(e.message || "Failed to start", "error"); setIsTranscribing(false); setTranscribeProgress(null); }
   };
 
