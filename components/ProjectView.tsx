@@ -676,9 +676,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             </div>
                         )}
 
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                        <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10 flex gap-1">
                             {isLocal && (
-                                <button 
+                                <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         if (confirm("Отменить загрузку?")) {
@@ -686,16 +686,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                             if (task) cancelUpload(task.id);
                                         }
                                     }}
-                                    className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                    className="p-2.5 md:p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
                                     title="Cancel Upload"
                                 >
                                     <X size={12} />
                                 </button>
                             )}
                             {!isLocked && canSharePublicLink && !isLocal && (
-                                <button 
+                                <button
                                     onClick={(e) => handleShareAsset(e, asset)}
-                                    className="p-1.5 bg-black/60 hover:bg-orange-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                    className="p-2.5 md:p-1.5 bg-black/60 hover:bg-orange-500 text-white rounded-md backdrop-blur-sm transition-colors"
                                     title="Copy Review Link (Restricted Access)"
                                 >
                                     <LinkIcon size={12} />
@@ -704,11 +704,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             {canEditProject && !isLocked && !isLocal && (
                                 <>
                                     {isProjectOwner && isDrive && lastVer.googleDriveId && (
-                                        <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
+                                        <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-2.5 md:p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
                                     )}
-                                    <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
+                                    <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-2.5 md:p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
                                     {canDeleteAssets && (
-                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-2.5 md:p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
                                     )}
                                 </>
                             )}
@@ -917,7 +917,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                     <div><div className="text-sm text-zinc-200 font-medium">{member.name}</div><div className="text-[10px] text-zinc-500">{getDisplayRole(member)}</div></div>
                                 </div>
                                 {isProjectOwner && member.id !== currentUser.id && (
-                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 size={14} /></button>
+                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-2.5 md:p-1"><Trash2 size={14} /></button>
                                 )}
                             </div>
                         ))}

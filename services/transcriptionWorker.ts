@@ -1,12 +1,12 @@
 
-import { pipeline, env } from '@huggingface/transformers';
+import { pipeline, env, type PipelineType } from '@huggingface/transformers';
 
 // Skip local model checks since we are running in browser
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
 class TranscriptionPipeline {
-  static task = 'automatic-speech-recognition';
+  static task: PipelineType = 'automatic-speech-recognition';
   static model = 'Xenova/whisper-tiny'; 
   static instance: any = null;
 

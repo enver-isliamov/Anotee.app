@@ -29,6 +29,16 @@ interface PlayerProps {
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
 
+// T-07: язык распознавания речи = язык интерфейса (i18n-код → BCP-47)
+const SPEECH_RECOGNITION_LANGS: Record<string, string> = {
+    en: 'en-US',
+    ru: 'ru-RU',
+    es: 'es-ES',
+    pt: 'pt-BR',
+    ja: 'ja-JP',
+    ko: 'ko-KR',
+};
+
 const TRANSCRIBE_LANGUAGES = [
     { code: 'auto', label: 'Auto-Detect' },
     { code: 'en', label: 'English' },
@@ -199,7 +209,7 @@ const FloatingControls = React.memo(({
     initialPos, onPositionChange, isLocked, t, 
     handleQuickMarker, seek, handleSetInPoint, handleSetOutPoint, 
     markerInPoint, markerOutPoint, clearMarkers,
-    startListening, isListening, toggleListening, isFullscreen // Add props for voice
+    openVoiceModal, isListening, toggleListening // T-07: mic доступен везде, открывает VoiceModal
 }: any) => {
     // Clamp initial position to be safe
     const getSafePos = (p: {x: number, y: number}) => {
@@ -288,13 +298,10 @@ const FloatingControls = React.memo(({
                 <div className="flex items-center gap-1 w-auto justify-center">
                     <button onClick={handleSetInPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
                     <button onClick={handleSetOutPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
+                    {/* T-07: mic доступен без fullscreen и без маркера — открывает VoiceModal (доступ не только с клавиатуры, мобильные) */}
+                    <button onClick={openVoiceModal} className={`ml-1 w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 md:p-1.5 rounded-lg transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`} title={t('player.voice.open')}><Mic size={16} /></button>
                     {(markerInPoint !== null || markerOutPoint !== null) && (
-                        <>
-                            {isFullscreen && (
-                                <button onClick={toggleListening} className={`ml-1 p-2 md:p-1.5 rounded-lg transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`} title="Voice Comment"><Mic size={16} /></button>
-                            )}
-                            <button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>
-                        </>
+                        <button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>
                     )}
                 </div>
             </div>
@@ -304,7 +311,7 @@ const FloatingControls = React.memo(({
 
 // ... (Rest of file unchanged, just export Player) ...
 export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   
   // Smart Polling: Activate on Mount, Deactivate on Unmount
   useEffect(() => {
@@ -410,6 +417,13 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  // T-07: состояние диктовки — финальные результаты накапливаем, interim подставляем временно.
+  // Всё считается в refs ВНЕ setState-updater (updater обязан быть чистым: React вызывает его повторно),
+  // ручной ввод отслеживаем в onChange (программная установка value onChange не вызывает).
+  const manualBaseRef = useRef('');       // база: текст пользователя на момент старта/ручных правок
+  const finalTranscriptRef = useRef('');  // накопленные финальные результаты
+  const pendingInterimRef = useRef('');   // текущий незавершённый interim
+  const lastDictatedRef = useRef<string | null>(null); // последняя строка, выставленная диктовкой
 
   const [transcript, setTranscript] = useState<TranscriptChunk[] | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -434,7 +448,23 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
               workerRef.current.terminate();
               workerRef.current = null;
           }
+          // T-07: при размонтировании останавливаем распознавание (onend-безопасно)
+          if (recognitionRef.current) {
+              try {
+                  recognitionRef.current.onend = null;
+                  recognitionRef.current.stop();
+              } catch { /* уже остановлено */ }
+              recognitionRef.current = null;
+          }
       };
+  }, []);
+
+  // T-08: window.innerWidth в рендере запрещён (AGENTS.md §5) — только state + resize-листенер
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => window.innerWidth > 768);
+  useEffect(() => {
+      const handleViewportResize = () => setIsDesktopViewport(window.innerWidth > 768);
+      window.addEventListener('resize', handleViewportResize);
+      return () => window.removeEventListener('resize', handleViewportResize);
   }, []);
 
   // ... (Other event listeners for resize etc) ...
@@ -734,27 +764,95 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const saveEdit = (id: string) => { syncCommentAction('update', { id, text: editText }); setEditingCommentId(null); setEditText(''); };
   const handleBulkResolve = () => { comments.filter(c => c.status === CommentStatus.OPEN).forEach(c => syncCommentAction('update', { id: c.id, status: CommentStatus.RESOLVED })); };
   const handleToggleLock = () => { const updatedVersions = [...asset.versions]; const versionToUpdate = { ...updatedVersions[currentVersionIdx] }; versionToUpdate.isLocked = !versionToUpdate.isLocked; updatedVersions[currentVersionIdx] = versionToUpdate; const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); onUpdateProject({ ...project, assets: updatedAssets }); notify(versionToUpdate.isLocked ? t('player.lock_ver') : t('player.unlock_ver'), "info"); };
-  const startListening = () => { 
+  // T-07: ручной ввод в поле комментария во время слушания становится новой базой
+  // (onChange не срабатывает при программной установке value → диктовка не «перепутается» с печатью)
+  const handleCommentTextChange = (value: string) => {
+      if (lastDictatedRef.current === null || value !== lastDictatedRef.current) {
+          manualBaseRef.current = value;
+      }
+      setNewCommentText(value);
+  };
+  // T-07: выставляем текст диктовки: база + накопленные финалы + текущий interim
+  const applyDictation = () => {
+      const dictated = [finalTranscriptRef.current, pendingInterimRef.current].filter(Boolean).join(' ');
+      const next = [manualBaseRef.current, dictated].filter(Boolean).join(' ');
+      lastDictatedRef.current = next;
+      setNewCommentText(next);
+  };
+  const startListening = () => {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) { 
-          notify("Speech recognition not supported in this browser.", "error"); 
-          return; 
-      } 
-      recognitionRef.current = new SpeechRecognition(); 
-      recognitionRef.current.continuous = false; 
-      recognitionRef.current.interimResults = false; 
-      recognitionRef.current.lang = 'en-US'; 
-      recognitionRef.current.onstart = () => setIsListening(true); 
-      recognitionRef.current.onend = () => setIsListening(false); 
-      recognitionRef.current.onresult = (event: any) => { 
-          const t = event.results[0][0].transcript; 
-          setNewCommentText(prev => prev ? `${prev} ${t}` : t); 
-      }; 
-      recognitionRef.current.start(); 
+      if (!SpeechRecognition) {
+          notify(t('player.voice.unsupported'), "error");
+          return;
+      }
+      // Перезапуск: глушим предыдущую сессию, чтобы start() не бросил InvalidStateError
+      if (recognitionRef.current) {
+          try {
+              recognitionRef.current.onend = null;
+              recognitionRef.current.onresult = null;
+              recognitionRef.current.stop();
+          } catch { /* уже остановлено */ }
+          recognitionRef.current = null;
+      }
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      // T-07: язык распознавания = язык интерфейса
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || 'en-US';
+      // База диктовки: текст, который был в поле до старта
+      manualBaseRef.current = newCommentText;
+      finalTranscriptRef.current = '';
+      pendingInterimRef.current = '';
+      lastDictatedRef.current = newCommentText;
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => {
+          setIsListening(false);
+          // continuous=false: сессия завершена — дозакрепляем незавершённый interim как финальный
+          if (pendingInterimRef.current) {
+              const tail = pendingInterimRef.current.trim();
+              finalTranscriptRef.current = finalTranscriptRef.current ? `${finalTranscriptRef.current} ${tail}` : tail;
+              pendingInterimRef.current = '';
+              applyDictation();
+          }
+          if (recognitionRef.current === recognition) recognitionRef.current = null;
+      };
+      // T-07: понятный фидбек вместо молчаливого провала
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === 'not-allowed' || code === 'service-not-allowed') {
+              notify(t('player.voice.err_denied'), "error");
+          } else if (code === 'network') {
+              notify(t('player.voice.err_network'), "error");
+          } else if (code === 'no-speech') {
+              // Пользователь просто промолчал — не ошибка
+          } else {
+              notify(`${t('player.voice.err_generic')}${code}`, "error");
+          }
+          setIsListening(false);
+      };
+      recognition.onresult = (event: any) => {
+          let interim = '';
+          const startIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcript = result[0].transcript as string;
+              if (result.isFinal) {
+                  finalTranscriptRef.current = finalTranscriptRef.current ? `${finalTranscriptRef.current} ${transcript.trim()}` : transcript.trim();
+              } else {
+                  interim += transcript;
+              }
+          }
+          pendingInterimRef.current = interim;
+          applyDictation();
+      };
+      try { recognition.start(); } catch (e) { console.warn("SpeechRecognition start failed", e); setIsListening(false); }
   };
   const toggleListening = () => { if (isListening) recognitionRef.current?.stop(); else startListening(); };
+  // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
+  const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
-  const handleQuickMarker = () => { setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
+  const handleQuickMarker = () => { if (!newCommentText.trim()) { notify(t('player.voice.need_text'), "info"); return; } setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
   const handleSetInPoint = () => { setMarkerInPoint(currentTime); notify("In Point Set", "info"); };
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
@@ -808,7 +906,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
             <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
-            {(!isSearchOpen || window.innerWidth > 768) && (
+            {(!isSearchOpen || isDesktopViewport) && (
               <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
                    <div className="flex items-center gap-2 max-w-full">
                        <div className="relative group/title min-w-0" id="tour-version-selector">
@@ -858,9 +956,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 {isSearchOpen && (<input autoFocus className="w-full bg-transparent text-xs text-zinc-900 dark:text-white outline-none py-1.5" placeholder={t('dash.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onBlur={() => !searchQuery && setIsSearchOpen(false)} />)}
                 <button onClick={() => { if (isSearchOpen && searchQuery) setSearchQuery(''); else setIsSearchOpen(!isSearchOpen); }} className={`p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white ${isSearchOpen ? 'text-zinc-900 dark:text-white' : ''}`}>{isSearchOpen && searchQuery ? <XIcon size={16} /> : <Search size={18} />}</button>
              </div>
-             <div className="hidden md:block">
+             {/* T-08: переключатель вида доступен и на мобильных (ранее hidden md:block — единственная точка доступа к compare) */}
+             <div className="block">
                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
-                 <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="p-1.5 md:p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}</div>
+                 <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}</div>
              </div>
           </div>
         </header>
@@ -890,7 +989,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              </div>
 
              {/* ... Voice Modal ... */}
-             {showVoiceModal && isFullscreen && (
+             {/* T-07: модалка доступна и без fullscreen (мобильные) */}
+             {showVoiceModal && (
                  <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4">
                         <div className="flex items-center gap-4">
@@ -900,7 +1000,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                 <div className="flex items-center gap-2 text-indigo-400 font-mono text-[10px] bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-500/20 w-fit"><span>{formatTimecode(markerInPoint || currentTime, videoFps)}</span>{markerOutPoint && (<><span>→</span><span>{formatTimecode(markerOutPoint, videoFps)}</span></>)}</div>
                             </div>
                         </div>
-                        <textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder={isListening ? "Listening..." : "Type comment..."} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
+                        <textarea value={newCommentText} onChange={(e) => handleCommentTextChange(e.target.value)} placeholder={isListening ? "Listening..." : "Type comment..."} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
                         <div className="flex w-full gap-2"><button onClick={() => closeVoiceModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 font-medium transition-colors text-xs">{t('cancel')}</button><button onClick={() => closeVoiceModal(true)} disabled={!newCommentText.trim() || isLocked} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs">{t('save')}</button></div>
                     </div>
                  </div>
@@ -993,7 +1093,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>)}
                 <div className="flex gap-2 items-start" id="tour-comment-input">
                     <div className="relative flex-1">
-                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
+                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => handleCommentTextChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
                         <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>
                     </div>
                     <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-3 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={16} /></button>
@@ -1014,10 +1114,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         markerInPoint={markerInPoint}
         markerOutPoint={markerOutPoint}
         clearMarkers={clearMarkers}
-        startListening={startListening}
+        openVoiceModal={openVoiceModal}
         isListening={isListening}
         toggleListening={toggleListening}
-        isFullscreen={isFullscreen}
       />
     </div>
   );
