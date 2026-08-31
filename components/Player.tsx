@@ -91,7 +91,7 @@ const PlayerSidebar = React.memo(({
     currentUser, currentTime, editingCommentId, selectedCommentId, 
     setSelectedCommentId, videoRef, setVideoError, setPreviousTime, setIsPlaying,
     startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
-    handleWordTap, isWordDeletedAt, selectedWordIdx, selectionStartIdx, comments: allComments,
+    wordUi, comments: allComments,
     transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
     transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
     setTranscript, seekByFrame, videoFps, t
@@ -101,6 +101,7 @@ const PlayerSidebar = React.memo(({
     const [swipedCommentId, setSwipedCommentId] = useState<string | null>(null);
     const [swipeOffset, setSwipeOffset] = useState(0);
     const touchStartRef = useRef<{x: number, y: number} | null>(null);
+    const selDragRef = useRef(false); // T-26: drag-выделение слов
 
     const handleTouchStart = (e: React.TouchEvent, id: string) => {
         touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -228,13 +229,18 @@ const PlayerSidebar = React.memo(({
                                             <button onClick={() => { setTranscript(null); if (version) clearTranscript(version.id); }} className="text-[10px] text-zinc-400 hover:text-red-500 transition-colors">Clear</button>
                                         </span>
                                     </div>
-                                    <div className="px-4 py-3 text-[15px] leading-loose" data-testid="transcript-words">
+                                    <div className="px-4 py-3 text-[15px] leading-loose [touch-action:pan-y] select-none" data-testid="transcript-words"
+                                        onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } wordUi.onTap(Number(t.dataset.idx)); }}
+                                        onPointerMove={(e) => { if (!selDragRef.current) return; const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null; const t = el?.closest('[data-idx]') as HTMLElement | null; if (t?.dataset.idx !== undefined) wordUi.onExtend(Number(t.dataset.idx)); }}
+                                        onPointerUp={() => { selDragRef.current = false; }}
+                                        onPointerCancel={() => { selDragRef.current = false; }}
+                                    >
                                         {transcript.map((chunk: TranscriptChunk, i: number) => {
-                                            const deleted = isWordDeletedAt(i);
+                                            const deleted = wordUi.isDeletedAt(i);
                                             const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
-                                            const inRange = selectionStartIdx !== null && selectedWordIdx !== null && i >= Math.min(selectionStartIdx, selectedWordIdx) && i <= Math.max(selectionStartIdx, selectedWordIdx);
+                                            const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
                                             return (
-                                                <span key={i} data-testid="transcript-word" onClick={() => handleWordTap(chunk, i)} title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-500/80' : ''} ${inRange ? 'bg-indigo-500/15 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}</span>
+                                                <span key={i} data-idx={i} data-testid="transcript-word" title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-500/80' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}</span>
                                             );
                                         })}
                                     </div>
@@ -889,7 +895,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // Drag handlers moved to FloatingControls component
   const seek = (delta: number) => { if (videoRef.current) { const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); videoRef.current.currentTime = t; setCurrentTime(t); } };
   // T-19: создание комментария вынесено (text параметром) — push-to-talk коммитит без чтения свежего state (stale closure)
-  const createComment = (text: string, timestampOverride?: number) => { const cId = generateId(); syncCommentAction('create', { id: cId, text, timestamp: markerInPoint !== null ? markerInPoint : (timestampOverride ?? currentTime), duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
+  const createComment = (text: string, timestampOverride?: number, durationOverride?: number) => { const cId = generateId(); syncCommentAction('create', { id: cId, text, timestamp: markerInPoint !== null ? markerInPoint : (timestampOverride ?? currentTime), duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : durationOverride, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
   const handleAddComment = () => { createComment(newCommentText); };
   const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
   const handleResolveComment = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const c = comments.find(c => c.id === id); if (c) syncCommentAction('update', { id, status: c.status === CommentStatus.OPEN ? CommentStatus.RESOLVED : CommentStatus.OPEN }); };
@@ -986,38 +992,88 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
   const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
-  // T-25: взаимодействие со словами транскрипта — нижний шит-меню (без режимов)
+  // T-26: выделение слова/фразы/диапазона + док действий (удалить · голос · печать)
   const [showTxtOverlay, setShowTxtOverlay] = useState(false);
-  const [selectedWordIdx, setSelectedWordIdx] = useState<number | null>(null);
-  const [selectionStartIdx, setSelectionStartIdx] = useState<number | null>(null);
-  const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
-      if (!word.timestamp) return;
-      setSelectedWordIdx(idx);
+  const [selRange, setSelRange] = useState<{ start: number; end: number } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMode, setSheetMode] = useState<'actions' | 'typing'>('actions');
+  const [typedText, setTypedText] = useState('');
+  const [sheetRecording, setSheetRecording] = useState(false);
+  const [sheetInterim, setSheetInterim] = useState('');
+  const sheetRecRef = useRef<any>(null);
+  const selDragRef = useRef(false);
+  const selStartTs = selRange ? ((transcript ?? [])[selRange.start]?.timestamp?.[0] ?? 0) : 0;
+  const selEndTs = selRange ? ((transcript ?? [])[selRange.end]?.timestamp?.[1] ?? selStartTs) : 0;
+  const selDuration = Math.max(0.05, selEndTs - selStartTs);
+  const selText = selRange ? rangeDeletionText(transcript ?? [], selRange.start, selRange.end) : '';
+  const rangeHasDeletion = selRange ? findDeletionsInRange(comments, selStartTs, selEndTs).length > 0 : false;
+  const beginSelection = (idx: number) => { setSelRange({ start: idx, end: idx }); setSheetOpen(true); setSheetMode('actions'); };
+  const extendSelection = (idx: number) => setSelRange((r) => (r ? { start: Math.min(r.start, idx), end: Math.max(r.end, idx) } : { start: idx, end: idx }));
+  const closeSelSheet = () => { setSheetOpen(false); setSheetMode('actions'); setTypedText(''); stopSheetRecording(); };
+  const markSelectionDeleted = () => {
+      if (!selRange) return;
+      findDeletionsInRange(comments, selStartTs, selEndTs).forEach((c) => syncCommentAction('delete', { id: c.id }));
+      const label = selRange.start === selRange.end ? t('player.transcript.delete') : t('player.transcript.delete_phrase');
+      syncCommentAction('create', { id: generateId(), text: `${label}: «${selText}»`, timestamp: selStartTs, duration: selDuration, status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+      closeSelSheet();
   };
-  const deleteWord = (idx: number) => {
-      const w = (transcript ?? [])[idx]; if (!w?.timestamp) return;
-      const end = w.timestamp[1] ?? w.timestamp[0] + 0.5;
-      syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete')}: «${w.text.trim()}»`, timestamp: w.timestamp[0], duration: Math.max(0.05, end - w.timestamp[0]), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
-      setSelectedWordIdx(null);
+  const restoreSelection = () => {
+      if (!selRange) return;
+      findDeletionsInRange(comments, selStartTs, selEndTs).forEach((c) => syncCommentAction('delete', { id: c.id }));
+      closeSelSheet();
   };
-  const restoreWord = (idx: number) => {
-      const w = (transcript ?? [])[idx]; if (!w?.timestamp) return;
-      findDeletionsInRange(comments, w.timestamp[0], w.timestamp[1] ?? w.timestamp[0] + 0.5).forEach(c => syncCommentAction('delete', { id: c.id }));
-      setSelectedWordIdx(null);
+  // голосовая правка к выделению: зажал → говоришь (фразы добавляются к комментарию) → отпустил
+  const startSheetRecording = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { notify(t('player.voice.unsupported'), 'error'); return; }
+      if (recognitionRef.current) { try { recognitionRef.current.onend = null; recognitionRef.current.onresult = null; recognitionRef.current.stop(); } catch { /* уже остановлено */ } recognitionRef.current = null; setIsListening(false); }
+      cancelPTT();
+      const recognition = new SpeechRecognition();
+      sheetRecRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || 'en-US';
+      recognition.onstart = () => setSheetRecording(true);
+      recognition.onresult = (event: any) => {
+          let interim = '';
+          const startIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const r = event.results[i];
+              if (r.isFinal) { const txt = r[0].transcript.trim(); if (txt) sheetDictatedRef.current = sheetDictatedRef.current ? `${sheetDictatedRef.current} ${txt}` : txt; }
+              else interim += r[0].transcript;
+          }
+          setSheetInterim([sheetDictatedRef.current, interim].filter(Boolean).join(' '));
+      };
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === 'not-allowed' || code === 'service-not-allowed') notify(t('player.voice.err_denied'), 'error');
+          else if (code === 'network') notify(t('player.voice.err_network'), 'error');
+      };
+      recognition.onend = () => { setSheetRecording(false); sheetRecRef.current = null; setSheetInterim(''); };
+      try { recognition.start(); } catch (e) { console.warn('sheet recording start failed', e); }
   };
-  const deletePhraseRange = (from: number, to: number) => {
-      const arr = transcript ?? [];
-      const s = arr[from]?.timestamp?.[0]; const e = arr[to]?.timestamp?.[1];
-      if (s === undefined || e === undefined) { setSelectionStartIdx(null); setSelectedWordIdx(null); return; }
-      findDeletionsInRange(comments, s, e).forEach(c => syncCommentAction('delete', { id: c.id }));
-      const phraseText = rangeDeletionText(arr, from, to);
-      if (phraseText) syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete_phrase')}: «${phraseText}»`, timestamp: s, duration: Math.max(0.05, e - s), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
-      setSelectionStartIdx(null); setSelectedWordIdx(null);
+  const stopSheetRecording = () => {
+      const rec = sheetRecRef.current;
+      sheetRecRef.current = null;
+      try { rec?.stop(); } catch { /* уже остановлено */ }
+      // отпускание = коммит: одна голосовая правка на выделенный диапазон
+      const dictated = sheetDictatedRef.current.trim();
+      if (dictated) createComment(dictated, selStartTs, selDuration);
+      sheetDictatedRef.current = '';
+      setSheetInterim('');
+      setSheetRecording(false);
+  };
+  const sheetDictatedRef = useRef('');
+  const sendTypedEdit = () => {
+      const text = typedText.trim(); if (!text) return;
+      createComment(text, selStartTs, selDuration);
+      setTypedText(''); setSheetMode('actions');
   };
   const isWordDeletedAt = (idx: number) => {
       const w = (transcript ?? [])[idx];
       return w?.timestamp ? isWordDeleted(comments, w) : false;
   };
+  const wordUi = { onTap: beginSelection, onExtend: extendSelection, isDeletedAt: isWordDeletedAt, selRange };
   const rangeCount = (a: number, b: number) => Math.abs(b - a) + 1;
   // T-23: учёт экранной клавиатуры — поднимаем бар комментариев над ней (мобильные)
   const [kbLift, setKbLift] = useState(0);
@@ -1352,14 +1408,19 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                              <h3 className="text-sm font-bold text-white uppercase tracking-wider">{t('player.txt.title')}</h3>
                              <button onClick={() => setShowTxtOverlay(false)} className="p-2 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white" title={t('cancel')}><XIcon size={18} /></button>
                          </div>
-                         {transcript && transcript.length > 0 ? (
-                             <div className="text-sm leading-loose" data-testid="txt-overlay-words">
+                             {transcript && transcript.length > 0 ? (
+                             <div className="text-sm leading-loose [touch-action:pan-y] select-none" data-testid="txt-overlay-words"
+                                 onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } wordUi.onTap(Number(t.dataset.idx)); }}
+                                 onPointerMove={(e) => { if (!selDragRef.current) return; const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null; const t = el?.closest('[data-idx]') as HTMLElement | null; if (t?.dataset.idx !== undefined) wordUi.onExtend(Number(t.dataset.idx)); }}
+                                 onPointerUp={() => { selDragRef.current = false; }}
+                                 onPointerCancel={() => { selDragRef.current = false; }}
+                             >
                                  {transcript.map((chunk: TranscriptChunk, i: number) => {
-                                     const deleted = isWordDeletedAt(i);
+                                     const deleted = wordUi.isDeletedAt(i);
                                      const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
-                                     const inRange = selectionStartIdx !== null && selectedWordIdx !== null && i >= Math.min(selectionStartIdx, selectedWordIdx) && i <= Math.max(selectionStartIdx, selectedWordIdx);
+                                     const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
                                      return (
-                                         <span key={i} data-testid="transcript-word" onClick={() => handleWordTap(chunk, i)} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : ''} ${inRange ? 'bg-indigo-500/15 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'} ${selectionStartIdx === i ? 'underline decoration-indigo-400 decoration-2 underline-offset-4' : ''}`}>{chunk.text.trim()}</span>
+                                         <span key={i} data-idx={i} data-testid="transcript-word" className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'}`}>{chunk.text.trim()}</span>
                                      );
                                  })}
                              </div>
@@ -1487,7 +1548,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
                 handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
                 setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
-                handleWordTap={handleWordTap} isWordDeletedAt={isWordDeletedAt} selectedWordIdx={selectedWordIdx} selectionStartIdx={selectionStartIdx} comments={comments}
+                wordUi={wordUi} comments={comments}
             />
         )}
 
@@ -1513,28 +1574,49 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             </div>
         )}
       </div>
-      {selectedWordIdx !== null && transcript && transcript[selectedWordIdx] && (
-          <div className="fixed bottom-0 left-0 right-0 z-[90] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl p-4 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }} data-testid="word-sheet">
-              <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">«{(transcript[selectedWordIdx] as any).text.trim()}»</span>
-                  <button onClick={() => { setSelectedWordIdx(null); setSelectionStartIdx(null); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"><XIcon size={16} /></button>
+      {selRange !== null && sheetOpen && transcript && transcript[selRange.start] && (
+          <div className="fixed bottom-0 left-0 right-0 z-[90] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }} data-testid="word-sheet">
+              <div className="flex justify-center pt-2"><div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div></div>
+              <div className="px-4 pt-2 pb-1">
+                  <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">{t('player.sel.range')} · {formatTimecode(selStartTs, videoFps)} → {formatTimecode(selEndTs, videoFps)}</div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-300 truncate">«{selText}»</div>
+                      </div>
+                      <button onClick={closeSelSheet} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 shrink-0"><XIcon size={16} /></button>
+                  </div>
               </div>
-              <div className="flex flex-col gap-2">
-                  {isWordDeletedAt(selectedWordIdx) ? (
-                      <button onClick={() => restoreWord(selectedWordIdx)} className="w-full py-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold" data-testid="word-restore">{t('player.transcript.menu_restore')}</button>
-                  ) : (
-                      <button onClick={() => deleteWord(selectedWordIdx)} className="w-full py-2.5 rounded-lg bg-red-600 text-white text-xs font-bold" data-testid="word-delete">{t('player.transcript.menu_delete_word')}</button>
-                  )}
-                  {selectionStartIdx === null ? (
-                      <button onClick={() => setSelectionStartIdx(selectedWordIdx)} className="w-full py-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold" data-testid="word-select-start">{t('player.transcript.menu_start_selection')}</button>
-                  ) : (
-                      <>
-                          <div className="text-[10px] text-indigo-500 text-center">{t('player.transcript.select_end_hint')}</div>
-                          <button onClick={() => deletePhraseRange(Math.min(selectionStartIdx, selectedWordIdx), Math.max(selectionStartIdx, selectedWordIdx))} className="w-full py-2.5 rounded-lg bg-red-600 text-white text-xs font-bold" data-testid="word-delete-phrase">{t('player.transcript.menu_delete_phrase')} ({rangeCount(selectionStartIdx, selectedWordIdx)})</button>
-                          <button onClick={() => setSelectionStartIdx(null)} className="w-full py-2 rounded-lg text-zinc-500 text-xs font-bold">{t('player.transcript.menu_cancel')}</button>
-                      </>
-                  )}
-              </div>
+              {sheetMode === 'actions' && (
+                  <div className="px-4 pb-3 flex flex-col gap-2">
+                      {rangeHasDeletion ? (
+                          <button onClick={restoreSelection} className="w-full py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold flex items-center justify-center gap-2" data-testid="sel-restore"><RotateCcw size={14} /> {t('player.sel.restore')}</button>
+                      ) : (
+                          <button onClick={markSelectionDeleted} className="w-full py-2.5 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-2" data-testid="sel-delete"><Trash2 size={14} /> {t('player.sel.delete')}</button>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onPointerDown={(e) => { e.preventDefault(); startSheetRecording(); }}
+                              onPointerUp={(e) => { e.preventDefault(); stopSheetRecording(); }}
+                              onPointerCancel={stopSheetRecording}
+                              onLostPointerCapture={stopSheetRecording}
+                              onContextMenu={(e) => e.preventDefault()}
+                              className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
+                              data-testid="sel-voice"
+                          ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
+                          <button onClick={() => setSheetMode('typing')} className="py-2.5 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-2" data-testid="sel-type"><Pencil size={14} /> {t('player.sel.type')}</button>
+                      </div>
+                      {sheetRecording && sheetInterim && (<div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center truncate" data-testid="sheet-interim">{sheetInterim}…</div>)}
+                  </div>
+              )}
+              {sheetMode === 'typing' && (
+                  <div className="px-4 pb-3 flex flex-col gap-2">
+                      <textarea autoFocus value={typedText} onChange={(e) => setTypedText(e.target.value)} rows={2} placeholder={t('player.sel.type_placeholder')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-[13px] text-zinc-900 dark:text-white outline-none focus:border-indigo-500 resize-none" data-testid="sel-typed" />
+                      <div className="flex gap-2">
+                          <button onClick={() => setSheetMode('actions')} className="flex-1 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold">{t('player.transcript.menu_cancel')}</button>
+                          <button onClick={sendTypedEdit} disabled={!typedText.trim()} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2" data-testid="sel-send"><Send size={14} /> {t('player.sel.send')}</button>
+                      </div>
+                  </div>
+              )}
           </div>
       )}
 
