@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
@@ -7,6 +7,7 @@ import { Login } from './components/Login';
 import { Profile } from './components/Profile';
 import { AdminPanel } from './components/AdminPanel';
 import { TestRunner } from './components/TestRunner'; // Import the new component
+import { PublicViewer } from './components/PublicViewer';
 import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
 import { RoadmapPage } from './components/Roadmap/RoadmapPage';
 import { LegalPage } from './components/LegalPages';
@@ -761,6 +762,15 @@ const AuthWrapper: React.FC = () => {
 };
 
 const App: React.FC = () => {
+    // T-21: гостевые ссылки /v/<token> — просмотр одной версии без регистрации.
+    // Рендерим PublicViewer БЕЗ AppLayout: никаких других разделов проекта недоступно.
+    const publicToken = typeof window !== 'undefined' && window.location.pathname.startsWith('/v/') ? window.location.pathname.split('/')[2] : null;
+    if (publicToken) {
+        const guestEnv = (import.meta as any).env || {};
+        const guestKey = guestEnv.VITE_CLERK_PUBLISHABLE_KEY;
+        const guestMock = !guestKey || guestKey.includes('placeholder') || guestKey.includes('YOUR_') || guestKey.length < 20;
+        return <ErrorBoundary>{guestMock ? <LanguageProvider><PublicViewer token={publicToken} isMockMode /></LanguageProvider> : <ClerkProvider publishableKey={guestKey}><LanguageProvider><PublicViewer token={publicToken} /></LanguageProvider></ClerkProvider>}</ErrorBoundary>;
+    }
     const env = (import.meta as any).env || {};
     const clerkPubKey = env.VITE_CLERK_PUBLISHABLE_KEY;
     const isMockMode = !clerkPubKey || 

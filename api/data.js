@@ -1,4 +1,4 @@
-
+﻿
 import { sql } from '@vercel/postgres';
 import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
@@ -58,6 +58,52 @@ function sanitizeProjectForUser(projectData, user, isGuest = false) {
 
 export default async function handler(req, res) {
   try {
+      // ==========================================
+      // T-21: PUBLIC VIEW — гостевой доступ к одной версии БЕЗ регистрации.
+      // Валидация по токену из project.publicShare; Clerk не требуется.
+      // Ветер стоит ДО verifyUser намеренно: гость не аутентифицирован.
+      // ==========================================
+      const earlyAction = req.query && req.query.action;
+      if (earlyAction === 'public_view' && req.method === 'GET') {
+          const token = String(req.query.token || '');
+          if (!token || token.length < 20) return res.status(400).json({ error: 'Invalid token' });
+          const { rows } = await sql`SELECT id, owner_id, data FROM projects WHERE data->'publicShare'->>'token' = ${token} LIMIT 1`;
+          if (!rows || !rows.length) return res.status(404).json({ error: 'Link not found or revoked' });
+          const projectData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+          const share = projectData.publicShare;
+          if (!share || share.token !== token) return res.status(404).json({ error: 'Link not found or revoked' });
+          const sharedAsset = (projectData.assets || []).find(a => a.id === share.assetId);
+          if (!sharedAsset) return res.status(404).json({ error: 'Asset not found' });
+          const sharedVersion = (sharedAsset.versions || []).find(v => v.id === share.versionId);
+          if (!sharedVersion) return res.status(404).json({ error: 'Shared version not found or deleted' }); // M1: без fallback на другую версию
+          if (!sharedVersion) return res.status(404).json({ error: 'Version not found' });
+          let videoUrl = sharedVersion.url || null;
+              if (sharedVersion.storageType === 's3' && sharedVersion.s3Key) {
+                  const { getS3Client } = await import('./_s3.js');
+                  const { s3, config } = await getS3Client(rows[0].owner_id); // B1: контекст владельца без Clerk
+                  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+                  const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+                  videoUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: config.bucket, Key: sharedVersion.s3Key }), { expiresIn: 3600 });
+              } else if (sharedVersion.storageType === 'drive' && sharedVersion.googleDriveId) {
+                  videoUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
+              }
+                  videoUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
+              }
+          } catch (presignErr) {
+              console.error('public_view presign failed', presignErr);
+              videoUrl = null;
+          }
+          const publicComments = (sharedVersion.comments || []).map(c => ({ id: c.id, authorName: c.authorName, text: c.text, timestamp: c.timestamp, duration: c.duration, status: c.status, editKind: c.editKind, createdAt: c.createdAt }));
+          return res.status(200).json({
+              projectName: projectData.name,
+              assetTitle: sharedAsset.title,
+              versionNumber: sharedVersion.versionNumber,
+              videoUrl,
+              comments: publicComments,
+              isLocked: !!sharedVersion.isLocked
+          });
+      }
+
       // FORCE EMAIL FETCH: Required for "Shared with Me" personal invites to work.
       const requireEmail = true; 
       const user = await verifyUser(req, requireEmail);

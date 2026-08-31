@@ -139,3 +139,19 @@
 | T-09 (tsc --noEmit зелёный) | см. статус выше | этот коммит |
 | T-14 (mock-режим без Clerk-краша) | см. статус выше | этот коммит |
 | T-12 (Diagnostics 2.0) | см. статус | — |
+
+### T-20 P1 `done` Плеер: word-level транскрибация, морфирующий таймкод, compare A/B
+- Транскрипция: `return_timestamps: 'word'` в воркере (`wordTimestamps: true`), дефолт языка `auto` (авто-детект Whisper); вкладка Transcript — слова инлайном, тап по слову → комментарий-удаление `editKind: 'delete'` (персистится в проекте → маркер in-out на таймлайне, красный маркер, зачёркнут в списке и в транскрипте); режим фразы (два тапа → диапазон одним комментарием). Утилиты: `services/transcriptUtils.ts` (+unit).
+- Таймкод: одна морфирующая панель — компактная в покое, крупная при скрабе (`data-state=scrub|idle`).
+- Compare: swap A/B, вертикальный стек на мобильном, бейджи A/B, overlay комментариев скрыт в compare.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 24 (вкл. data-state ассерты).
+
+### T-21 P0 `done` Гостевые ссылки на версию без регистрации
+- `Project.publicShare?: { token, assetId, versionId, createdAt } | null`.
+- `api/data.js`: action `public_view` ДО verifyUser (токен-валидация через SQL по JSONB, без Clerk): отдаёт только расшаренную версию (S3 — server-side presign через реэкспортированный `getContextS3` из storage.js; Drive — легаси-URL) + комментарии версии.
+- `components/PublicViewer.tsx` — изолированная страница /v/<token>: видео + комментарии (read-only), без навигации по проекту; mock-режим для e2e.
+- ShareModal (Dashboard): выбор ассета/версии, создание/копирование/отзыв гостевой ссылки (`dash.share.*` i18n пары).
+- Верификация: tsc 0, build 0, e2e public-view (без регистрации, без доступа к другим разделам).
+
+### T-22 P1 `todo` Команда: глубокая доработка прав и доступов
+- Матрица ролей на сервере (owner/manager/member/viewer/public), ограничение PATCH/POST по роли (связано с T-06), UI ролей в ShareModal, аудит действий. Требует дизайна — отдельная задача.

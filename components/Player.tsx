@@ -1,11 +1,12 @@
 ﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, AppConfig } from '../types';
-import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
+import { ArrowLeftRight, Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor, formatTimecode } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
+import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
@@ -89,6 +90,7 @@ const PlayerSidebar = React.memo(({
     currentUser, currentTime, editingCommentId, selectedCommentId, 
     setSelectedCommentId, videoRef, setVideoError, setPreviousTime, setIsPlaying,
     startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
+    phraseMode, setPhraseMode, phraseStartIdx, setPhraseStartIdx, onWordClick, comments: allComments,
     transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
     transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
     setTranscript, seekByFrame, videoFps, t
@@ -194,7 +196,7 @@ const PlayerSidebar = React.memo(({
                                         {!canR && !isE && (<div className={`w-1.5 h-1.5 rounded-full mx-1 ${comment.status==='resolved'?'bg-green-500':'bg-yellow-500'}`} />)}
                                     </div>
                                 </div>
-                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-xs leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}`}>{comment.text}</p>)}
+                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-xs leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}${(comment as any).editKind === 'delete' ? ' line-through text-red-500 dark:text-red-400' : ''}`}>{(comment as any).editKind === 'delete' && (<span className="inline-block mr-1 px-1 rounded bg-red-500/10 text-red-500 text-[9px] font-bold uppercase align-middle">{t('player.transcript.delete')}</span>)}{comment.text}</p>)}
                             </div>
                         </div>);
                     })}
@@ -216,7 +218,28 @@ const PlayerSidebar = React.memo(({
                                 </div>
                             )}
                             {isTranscribing && (<div className="flex flex-col items-center justify-center h-64 px-8 text-center"><Loader2 size={32} className="animate-spin text-indigo-500 mb-4" /><div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden"><div className="bg-indigo-500 h-full transition-all duration-300 ease-out" style={{ width: `${transcribeProgress?.progress || 0}%` }} /></div><p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">{transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}</p></div>)}
-                            {transcript && transcript.length > 0 && (<div className="flex-1 overflow-y-auto p-2 space-y-1"><div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between"><span>Result</span><button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button></div>{transcript.map((chunk: TranscriptChunk, i: number) => { const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]; return (<div key={i} onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)} className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}><div className="flex gap-2"><span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">{chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : '--:--'}</span><p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>{chunk.text}</p></div></div>); })}</div>)}
+                            {transcript && transcript.length > 0 && (
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                    <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between items-center gap-2">
+                                        <span>Result</span>
+                                        <span className="flex items-center gap-2">
+                                            <button onClick={() => { setPhraseMode(!phraseMode); setPhraseStartIdx(null); }} className={`px-2 py-0.5 rounded transition-colors normal-case ${phraseMode ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>{t('player.transcript.phrase_mode')}</button>
+                                            <button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors normal-case">Clear</button>
+                                        </span>
+                                    </div>
+                                    {phraseMode && (<div className="px-2 pb-1 text-[10px] text-indigo-500">{phraseStartIdx === null ? t('player.transcript.phrase_hint') : t('player.transcript.phrase_end')}</div>)}
+                                    <div className="px-2 py-1 text-xs leading-relaxed">
+                                        {transcript.map((chunk: TranscriptChunk, i: number) => {
+                                            const deleted = isWordDeleted(allComments, chunk);
+                                            const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
+                                            const isPhraseStart = phraseMode && phraseStartIdx === i;
+                                            return (
+                                                <span key={i} data-testid="transcript-word" onClick={() => onWordClick(chunk, i)} title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`inline-block mr-1 mb-0.5 px-1 rounded cursor-pointer transition-colors ${deleted ? 'line-through text-red-500 dark:text-red-400 bg-red-500/5 opacity-70' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'} ${isActive && !deleted ? 'bg-indigo-50 dark:bg-indigo-900/20 text-zinc-900 dark:text-white font-medium ring-1 ring-indigo-400' : ''} ${isPhraseStart ? 'ring-2 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/30' : ''}`}>{chunk.text.trim()}{' '}</span>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -531,7 +554,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         notify(`Starting AI Model...`, "info");
         workerRef.current.postMessage({
           type: 'transcribe',
-          audio: audioData,
+          audio: audioData, wordTimestamps: true,
           language: transcribeLanguage,
           model: transcribeModel,
           // Не передаём modelBaseUrl, если зеркало не настроено — воркер ведёт себя как раньше
@@ -959,6 +982,28 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
   const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
+  // T-20: пословное удаление из транскрипта (комментарии editKind=delete персистятся в проекте)
+  const [phraseMode, setPhraseMode] = useState(false);
+  const [phraseStartIdx, setPhraseStartIdx] = useState<number | null>(null);
+  const onWordClick = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
+      if (!word.timestamp) return;
+      const arr = transcript ?? [];
+      if (phraseMode) {
+          if (phraseStartIdx === null) { setPhraseStartIdx(idx); return; }
+          const from = Math.min(idx, phraseStartIdx); const to = Math.max(idx, phraseStartIdx);
+          const s = arr[from]?.timestamp?.[0]; const e = arr[to]?.timestamp?.[1];
+          if (s === undefined || e === undefined) { setPhraseStartIdx(null); return; }
+          findDeletionsInRange(comments, s, e).forEach((c) => syncCommentAction('delete', { id: c.id }));
+          const phraseText = rangeDeletionText(arr, from, to);
+          if (phraseText) syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete_phrase')}: «${phraseText}»`, timestamp: s, duration: Math.max(0.05, e - s), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+          setPhraseStartIdx(null);
+          return;
+      }
+      const existing = findDeletionComment(comments, word);
+      if (existing) { syncCommentAction('delete', { id: existing.id }); return; }
+      const end = word.timestamp[1] ?? word.timestamp[0] + 0.5;
+      syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete')}: «${word.text.trim()}»`, timestamp: word.timestamp[0], duration: Math.max(0.05, end - word.timestamp[0]), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+  };
   // T-19: push-to-talk — зажал mic в FloatingControls → говоришь (маленькая пилюля с живым текстом
   // над контролами, НЕ перекрывая видео) → отпустил → комментарий на текущем таймкоде.
   // Короткий тап (<400ms без диктовки) — прежний workflow: открыть VoiceModal.
@@ -1099,6 +1144,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       if (compareVersionIdx === idx) { setCompareVersionIdx(null); setViewMode('single'); } 
   };
 
+  const scrubActive = isScrubbing || isVideoScrubbing;
   const filteredComments = comments.filter(c => c.text.toLowerCase().includes(searchQuery.toLowerCase()));
   const activeOverlayComments = comments.filter(c => { const s = c.timestamp; const e = c.duration ? (s + c.duration) : (s + 4); return currentTime >= s && currentTime <= e; });
 
@@ -1176,6 +1222,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              <div className="block">
                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
                  {/* T-18: меню поднимается до z-[100] над backdrop z-[90] (образец — version selector) */}
+                 {viewMode === 'side-by-side' && compareVersion && (
+                     <button onClick={() => { const cur = currentVersionIdx; if (compareVersionIdx !== null) { handleSwitchVersion(compareVersionIdx); handleSelectCompareVersion(cur); } }} className="w-10 h-10 flex items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-white transition-colors" title={t('player.compare.swap')}><ArrowLeftRight size={18} /></button>
+                 )}
                  <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-[100] min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}{showMobileViewMenu && <div className="fixed inset-0 z-[90]" onClick={() => setShowMobileViewMenu(false)}></div>}</div>
              </div>
           </div>
@@ -1200,24 +1249,19 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
              </div>
              
-             {/* ... Timecode ... */}
-             <div id="tour-timecode" className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
-                <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime, videoFps)}</div>
-                <div className="h-6 w-px bg-white/20"></div>
-                <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
+             <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
+                <div className={`font-mono text-white tracking-widest transition-all duration-200 ${scrubActive ? 'text-2xl md:text-3xl px-4 py-1.5' : 'text-xs px-2 py-0.5'}`}>{formatTimecode(currentTime, videoFps)}</div>
+                <div className={`${scrubActive ? 'h-8' : 'h-4'} w-px bg-white/20 transition-all`}></div>
+                <button onClick={cycleFps} className={`${scrubActive ? 'px-3 py-2' : 'px-1.5 py-0.5'} hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps`} title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
-             {/* T-18: крупный чип с целевым таймкодом во время свайп-скраба по видео */}
-             {isVideoScrubbing && (
-                <div data-testid="scrub-timecode-chip" className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none bg-black/50 backdrop-blur-sm rounded-xl border border-white/10 shadow-lg px-4 py-2">
-                    <div className="text-white font-mono text-2xl md:text-3xl tracking-widest">{formatTimecode(currentTime, videoFps)}</div>
-                </div>
-             )}
 
              {/* ... Comments Overlay ... */}
+              {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
                  {activeOverlayComments.map(c => { const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
              </div>
+              )}
 
              {/* ... Voice Modal ... */}
              {/* T-07: модалка доступна и без fullscreen (мобильные); T-18: закрытие тапом по backdrop */}
@@ -1285,12 +1329,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              )}
 
              {/* ... Video Element ... */}
-             <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
+             <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? (isDesktopViewport ? 'grid grid-cols-2 gap-1' : 'grid grid-cols-1 gap-2 overflow-y-auto') : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-                    {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
+                    {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">A · v{version.versionNumber}</div>}
                     <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
-                {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
+                {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">B · v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
                 {/* T-18: onPointerCancel/onLostPointerCapture — iOS-системный жест обрывает скраб, safeEnd выводит из режима */}
                 <div data-testid="video-scrub-overlay" className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerCancel={handleVideoDragEnd} onLostPointerCapture={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
              </div>
@@ -1300,7 +1344,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              {/* T-18: onPointerCancel/onLostPointerCapture — safeEnd и для таймлайна */}
              <div id="tour-timeline" className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerCancel={handleTimelinePointerUp} onLostPointerCapture={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
                 <div className="w-full h-2 md:h-1.5 bg-zinc-700/50 rounded-full overflow-hidden relative"><div className="h-full bg-indigo-500" style={{ width: `${(currentTime / duration) * 100}%` }} /></div>
-                {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: c.status === 'resolved' ? '#22c55e' : cl }} />); })}
+                {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: (c as any).editKind === 'delete' ? '#ef4444' : (c.status === 'resolved' ? '#22c55e' : cl) }} />); })}
              </div>
           </div>
         </div>
@@ -1318,6 +1362,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
                 handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
                 setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
+                phraseMode={phraseMode} setPhraseMode={setPhraseMode} phraseStartIdx={phraseStartIdx} setPhraseStartIdx={setPhraseStartIdx} onWordClick={onWordClick} comments={comments}
             />
         )}
 

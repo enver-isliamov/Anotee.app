@@ -1,4 +1,4 @@
-
+﻿
 import { sql } from '@vercel/postgres';
 import { verifyUser } from './_auth.js';
 import { encrypt } from './_crypto.js';
@@ -298,3 +298,4 @@ export default async function handler(req, res) {
         return res.status(status).json({ success: false, error: msg });
     }
 }
+
