@@ -1,4 +1,4 @@
-
+﻿
 export enum CommentStatus {
   OPEN = 'open',
   RESOLVED = 'resolved'
@@ -45,6 +45,8 @@ export interface Comment {
   status: CommentStatus;
   createdAt: string;
   replies?: Comment[];
+  /** T-20: пометка правки-удаления (из word-level транскрипта) */
+  editKind?: 'delete';
 }
 
 export type StorageType = 'vercel' | 'drive' | 'local' | 's3';

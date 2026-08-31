@@ -1,4 +1,4 @@
-
+﻿
 import { pipeline, env, type PipelineType } from '@huggingface/transformers';
 
 // Skip local model checks since we are running in browser
@@ -35,7 +35,7 @@ class TranscriptionPipeline {
 }
 
 self.addEventListener('message', async (event) => {
-  const { type, audio, language, model, modelBaseUrl } = event.data;
+      const { type, audio, language, model, modelBaseUrl, wordTimestamps } = event.data;
 
   if (type === 'transcribe') {
     try {
@@ -58,7 +58,7 @@ self.addEventListener('message', async (event) => {
       const options: any = {
         chunk_length_s: 30,
         stride_length_s: 5,
-        return_timestamps: true,
+        return_timestamps: wordTimestamps ? "word" : true,
       };
 
       // If language is specified and not 'auto', force it.

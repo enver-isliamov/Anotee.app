@@ -91,7 +91,7 @@ test.describe('T-18: свайп-скраб по видео', () => {
     expect(Math.abs(timeAfter - timeBefore - expectedDelta)).toBeLessThanOrEqual(2 / 30);
 
     // После отпускания чип скрыт
-    await expect(page.getByTestId('scrub-timecode-chip')).toHaveCount(0);
+    await expect(page.getByTestId('scrub-timecode-chip')).toHaveAttribute('data-state', 'idle');
   });
 
   test('мультитач: второй палец (другой pointerId) не перехватывает и не завершает скраб', async ({ page }) => {
@@ -119,7 +119,7 @@ test.describe('T-18: свайп-скраб по видео', () => {
     // Первый палец: dx ≈ 60% ширины → кадровая математика 5px=1кадр, FPS 30 (мок)
     const framesMoved = Math.round((endX - startX) / 5);
     expect(Math.abs(timeAfter - framesMoved / 30)).toBeLessThanOrEqual(2 / 30);
-    await expect(page.getByTestId('scrub-timecode-chip')).toHaveCount(0);
+    await expect(page.getByTestId('scrub-timecode-chip')).toHaveAttribute('data-state', 'idle');
   });
 
   test('pointercancel (iOS-системный жест) выводит из скраба: чип скрыт, плеер не зависает', async ({ page }) => {
@@ -141,7 +141,7 @@ test.describe('T-18: свайп-скраб по видео', () => {
     await dispatchPointer(overlay, 'pointercancel', { x: startX + 80, y, pointerId: 1 });
     await dispatchPointer(overlay, 'lostpointercapture', { x: startX + 80, y, pointerId: 1 });
 
-    await expect(page.getByTestId('scrub-timecode-chip')).toHaveCount(0);
+    await expect(page.getByTestId('scrub-timecode-chip')).toHaveAttribute('data-state', 'idle');
   });
 
   test('T-19 push-to-talk: удержание mic → диктовка → отпускание создаёт комментарий', async ({ page }) => {
