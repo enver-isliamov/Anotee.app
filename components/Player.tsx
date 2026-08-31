@@ -7,6 +7,7 @@ import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
 import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
+import { loadTranscript, saveTranscript, clearTranscript } from '../services/transcriptStore';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
@@ -224,7 +225,7 @@ const PlayerSidebar = React.memo(({
                                         <span>Result</span>
                                         <span className="flex items-center gap-2">
                                             <button onClick={() => { setPhraseMode(!phraseMode); setPhraseStartIdx(null); }} className={`px-2 py-0.5 rounded transition-colors normal-case ${phraseMode ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>{t('player.transcript.phrase_mode')}</button>
-                                            <button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors normal-case">Clear</button>
+                                            <button onClick={() => { setTranscript(null); if (version) clearTranscript(version.id); }} className="hover:text-red-500 transition-colors normal-case">Clear</button>
                                         </span>
                                     </div>
                                     {phraseMode && (<div className="px-2 pb-1 text-[10px] text-indigo-500">{phraseStartIdx === null ? t('player.transcript.phrase_hint') : t('player.transcript.phrase_end')}</div>)}
@@ -546,7 +547,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     if (data.status === 'progress') setTranscribeProgress({ status: 'downloading', progress: data.progress || 0 });
                     else if (data.status === 'done') setTranscribeProgress({ status: 'processing', progress: 0 });
                 } else if (type === 'complete') {
-                    if (result && Array.isArray(result.chunks)) { setTranscript(result.chunks); notify("Transcription complete", "success"); }
+                    if (result && Array.isArray(result.chunks)) { setTranscript(result.chunks); saveTranscript(version?.id || "", result.chunks); notify("Transcription complete", "success"); }
                     setIsTranscribing(false); setTranscribeProgress(null);
                 } else if (type === 'error') { console.error("Worker Error:", error); notify(`Transcription Failed: ${error}`, "error"); setIsTranscribing(false); setTranscribeProgress(null); }
              };
@@ -640,7 +641,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   useEffect(() => {
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
-    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null); cancelPTT(); setS3ErrorDetail(null);
+    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(loadTranscript(version?.id || "") || null); cancelPTT(); setS3ErrorDetail(null);
 
     const checkRemoteStatus = async () => {
         if (!isMockMode) {
@@ -987,6 +988,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
   // T-20: пословное удаление из транскрипта (комментарии editKind=delete персистятся в проекте)
+  const [showTxtOverlay, setShowTxtOverlay] = useState(false);
   const [phraseMode, setPhraseMode] = useState(false);
   const [phraseStartIdx, setPhraseStartIdx] = useState<number | null>(null);
   const onWordClick = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
@@ -1123,6 +1125,52 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       setIsPTTActive(false);
       setPttText("");
   };
+  // T-24: фоновая диктовка в фулскрине — каждая финальная фраза → комментарий на свой таймкод
+  const [isLiveDictating, setIsLiveDictating] = useState(false);
+  const [liveText, setLiveText] = useState("");
+  const liveRecognitionRef = useRef<any>(null);
+  const isLiveRef = useRef(false);
+  const startLiveDictation = () => {
+      if (isLiveRef.current) return;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { notify(t("player.voice.unsupported"), "error"); return; }
+      if (recognitionRef.current) { try { recognitionRef.current.onend = null; recognitionRef.current.onresult = null; recognitionRef.current.stop(); } catch { /* уже остановлено */ } recognitionRef.current = null; setIsListening(false); }
+      cancelPTT();
+      const recognition = new SpeechRecognition();
+      liveRecognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || "en-US";
+      recognition.onstart = () => { isLiveRef.current = true; setIsLiveDictating(true); };
+      recognition.onresult = (event: any) => {
+          let interim = "";
+          const startIndex = typeof event.resultIndex === "number" ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcriptText = result[0].transcript as string;
+              if (result.isFinal) {
+                  const text = transcriptText.trim();
+                  if (text) createComment(text, videoRef.current ? videoRef.current.currentTime : undefined); // фоном: фраза → комментарий на текущий таймкод
+              } else interim += transcriptText;
+          }
+          setLiveText(interim);
+      };
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === "not-allowed" || code === "service-not-allowed") notify(t("player.voice.err_denied"), "error");
+          else if (code === "network") notify(t("player.voice.err_network"), "error");
+          else if (code !== "no-speech") notify(`${t("player.voice.err_generic")}${code}`, "error");
+      };
+      recognition.onend = () => { isLiveRef.current = false; setIsLiveDictating(false); liveRecognitionRef.current = null; setLiveText(""); };
+      try { recognition.start(); } catch (e) { console.warn("Live dictation start failed", e); }
+  };
+  const stopLiveDictation = () => {
+      try { liveRecognitionRef.current?.stop(); } catch { /* уже остановлено */ }
+  };
+  // T-24: при размонтировании глушим фоновую диктовку
+  useEffect(() => {
+      return () => { if (liveRecognitionRef.current) { try { liveRecognitionRef.current.onend = null; liveRecognitionRef.current.abort(); } catch { /* уже остановлено */ } liveRecognitionRef.current = null; } };
+  }, []);
   // T-19: при размонтировании глушим PTT-сессию
   useEffect(() => {
       return () => {
@@ -1270,9 +1318,15 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
              
              {/* ... Fullscreen button ... */}
-             <div className="absolute bottom-4 right-4 z-50 opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100 transition-opacity duration-300">
-                <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
-             </div>
+              <div className={`absolute bottom-4 right-4 z-50 flex items-center gap-2 transition-opacity duration-300 ${isFullscreen ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100'}`}>
+                 {isFullscreen && (
+                     <button onClick={() => setShowTxtOverlay(v => !v)} data-testid="txt-toggle" title={t('player.txt.toggle')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg border ${showTxtOverlay ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-white/10'}`}><FileText size={20} /></button>
+                 )}
+                 {isFullscreen && (
+                     <button onClick={() => { if (isLiveDictating) stopLiveDictation(); else startLiveDictation(); }} data-testid="live-mic" title={t('player.live.mic')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg border ${isLiveDictating ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-white/10'}`}>{isLiveDictating ? <MicOff size={20} /> : <Mic size={20} />}</button>
+                 )}
+                 <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
+              </div>
              
              <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
                 <div className={`font-mono text-white tracking-widest transition-all duration-200 ${scrubActive ? 'text-2xl md:text-3xl px-4 py-1.5' : 'text-xs px-2 py-0.5'}`}>{formatTimecode(currentTime, videoFps)}</div>
@@ -1280,6 +1334,40 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 <button onClick={cycleFps} className={`${scrubActive ? 'px-3 py-2' : 'px-1.5 py-0.5'} hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps`} title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
+
+             {/* T-24: TXT-оверлей — весь транскрипт поверх затемнённого видео (фулскрин) */}
+             {isFullscreen && showTxtOverlay && (
+                 <div data-testid="txt-overlay" className="absolute inset-0 z-[110] bg-black/85 backdrop-blur-md pt-16 pb-24 overflow-y-auto">
+                     <div className="max-w-3xl mx-auto px-4">
+                         <div className="flex items-center justify-between mb-4">
+                             <h3 className="text-sm font-bold text-white uppercase tracking-wider">{t('player.txt.title')}</h3>
+                             <div className="flex items-center gap-2">
+                                 {transcript && transcript.length > 0 && (
+                                     <button onClick={() => setPhraseMode(!phraseMode)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${phraseMode ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:text-white'}`}>{t('player.transcript.phrase_mode')}</button>
+                                 )}
+                                 <button onClick={() => setShowTxtOverlay(false)} className="p-2 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white" title={t('cancel')}><XIcon size={18} /></button>
+                             </div>
+                         </div>
+                         {transcript && transcript.length > 0 ? (
+                             <div className="text-sm leading-loose" data-testid="txt-overlay-words">
+                                 {transcript.map((chunk: TranscriptChunk, i: number) => {
+                                     const deleted = isWordDeleted(comments, chunk);
+                                     const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
+                                     const isPhraseStart = phraseMode && phraseStartIdx === i;
+                                     return (
+                                         <span key={i} data-testid="transcript-word" onClick={() => onWordClick(chunk, i)} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : isActive ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'} ${isPhraseStart ? 'underline decoration-indigo-400 decoration-2 underline-offset-4' : ''}`}>{chunk.text.trim()}</span>
+                                     );
+                                 })}
+                             </div>
+                         ) : (
+                             <div className="text-center py-10" data-testid="txt-overlay-empty">
+                                 <p className="text-sm text-zinc-400 mb-4">{t('player.txt.empty_hint')}</p>
+                                 <button onClick={handleTranscribe} disabled={isTranscribing || loadingDrive} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold">{t('player.transcribe.pill')}</button>
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             )}
 
              {/* ... Comments Overlay ... */}
               {viewMode !== 'side-by-side' && (
@@ -1436,9 +1524,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         clearMarkers={clearMarkers}
         openVoiceModal={openVoiceModal}
         isListening={isListening}
-        toggleListening={toggleListening}
-        isPTTActive={isPTTActive}
-        pttText={pttText}
+                isPTTActive={isPTTActive || isLiveDictating} pttText={liveText || pttText}
         onMicPointerDown={startPTT}
         onMicPointerUp={finishPTT}
       />
