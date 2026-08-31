@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff, CircleHelp } from 'lucide-react';
 import { generateId } from '../services/utils';
+import { generateInitialsAvatar } from '../services/avatarUtils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
@@ -318,7 +319,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       const newMember: User = {
           id: inviteEmail, 
           name: inviteEmail.split('@')[0],
-          avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${inviteEmail}`
+          avatar: generateInitialsAvatar(inviteEmail)
       };
 
       const currentTeam = project.team || [];
@@ -660,7 +661,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             src={asset.thumbnail} 
                             alt={asset.title} 
                             className={`w-full h-full object-cover transition-transform duration-500 opacity-80 ${isLocal ? '' : 'group-hover:scale-105 group-hover:opacity-100'}`}
-                            onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
+                            onError={(e) => { (e.target as HTMLImageElement).src = '/img/thumbnail-fallback.jpg'; }}
                         />
                         {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
                         {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}

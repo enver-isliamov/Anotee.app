@@ -1,4 +1,4 @@
-{
+﻿{
   "app.name": "Anotee",
   "loading": "Загрузка...",
   "cancel": "Отмена",
@@ -122,6 +122,7 @@
   "player.voice.err_network": "Сервис распознавания речи недоступен (нужен интернет).",
   "player.voice.err_generic": "Ошибка распознавания речи: ",
   "player.voice.need_text": "Скажите правку голосом или напишите текст",
+          "player.voice.ptt_hint": "Зажми и говори — отпусти, чтобы сохранить правку",
   "player.export.title": "Экспорт маркеров",
   "player.export.xml": "DaVinci Resolve (.xml)",
   "player.export.csv": "Premiere Pro (.csv)",

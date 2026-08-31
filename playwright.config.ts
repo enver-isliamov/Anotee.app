@@ -22,14 +22,14 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       // Мобильные регрессии — только в проекте «mobile».
-      // Regex без ведущей ".*\.": файл лежит в tests/e2e/, перед "mobile" стоит "/".
-      testIgnore: /mobile\.spec\.ts/,
+      // Regex без ведущей ".*\.": файлы лежат в tests/e2e/, перед "mobile" стоит "/".
+      testIgnore: /mobile\.spec\.ts|touch-gestures\.spec\.ts/,
     },
     {
       // Pixel 7: 412×915, hasTouch, mobile UA
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
-      testMatch: /mobile\.spec\.ts/,
+      testMatch: /mobile\.spec\.ts|touch-gestures\.spec\.ts/,
     },
   ],
 });

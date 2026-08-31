@@ -28,6 +28,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check for blocked external hosts (RF)
+        run: npm run check:external
+
   e2e:
     runs-on: ubuntu-latest
     needs: build-test
