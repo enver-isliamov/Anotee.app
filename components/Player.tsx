@@ -196,7 +196,7 @@ const PlayerSidebar = React.memo(({
                                         {!canR && !isE && (<div className={`w-1.5 h-1.5 rounded-full mx-1 ${comment.status==='resolved'?'bg-green-500':'bg-yellow-500'}`} />)}
                                     </div>
                                 </div>
-                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-xs leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}${(comment as any).editKind === 'delete' ? ' line-through text-red-500 dark:text-red-400' : ''}`}>{(comment as any).editKind === 'delete' && (<span className="inline-block mr-1 px-1 rounded bg-red-500/10 text-red-500 text-[9px] font-bold uppercase align-middle">{t('player.transcript.delete')}</span>)}{comment.text}</p>)}
+                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-[13px] leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}${(comment as any).editKind === 'delete' ? ' line-through text-red-500 dark:text-red-400' : ''}`}>{(comment as any).editKind === 'delete' && (<span className="inline-block mr-1 px-1 rounded bg-red-500/10 text-red-500 text-[9px] font-bold uppercase align-middle">{t('player.transcript.delete')}</span>)}{comment.text}</p>)}
                             </div>
                         </div>);
                     })}
@@ -228,7 +228,7 @@ const PlayerSidebar = React.memo(({
                                         </span>
                                     </div>
                                     {phraseMode && (<div className="px-2 pb-1 text-[10px] text-indigo-500">{phraseStartIdx === null ? t('player.transcript.phrase_hint') : t('player.transcript.phrase_end')}</div>)}
-                                    <div className="px-2 py-1 text-xs leading-relaxed">
+                                    <div className="px-2 py-1 text-[13px] leading-relaxed">
                                         {transcript.map((chunk: TranscriptChunk, i: number) => {
                                             const deleted = isWordDeleted(allComments, chunk);
                                             const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
@@ -441,6 +441,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
   // T-18: pointerId — игнор чужих пальцев (мультитач)
   const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean, pointerId: number | null }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false, pointerId: null });
+  // T-23: диагностика ошибки S3 + перезагрузка версии (retry)
+  const [s3ErrorDetail, setS3ErrorDetail] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const [controlsPos, setControlsPos] = useState(() => {
     try {
@@ -637,7 +640,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   useEffect(() => {
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
-    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null); cancelPTT();
+    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null); cancelPTT(); setS3ErrorDetail(null);
 
     const checkRemoteStatus = async () => {
         if (!isMockMode) {
@@ -673,10 +676,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     } else {
                         const err = await presignRes.json();
                         console.error("S3 Sign Failed", err);
-                        throw new Error(err.error || "Failed to sign S3 URL");
+                        throw Object.assign(new Error(err.error || "Failed to sign S3 URL"), { status: presignRes.status });
                     }
                 } catch (e) {
                     console.error("S3 Load Error", e);
+                    const st = (e as any)?.status; setS3ErrorDetail(st === 401 ? 'auth' : (st === 403 || st === 404) ? 'config' : 'network');
                     setVideoError(true);
                 } finally {
                     setLoadingDrive(false);
@@ -1004,6 +1008,21 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       const end = word.timestamp[1] ?? word.timestamp[0] + 0.5;
       syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete')}: «${word.text.trim()}»`, timestamp: word.timestamp[0], duration: Math.max(0.05, end - word.timestamp[0]), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
   };
+  // T-23: учёт экранной клавиатуры — поднимаем бар комментариев над ней (мобильные)
+  const [kbLift, setKbLift] = useState(0);
+  useEffect(() => {
+      const vv = (window as any).visualViewport as VisualViewport | undefined;
+      if (!vv) return;
+      const update = () => {
+          const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          setKbLift(overlap > 120 ? Math.round(overlap) : 0);
+      };
+      vv.addEventListener('resize', update);
+      vv.addEventListener('scroll', update);
+      window.addEventListener('focusin', update);
+      window.addEventListener('focusout', update);
+      return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); window.removeEventListener('focusin', update); window.removeEventListener('focusout', update); };
+  }, []);
   // T-19: push-to-talk — зажал mic в FloatingControls → говоришь (маленькая пилюля с живым текстом
   // над контролами, НЕ перекрывая видео) → отпустил → комментарий на текущем таймкоде.
   // Короткий тап (<400ms без диктовки) — прежний workflow: открыть VoiceModal.
@@ -1167,6 +1186,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         <header className="h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+            {isTranscribing && (
+              <div data-testid="transcribe-pill" title={t('player.transcribe.pill')} className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2.5 py-1 shrink-0">
+                <Wand2 size={12} className="text-indigo-400 animate-pulse" />
+                <span className="text-[10px] font-bold text-indigo-300 whitespace-nowrap">{t('player.transcribe.pill')} {transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span>
+              </div>
+            )}
             <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
             {(!isSearchOpen || isDesktopViewport) && (
               <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
@@ -1294,15 +1319,23 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     
                     {version.storageType === 's3' ? (
                         <>
-                            <p className="text-zinc-300 font-bold text-lg mb-2">S3 Connection Error</p>
-                            <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
-                                Unable to load file from S3 Bucket. This is usually due to CORS misconfiguration or missing permissions.
-                            </p>
-                            {isManager && (
-                                <button onClick={() => onBack()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
-                                    <Settings2 size={16} /> Check S3 Settings
-                                </button>
+                            <p className="text-zinc-300 font-bold text-lg mb-2">{t('player.s3.title')}</p>
+                            <p className="text-xs text-zinc-500 max-w-[280px] mb-2 leading-relaxed">{t('player.s3.desc')}</p>
+                            {s3ErrorDetail && (
+                                <p className="text-[11px] text-orange-300 mb-4 max-w-[280px]" data-testid="s3-error-reason">
+                                    {s3ErrorDetail === 'auth' ? t('player.s3.reason_auth') : s3ErrorDetail === 'config' ? t('player.s3.reason_config') : s3ErrorDetail === 'media' ? t('player.s3.reason_media') : t('player.s3.reason_network')}
+                                </p>
                             )}
+                            <div className="flex flex-col items-center gap-2 mb-2">
+                                <button onClick={() => { setVideoError(false); setDriveUrlRetried(false); setS3ErrorDetail(null); setReloadTick(t => t + 1); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm border border-zinc-700 cursor-pointer" data-testid="s3-retry">
+                                    <RotateCcw size={16} /> {t('player.s3.retry')}
+                                </button>
+                                {isManager && (
+                                    <button onClick={() => onBack()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer">
+                                        <Settings2 size={16} /> {t('player.s3.check_settings')}
+                                    </button>
+                                )}
+                            </div>
                         </>
                     ) : (
                         <>
@@ -1367,8 +1400,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         )}
 
         {!isFullscreen && sidebarTab === 'comments' && (
-            <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>)}
+            <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] transition-[bottom] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]" style={{ bottom: kbLift ? `${kbLift}px` : undefined }}>
+                {(markerInPoint !== null || markerOutPoint !== null) ? (
+                    <div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>
+                ) : (
+                    <div className="flex items-center gap-2 mb-2 px-1" data-testid="comment-context">
+                        <div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20">
+                            <MapPin size={9} />
+                            <span>{t('player.comment.context')} {formatTimecode(currentTime, videoFps)}</span>
+                        </div>
+                    </div>
+                )}
                 <div className="flex gap-2 items-start" id="tour-comment-input">
                     <div className="relative flex-1">
                         <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => handleCommentTextChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
