@@ -102,6 +102,8 @@ export interface Project {
   orgId?: string; 
   isLocked?: boolean; 
   publicAccess?: 'view' | 'none'; // New field for link sharing
+  /** T-21: гостевая ссылка на конкретную версию (просмотр без регистрации) */
+  publicShare?: { token: string; assetId: string; versionId: string; createdAt: string } | null;
   _version?: number; // Optimistic locking version
 }
 
