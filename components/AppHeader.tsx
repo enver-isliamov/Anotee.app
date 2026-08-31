@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState } from 'react';
 import { Menu, X, PlayCircle, Shield, Settings, CircleHelp } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
