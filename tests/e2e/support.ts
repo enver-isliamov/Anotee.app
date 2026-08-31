@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+﻿import { Page, expect } from '@playwright/test';
 
 /**
  * Общие хелперы для e2e (mock-режим: VITE_CLERK_PUBLISHABLE_KEY не задаётся,
@@ -26,29 +26,37 @@ export const resetMockData = (page: Page) => {
  */
 export const installSpeechRecognitionMock = (page: Page, transcript = 'Тестовая голосовая правка') => {
   page.addInitScript((phrase: string) => {
-    class FakeSpeechRecognition {
-      lang = '';
+        class FakeSpeechRecognition {
+      lang = "";
       continuous = false;
       interimResults = false;
       onstart: (() => void) | null = null;
       onend: (() => void) | null = null;
-      onresult: ((event: { resultIndex: number; results: Array<Array<{ transcript: string; isFinal?: boolean }>> }) => void) | null = null;
+      // Форма как в реальном Web Speech API: results[i] — SpeechRecognitionResult
+      // (имеет isFinal) c альтернативой results[i][0].transcript.
+      onresult: ((event: { resultIndex: number; results: { length: number } & Record<number, { isFinal?: boolean; 0: { transcript: string } }> }) => void) | null = null;
       onerror: ((event: unknown) => void) | null = null;
+      _aborted = false;
 
       start() {
         this.onstart?.();
         setTimeout(() => {
+          if (this._aborted) return;
           // 1) interim-результат (без isFinal — как в реальном API)
-          this.onresult?.({ resultIndex: 0, results: [[{ transcript: phrase }]] });
+          this.onresult?.({ resultIndex: 0, results: { 0: { isFinal: false, 0: { transcript: phrase } }, length: 1 } });
           // 2) тот же результат становится финальным
-          this.onresult?.({ resultIndex: 0, results: [[{ transcript: phrase, isFinal: true }]] });
-          this.onend?.();
+          this.onresult?.({ resultIndex: 0, results: { 0: { isFinal: true, 0: { transcript: phrase } }, length: 1 } });
+          // continuous=true (push-to-talk) — сессия живёт до stop()/abort(), как в реальном API;
+          // continuous=false (sidebar/VoiceModal) — авто-завершение после результата
+          if (!this.continuous) this.onend?.();
         }, 200);
       }
       stop() {
+        this._aborted = true;
         this.onend?.();
       }
       abort() {
+        this._aborted = true;
         this.onend?.();
       }
     }
@@ -71,6 +79,55 @@ export const openPlayer = async (page: Page) => {
 
   return page.locator('#tour-comment-input input');
 };
+
+/**
+ * Мокает HTMLMediaElement для жестовых тестов (T-18):
+ *  - duration фиксированный (внешние видео mock-проектов в песочнице не грузятся —
+ *    duration остаётся NaN, скрабу нечем считаться);
+ *  - currentTime хранится в JS-WeakMap (детерминированное чтение без реального media pipeline);
+ *  - видео-запросы абортятся СРАЗУ: media-error срабатывает рано и один раз
+ *    (videoError-оверлей z-50 перекрывает video-scrub-overlay и перехватывает реальные клики),
+ *    после dispatchVideoLoadedMetadata onLoadedMetadata-обработчик делает setVideoError(false).
+ * Вызывать ДО page.goto (addInitScript + page.route). После открытия плеера — dispatchVideoLoadedMetadata.
+ */
+export const installVideoMock = async (page: Page, duration = 100) => {
+  await page.route('**/*.mp4', (route) => route.abort());
+  page.addInitScript((dur: number) => {
+    const mediaProto = HTMLMediaElement.prototype as unknown as Record<string, PropertyDescriptor>;
+    const currentTimes = new WeakMap<HTMLMediaElement, number>();
+    Object.defineProperty(mediaProto, 'duration', {
+      configurable: true,
+      get(this: HTMLMediaElement) { return dur; },
+    });
+    Object.defineProperty(mediaProto, 'currentTime', {
+      configurable: true,
+      get(this: HTMLMediaElement) { return currentTimes.get(this) ?? 0; },
+      set(this: HTMLMediaElement, value: number) { currentTimes.set(this, value); },
+    });
+  }, duration);
+};
+
+/**
+ * Заставляет Player принять mock-duration: React 18 не диспатчит synthetic
+ * 'loadedmetadata' в onLoadedMetadata (проверено эмпирически — media-listener'ы
+ * не ловят несистемные события), поэтому вызываем проп-обработчик напрямую через
+ * `__reactProps$` (тот же механизм, что у React Testing Library).
+ * Вызывать ПОСЛЕ openPlayer.
+ */
+export const dispatchVideoLoadedMetadata = async (page: Page) => {
+  await page.evaluate(() => {
+    const video = document.querySelector('video') as HTMLVideoElement | null;
+    if (!video) throw new Error('video element not found');
+    const propsKey = Object.keys(video).find((k) => k.startsWith('__reactProps$'));
+    if (!propsKey) throw new Error('react props not found on video');
+    const props = video as unknown as Record<string, any>;
+    props[propsKey].onLoadedMetadata({ currentTarget: video });
+  });
+};
+
+/** Текущее currentTime первого <video> на странице (через замоканный геттер). */
+export const getVideoCurrentTime = (page: Page) =>
+  page.evaluate(() => (document.querySelector('video') as HTMLVideoElement | null)?.currentTime ?? -1);
 
 /** Собирает критические ошибки страницы (uncaught exceptions). */
 export const collectPageErrors = (page: Page) => {

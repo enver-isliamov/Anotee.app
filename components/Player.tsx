@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, AppConfig } from '../types';
 import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
@@ -63,8 +63,24 @@ const TRANSCRIBE_MODELS = [
 
 interface TranscriptChunk {
     text: string;
-    timestamp: [number, number] | null; 
+    timestamp: [number, number] | null;
 }
+
+// T-18: чувствительность скраба по видео утверждена владельцем (docs/SETTINGS.md,
+// «Логика Скраббинга»): 5 пикселей = 1 кадр — точность таймкода до кадра при перемотке пальцем.
+const VIDEO_SCRUB_PX_PER_FRAME = 5;
+
+// T-18: безопасный pointer capture — на iOS системный жест может снять capture в любой
+// момент: releasePointerCapture без hasPointerCapture-проверки бросает DOMException,
+// setPointerCapture на уже неактивном pointer — NotFoundError
+const setPointerCaptureSafe = (el: HTMLElement | null, pointerId: number) => {
+    if (!el) return;
+    try { el.setPointerCapture(pointerId); } catch { /* pointer уже неактивен */ }
+};
+const releasePointerCaptureSafe = (el: HTMLElement | null, pointerId: number) => {
+    if (!el) return;
+    try { if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId); } catch { /* capture уже снят */ }
+};
 
 // --- OPTIMIZATION: Memoized Sidebar Component with Mobile Gestures ---
 const PlayerSidebar = React.memo(({ 
@@ -214,7 +230,7 @@ const FloatingControls = React.memo(({
     initialPos, onPositionChange, isLocked, t, 
     handleQuickMarker, seek, handleSetInPoint, handleSetOutPoint, 
     markerInPoint, markerOutPoint, clearMarkers,
-    openVoiceModal, isListening, toggleListening // T-07: mic доступен везде, открывает VoiceModal
+    openVoiceModal, isListening, toggleListening, isPTTActive, pttText, onMicPointerDown, onMicPointerUp // T-19: push-to-talk (зажать-говорить-отпустить)
 }: any) => {
     // Clamp initial position to be safe
     const getSafePos = (p: {x: number, y: number}) => {
@@ -303,8 +319,22 @@ const FloatingControls = React.memo(({
                 <div className="flex items-center gap-1 w-auto justify-center">
                     <button onClick={handleSetInPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
                     <button onClick={handleSetOutPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
-                    {/* T-07: mic доступен без fullscreen и без маркера — открывает VoiceModal (доступ не только с клавиатуры, мобильные) */}
-                    <button onClick={openVoiceModal} className={`ml-1 w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 md:p-1.5 rounded-lg transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`} title={t('player.voice.open')}><Mic size={16} /></button>
+                    {/* T-19: push-to-talk — зажми и говори; короткий тап открывает VoiceModal */}
+                    <button
+                        onPointerDown={(e) => { e.preventDefault(); onMicPointerDown(); }}
+                        onPointerUp={(e) => { e.preventDefault(); onMicPointerUp(); }}
+                        onPointerCancel={() => { onMicPointerUp(); }}
+                        onLostPointerCapture={() => { onMicPointerUp(); }}
+                        onContextMenu={(e) => e.preventDefault()}
+                        className={`ml-1 w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 md:p-1.5 rounded-lg transition-colors touch-none select-none ${isPTTActive ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`}
+                        title={t('player.voice.ptt_hint')}
+                    ><Mic size={16} /></button>
+                    {isPTTActive && (
+                        <div data-testid="ptt-pill" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-max max-w-[260px] bg-black/75 backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2 shadow-xl pointer-events-none z-[10000]">
+                            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"></span><span className="text-[10px] font-bold uppercase tracking-wider text-red-300 shrink-0">REC</span></div>
+                            <div className="text-xs text-white mt-1 break-words line-clamp-2 min-h-[16px]">{pttText || '…'}</div>
+                        </div>
+                    )}
                     {(markerInPoint !== null || markerOutPoint !== null) && (
                         <button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>
                     )}
@@ -382,10 +412,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // ... (Other states remain the same) ...
   const [isScrubbing, setIsScrubbing] = useState(false);
-  const isDragRef = useRef(false); 
-  
+  // T-18: ref-объект вместо boolean — храним pointerId, чтобы второй палец не перезаписывал скраб
+  const isDragRef = useRef<{ active: boolean, pointerId: number | null }>({ active: false, pointerId: null });
+
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false });
+  // T-18: pointerId — игнор чужих пальцев (мультитач)
+  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean, pointerId: number | null }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false, pointerId: null });
 
   const [controlsPos, setControlsPos] = useState(() => {
     try {
@@ -572,11 +604,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleRemoveDeadVersion = async () => { if (!confirm("Remove version?")) return; const uV = asset.versions.filter(v => v.id !== version.id); if (uV.length === 0) { onBack(); return; } let newIdx = Math.min(currentVersionIdx, uV.length - 1); if (newIdx < 0) newIdx = 0; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a); setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(newIdx); onUpdateProject({ ...project, assets: uA }); notify("Version removed", "info"); };
 
+  // T-18: getToken из useAuth() — нестабильная ссылка (в mock-шиме clerkShim.ts создаёт новую
+  // на каждый рендер): в deps эффекта версии она перезапускала эффект на каждом рендере →
+  // `currentTime = 0; load()` отматывал видео назад во время скраба/плейбека. Токен читаем через ref.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
+
   // DRIVE & S3 LOADING (UPDATED)
   useEffect(() => {
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
-    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null);
+    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null); cancelPTT();
 
     const checkRemoteStatus = async () => {
         if (!isMockMode) {
@@ -584,7 +622,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             if (version?.storageType === 's3' && version.s3Key) {
                 setLoadingDrive(true);
                 try {
-                    const token = await getToken();
+                    const token = await getTokenRef.current();
                     // Get Presigned GET URL
                     // UPDATED API PATH
                     const presignRes = await fetch('/api/storage?action=presign', {
@@ -654,7 +692,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     };
     checkRemoteStatus();
     if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; videoRef.current.load(); }
-  }, [version?.id, isMockMode, isOwner, getToken]); 
+  }, [version?.id, isMockMode, isOwner]);
 
   // ... (Rest of Player Handlers, Render logic unchanged) ...
   // Player Handlers
@@ -722,14 +760,69 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
   
   // ... (Timeline scrubbing, video scrubbing, fullscreen, etc unchanged) ...
-  const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleTimelinePointerMove = (e: React.PointerEvent) => { if (isDragRef.current) { updateScrubPosition(e); } };
+  // T-18: pointerId-guard на всех стадиях — Move/Up/Cancel чужого пальца не завершают скраб
+  const handleTimelinePointerDown = (e: React.PointerEvent) => {
+      if (isDragRef.current.active) return; // мультитач: второй палец не перехватывает скраб
+      isDragRef.current = { active: true, pointerId: e.pointerId };
+      setIsScrubbing(true);
+      if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); }
+      updateScrubPosition(e);
+      setPointerCaptureSafe(e.target as HTMLElement, e.pointerId);
+  };
+  const handleTimelinePointerMove = (e: React.PointerEvent) => { if (isDragRef.current.active && isDragRef.current.pointerId === e.pointerId) { updateScrubPosition(e); } };
   const updateScrubPosition = (e: React.PointerEvent) => { if (!timelineRef.current || !videoRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const percentage = x / rect.width; const newTime = percentage * duration; setCurrentTime(newTime); videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+  // T-18: единый safeEnd для pointerup/pointercancel/lostpointercapture (iOS-системный жест
+  // обрывает pointer-сессию — без cancel-обработчиков плеер зависал в режиме скраба)
+  const handleTimelinePointerUp = (e: React.PointerEvent) => {
+      if (!isDragRef.current.active || isDragRef.current.pointerId !== e.pointerId) return;
+      isDragRef.current = { active: false, pointerId: null };
+      setIsScrubbing(false);
+      releasePointerCaptureSafe(e.target as HTMLElement, e.pointerId);
+  };
 
-  const handleVideoDragStart = (e: React.PointerEvent) => { e.preventDefault(); videoScrubRef.current = { startX: e.clientX, startTime: currentTime, isDragging: false, isPressed: true }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleVideoDragMove = (e: React.PointerEvent) => { if (!videoScrubRef.current.isPressed) return; const { startX, startTime, isDragging } = videoScrubRef.current; if (!isDragging) { if (Math.abs(e.clientX - startX) > 10) { videoScrubRef.current.isDragging = true; setIsVideoScrubbing(true); if (isPlaying) togglePlay(); } else { return; } } const deltaX = e.clientX - startX; const pixelsPerFrame = 5; const framesMoved = deltaX / pixelsPerFrame; const timeChange = framesMoved * (1 / videoFps); const newTime = Math.max(0, Math.min(duration, startTime + timeChange)); setCurrentTime(newTime); if(videoRef.current) videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handleVideoDragEnd = (e: React.PointerEvent) => { if (videoScrubRef.current.isPressed && !videoScrubRef.current.isDragging) { togglePlay(); } setIsVideoScrubbing(false); videoScrubRef.current.isDragging = false; videoScrubRef.current.isPressed = false; (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); };
+  // T-18: мультитач — пока первый палец скрабит, pointerdown второго игнорируем;
+  // ширина оверлея кэшируется на pointerdown (getBoundingClientRect на каждый move — layout thrashing)
+  const handleVideoDragStart = (e: React.PointerEvent) => {
+      if (videoScrubRef.current.isPressed) return;
+      e.preventDefault();
+      videoScrubRef.current = { startX: e.clientX, startTime: currentTime, isDragging: false, isPressed: true, pointerId: e.pointerId };
+      setPointerCaptureSafe(e.currentTarget as HTMLElement, e.pointerId);
+  };
+  const handleVideoDragMove = (e: React.PointerEvent) => {
+      const scrub = videoScrubRef.current;
+      if (!scrub.isPressed || scrub.pointerId !== e.pointerId) return; // чужой палец игнорируем
+      if (!scrub.isDragging) {
+          if (Math.abs(e.clientX - scrub.startX) > 10) {
+              scrub.isDragging = true;
+              setIsVideoScrubbing(true);
+              if (isPlaying) togglePlay();
+          } else {
+              return;
+          }
+      }
+      // T-18: кадровая точность утверждена владельцем (SETTINGS.md): 5px = 1 кадр.
+      // duration=0/Infinity/NaN → скраб не двигаем.
+      const scrubDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+      if (scrubDuration <= 0) return;
+      const framesMoved = Math.round((e.clientX - scrub.startX) / VIDEO_SCRUB_PX_PER_FRAME);
+      const newTime = Math.max(0, Math.min(scrubDuration, scrub.startTime + framesMoved / videoFps));
+      setCurrentTime(newTime);
+      if (videoRef.current) videoRef.current.currentTime = newTime;
+      if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
+  };
+  // T-18: safeEnd — тот же обработчик для pointerup, pointercancel и lostpointercapture
+  // (повторный вызов идемпотентен; release только при hasPointerCapture — без проверки
+  // повторный end после cancel бросал DOMException)
+  const handleVideoDragEnd = (e: React.PointerEvent) => {
+      const scrub = videoScrubRef.current;
+      if (scrub.pointerId !== null && scrub.pointerId !== e.pointerId) return; // чужой палец игнорируем
+      if (scrub.isPressed && !scrub.isDragging) togglePlay();
+      setIsVideoScrubbing(false);
+      scrub.isDragging = false;
+      scrub.isPressed = false;
+      scrub.pointerId = null;
+      releasePointerCaptureSafe(e.currentTarget as HTMLElement, e.pointerId);
+  };
 
   const toggleFullScreen = () => { 
       const container = playerContainerRef.current as any;
@@ -768,7 +861,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
   // Drag handlers moved to FloatingControls component
   const seek = (delta: number) => { if (videoRef.current) { const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); videoRef.current.currentTime = t; setCurrentTime(t); } };
-  const handleAddComment = () => { if (!newCommentText.trim()) return; const cId = generateId(); syncCommentAction('create', { id: cId, text: newCommentText, timestamp: markerInPoint !== null ? markerInPoint : currentTime, duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
+  // T-19: создание комментария вынесено (text параметром) — push-to-talk коммитит без чтения свежего state (stale closure)
+  const createComment = (text: string, timestampOverride?: number) => { const cId = generateId(); syncCommentAction('create', { id: cId, text, timestamp: markerInPoint !== null ? markerInPoint : (timestampOverride ?? currentTime), duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
+  const handleAddComment = () => { createComment(newCommentText); };
   const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
   const handleResolveComment = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const c = comments.find(c => c.id === id); if (c) syncCommentAction('update', { id, status: c.status === CommentStatus.OPEN ? CommentStatus.RESOLVED : CommentStatus.OPEN }); };
   const startEditing = (comment: Comment) => { setEditingCommentId(comment.id); setEditText(comment.text); };
@@ -864,6 +959,115 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
   const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
+  // T-19: push-to-talk — зажал mic в FloatingControls → говоришь (маленькая пилюля с живым текстом
+  // над контролами, НЕ перекрывая видео) → отпустил → комментарий на текущем таймкоде.
+  // Короткий тап (<400ms без диктовки) — прежний workflow: открыть VoiceModal.
+  const [isPTTActive, setIsPTTActive] = useState(false);
+  const [pttText, setPttText] = useState("");
+  const pttRecognitionRef = useRef<any>(null);
+  const pttBaseRef = useRef("");
+  const pttFinalRef = useRef("");
+  const pttInterimRef = useRef("");
+  const pttErrorRef = useRef(false);
+  const pttCancelRef = useRef(false);
+  const pttStartedAtRef = useRef(0);
+  const isPTTActiveRef = useRef(false);
+  const startPTT = () => {
+      if (isPTTActiveRef.current) return;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { notify(t("player.voice.unsupported"), "error"); return; }
+      // Глушим sidebar/VoiceModal-сессию, чтобы start() не бросил InvalidStateError
+      if (recognitionRef.current) {
+          try { recognitionRef.current.onend = null; recognitionRef.current.onresult = null; recognitionRef.current.stop(); } catch { /* уже остановлено */ }
+          recognitionRef.current = null;
+          setIsListening(false);
+      }
+      const recognition = new SpeechRecognition();
+      pttRecognitionRef.current = recognition;
+      pttBaseRef.current = newCommentText;
+      pttFinalRef.current = "";
+      pttErrorRef.current = false;
+      pttCancelRef.current = false;
+      pttStartedAtRef.current = Date.now();
+      setPttText("");
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      // T-19: язык распознавания = язык интерфейса (ru/en/es/pt/ja/ko) — не только английский
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || "en-US";
+      recognition.onstart = () => { isPTTActiveRef.current = true; setIsPTTActive(true); };
+      recognition.onresult = (event: any) => {
+          let interim = "";
+          const startIndex = typeof event.resultIndex === "number" ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcript = result[0].transcript as string;
+              if (result.isFinal) pttFinalRef.current = pttFinalRef.current ? `${pttFinalRef.current} ${transcript.trim()}` : transcript.trim();
+              else interim += transcript;
+          }
+          pttInterimRef.current = interim;
+          setPttText([pttFinalRef.current, interim].filter(Boolean).join(" "));
+      };
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === "not-allowed" || code === "service-not-allowed") notify(t("player.voice.err_denied"), "error");
+          else if (code === "network") notify(t("player.voice.err_network"), "error");
+          else if (code === "no-speech") { /* промолчал — не ошибка */ }
+          else { pttErrorRef.current = true; notify(`${t("player.voice.err_generic")}${code}`, "error"); }
+      };
+      recognition.onend = () => { finishPTTCommit(); };
+      try { recognition.start(); } catch (e) { console.warn("PTT start failed", e); }
+  };
+  const finishPTTCommit = () => {
+      if (!pttRecognitionRef.current) return; // идемпотентность: onend может прийти повторно
+      pttRecognitionRef.current = null;
+      isPTTActiveRef.current = false;
+      setIsPTTActive(false);
+      setPttText("");
+      if (pttCancelRef.current) { pttCancelRef.current = false; return; } // тап-отмена: модалка уже открыта
+      pttInterimRef.current = "";
+      const dictated = [pttFinalRef.current.trim(), pttInterimRef.current.trim()].filter(Boolean).join(" ");
+      const text = [pttBaseRef.current, dictated].filter(Boolean).join(" ").trim();
+      if (!dictated) {
+          if (!pttErrorRef.current) notify(t("player.voice.need_text"), "warning");
+          pttErrorRef.current = false;
+          return;
+      }
+      pttErrorRef.current = false;
+      // T-19 (ревью): живой таймкод из videoRef на момент отпускания — иначе stale closure от рендера на pointerdown
+      createComment(text, videoRef.current ? videoRef.current.currentTime : undefined);
+  };
+  const finishPTT = () => {
+      const elapsed = Date.now() - pttStartedAtRef.current;
+      if (elapsed < 400 && !pttFinalRef.current) {
+          // Короткий тап без диктовки — открыть VoiceModal (десктоп-workflow)
+          pttCancelRef.current = true;
+          try { pttRecognitionRef.current?.abort(); } catch { /* уже остановлено */ }
+          pttRecognitionRef.current = null;
+          isPTTActiveRef.current = false;
+          setIsPTTActive(false);
+          openVoiceModal();
+          return;
+      }
+      pttCancelRef.current = false;
+      try { pttRecognitionRef.current?.stop(); } catch { /* уже остановлено */ }
+  };
+  const cancelPTT = () => {
+      pttCancelRef.current = true;
+      try { pttRecognitionRef.current?.abort(); } catch { /* уже остановлено */ }
+      pttRecognitionRef.current = null;
+      isPTTActiveRef.current = false;
+      setIsPTTActive(false);
+      setPttText("");
+  };
+  // T-19: при размонтировании глушим PTT-сессию
+  useEffect(() => {
+      return () => {
+          if (pttRecognitionRef.current) {
+              try { pttRecognitionRef.current.onend = null; pttRecognitionRef.current.abort(); } catch { /* уже остановлено */ }
+              pttRecognitionRef.current = null;
+          }
+      };
+  }, []);
   const handleQuickMarker = () => { if (!newCommentText.trim()) { notify(t('player.voice.need_text'), "info"); return; } setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
   const handleSetInPoint = () => { setMarkerInPoint(currentTime); notify("In Point Set", "info"); };
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
@@ -971,10 +1175,18 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              {/* T-08: переключатель вида доступен и на мобильных (ранее hidden md:block — единственная точка доступа к compare) */}
              <div className="block">
                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
-                 <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}</div>
+                 {/* T-18: меню поднимается до z-[100] над backdrop z-[90] (образец — version selector) */}
+                 <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-[100] min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}{showMobileViewMenu && <div className="fixed inset-0 z-[90]" onClick={() => setShowMobileViewMenu(false)}></div>}</div>
              </div>
           </div>
         </header>
+      )}
+
+      {/* T-18: корневой backdrop — header с backdrop-blur-md становится containing block для
+          fixed-потомков (как у version selector'а — его backdrop клипуется до header), поэтому
+          полноэкранное закрытие даёт этот слой: z-40 — над видео (z-30), под header (z-50) */}
+      {!isFullscreen && showMobileViewMenu && (
+        <div data-testid="mobile-view-menu-backdrop" className="fixed inset-0 z-40" onClick={() => setShowMobileViewMenu(false)}></div>
       )}
 
       {/* Body */}
@@ -995,16 +1207,23 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
+             {/* T-18: крупный чип с целевым таймкодом во время свайп-скраба по видео */}
+             {isVideoScrubbing && (
+                <div data-testid="scrub-timecode-chip" className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none bg-black/50 backdrop-blur-sm rounded-xl border border-white/10 shadow-lg px-4 py-2">
+                    <div className="text-white font-mono text-2xl md:text-3xl tracking-widest">{formatTimecode(currentTime, videoFps)}</div>
+                </div>
+             )}
+
              {/* ... Comments Overlay ... */}
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
                  {activeOverlayComments.map(c => { const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
              </div>
 
              {/* ... Voice Modal ... */}
-             {/* T-07: модалка доступна и без fullscreen (мобильные) */}
+             {/* T-07: модалка доступна и без fullscreen (мобильные); T-18: закрытие тапом по backdrop */}
              {showVoiceModal && (
-                 <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4">
+                 <div data-testid="voice-modal-backdrop" className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => closeVoiceModal(false)}>
+                    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer shrink-0 ${isListening ? 'bg-red-500/20 ring-4 ring-red-500/20 scale-110' : 'bg-zinc-800 hover:bg-zinc-700'}`} onClick={toggleListening}><Mic size={20} className={`${isListening ? 'text-red-500 animate-pulse' : 'text-zinc-400'}`} /></div>
                             <div className="flex-1 overflow-hidden">
@@ -1072,12 +1291,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
                 {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
-                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
+                {/* T-18: onPointerCancel/onLostPointerCapture — iOS-системный жест обрывает скраб, safeEnd выводит из режима */}
+                <div data-testid="video-scrub-overlay" className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerCancel={handleVideoDragEnd} onLostPointerCapture={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
              </div>
           </div>
 
           <div className={`${isVerticalVideo ? 'absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pb-6 pt-10' : 'bg-zinc-900 border-t border-zinc-800 pb-2'} p-2 lg:p-4 shrink-0 transition-transform duration-300`}>
-             <div id="tour-timeline" className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
+             {/* T-18: onPointerCancel/onLostPointerCapture — safeEnd и для таймлайна */}
+             <div id="tour-timeline" className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerCancel={handleTimelinePointerUp} onLostPointerCapture={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
                 <div className="w-full h-2 md:h-1.5 bg-zinc-700/50 rounded-full overflow-hidden relative"><div className="h-full bg-indigo-500" style={{ width: `${(currentTime / duration) * 100}%` }} /></div>
                 {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: c.status === 'resolved' ? '#22c55e' : cl }} />); })}
              </div>
@@ -1129,6 +1350,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         openVoiceModal={openVoiceModal}
         isListening={isListening}
         toggleListening={toggleListening}
+        isPTTActive={isPTTActive}
+        pttText={pttText}
+        onMicPointerDown={startPTT}
+        onMicPointerUp={finishPTT}
       />
     </div>
   );
