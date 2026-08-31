@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -20,7 +20,8 @@ jobs:
       - run: npm ci
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: for f in api/*.js; do node --check "$f"; done
+      npx tsc --noEmit
 
       - name: Unit tests
         run: npm run test

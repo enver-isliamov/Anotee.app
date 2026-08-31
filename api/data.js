@@ -76,17 +76,15 @@ export default async function handler(req, res) {
           if (!sharedAsset) return res.status(404).json({ error: 'Asset not found' });
           const sharedVersion = (sharedAsset.versions || []).find(v => v.id === share.versionId);
           if (!sharedVersion) return res.status(404).json({ error: 'Shared version not found or deleted' }); // M1: без fallback на другую версию
-          if (!sharedVersion) return res.status(404).json({ error: 'Version not found' });
           let videoUrl = sharedVersion.url || null;
+          try {
               if (sharedVersion.storageType === 's3' && sharedVersion.s3Key) {
                   const { getS3Client } = await import('./_s3.js');
-                  const { s3, config } = await getS3Client(rows[0].owner_id); // B1: контекст владельца без Clerk
+                  const { s3, config } = await getS3Client(rows[0].owner_id); // B1: presign от имени владельца, без Clerk
                   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
                   const { GetObjectCommand } = await import('@aws-sdk/client-s3');
                   videoUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: config.bucket, Key: sharedVersion.s3Key }), { expiresIn: 3600 });
               } else if (sharedVersion.storageType === 'drive' && sharedVersion.googleDriveId) {
-                  videoUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
-              }
                   videoUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
               }
           } catch (presignErr) {
