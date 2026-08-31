@@ -65,9 +65,23 @@ self.addEventListener('message', async (event) => {
       // If undefined or 'auto', Whisper detects language automatically.
       if (language && language !== 'auto') {
           options.language = language;
+          options.task = 'transcribe';
       }
 
-      const output = await transcriber(audio, options);
+      let output: any;
+      try {
+        output = await transcriber(audio, options);
+      } catch (wordErr: any) {
+        // T-25: устойчивость — некоторые модели/языки не поддерживают word-level таймстампы;
+        // повторяем без них, чтобы транскрипция не падала совсем
+        const msg = String(wordErr?.message || wordErr);
+        if (wordTimestamps && /word|timestamp|alignment/i.test(msg)) {
+          self.postMessage({ type: 'warn', data: { message: 'word-level unsupported, falling back to sentence-level' } });
+          output = await transcriber(audio, { ...options, return_timestamps: true });
+        } else {
+          throw wordErr;
+        }
+      }
 
       self.postMessage({
         type: 'complete',

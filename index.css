@@ -1,5 +1,16 @@
-/* Входная точка Tailwind — подключается в index.tsx (import './index.css').
+﻿/* Входная точка Tailwind — подключается в index.tsx (import './index.css').
    Папку src/ не создаём (железное правило №6 AGENTS.md), файл лежит в корне рядом с index.tsx. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* T-25: PWA standalone — контент не уезжает под статус-бар */
+@media (display-mode: standalone) {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+/* T-25: iA-принцип — комфортная длина строки для чтения транскрипта */
+.reading-column {
+  max-width: 72ch;
+}

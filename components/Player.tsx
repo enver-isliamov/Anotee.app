@@ -91,7 +91,7 @@ const PlayerSidebar = React.memo(({
     currentUser, currentTime, editingCommentId, selectedCommentId, 
     setSelectedCommentId, videoRef, setVideoError, setPreviousTime, setIsPlaying,
     startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
-    phraseMode, setPhraseMode, phraseStartIdx, setPhraseStartIdx, onWordClick, comments: allComments,
+    handleWordTap, isWordDeletedAt, selectedWordIdx, selectionStartIdx, comments: allComments,
     transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
     transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
     setTranscript, seekByFrame, videoFps, t
@@ -220,22 +220,21 @@ const PlayerSidebar = React.memo(({
                             )}
                             {isTranscribing && (<div className="flex flex-col items-center justify-center h-64 px-8 text-center"><Loader2 size={32} className="animate-spin text-indigo-500 mb-4" /><div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden"><div className="bg-indigo-500 h-full transition-all duration-300 ease-out" style={{ width: `${transcribeProgress?.progress || 0}%` }} /></div><p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">{transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}</p></div>)}
                             {transcript && transcript.length > 0 && (
-                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                    <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between items-center gap-2">
-                                        <span>Result</span>
-                                        <span className="flex items-center gap-2">
-                                            <button onClick={() => { setPhraseMode(!phraseMode); setPhraseStartIdx(null); }} className={`px-2 py-0.5 rounded transition-colors normal-case ${phraseMode ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>{t('player.transcript.phrase_mode')}</button>
-                                            <button onClick={() => { setTranscript(null); if (version) clearTranscript(version.id); }} className="hover:text-red-500 transition-colors normal-case">Clear</button>
+                                <div className="flex-1 overflow-y-auto">
+                                    <div className="px-4 py-2.5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/50 sticky top-0 bg-white dark:bg-zinc-900 z-10">
+                                        <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Transcript</span>
+                                        <span className="flex items-center gap-3">
+                                            {isTranscribing && <span className="text-[10px] text-indigo-400 font-bold">{transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span>}
+                                            <button onClick={() => { setTranscript(null); if (version) clearTranscript(version.id); }} className="text-[10px] text-zinc-400 hover:text-red-500 transition-colors">Clear</button>
                                         </span>
                                     </div>
-                                    {phraseMode && (<div className="px-2 pb-1 text-[10px] text-indigo-500">{phraseStartIdx === null ? t('player.transcript.phrase_hint') : t('player.transcript.phrase_end')}</div>)}
-                                    <div className="px-2 py-1 text-[13px] leading-relaxed">
+                                    <div className="px-4 py-3 text-[15px] leading-loose" data-testid="transcript-words">
                                         {transcript.map((chunk: TranscriptChunk, i: number) => {
-                                            const deleted = isWordDeleted(allComments, chunk);
+                                            const deleted = isWordDeletedAt(i);
                                             const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
-                                            const isPhraseStart = phraseMode && phraseStartIdx === i;
+                                            const inRange = selectionStartIdx !== null && selectedWordIdx !== null && i >= Math.min(selectionStartIdx, selectedWordIdx) && i <= Math.max(selectionStartIdx, selectedWordIdx);
                                             return (
-                                                <span key={i} data-testid="transcript-word" onClick={() => onWordClick(chunk, i)} title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`inline-block mr-1 mb-0.5 px-1 rounded cursor-pointer transition-colors ${deleted ? 'line-through text-red-500 dark:text-red-400 bg-red-500/5 opacity-70' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'} ${isActive && !deleted ? 'bg-indigo-50 dark:bg-indigo-900/20 text-zinc-900 dark:text-white font-medium ring-1 ring-indigo-400' : ''} ${isPhraseStart ? 'ring-2 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/30' : ''}`}>{chunk.text.trim()}{' '}</span>
+                                                <span key={i} data-testid="transcript-word" onClick={() => handleWordTap(chunk, i)} title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-500/80' : ''} ${inRange ? 'bg-indigo-500/15 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}</span>
                                             );
                                         })}
                                     </div>
@@ -987,29 +986,39 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
   const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
-  // T-20: пословное удаление из транскрипта (комментарии editKind=delete персистятся в проекте)
+  // T-25: взаимодействие со словами транскрипта — нижний шит-меню (без режимов)
   const [showTxtOverlay, setShowTxtOverlay] = useState(false);
-  const [phraseMode, setPhraseMode] = useState(false);
-  const [phraseStartIdx, setPhraseStartIdx] = useState<number | null>(null);
-  const onWordClick = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
+  const [selectedWordIdx, setSelectedWordIdx] = useState<number | null>(null);
+  const [selectionStartIdx, setSelectionStartIdx] = useState<number | null>(null);
+  const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
       if (!word.timestamp) return;
-      const arr = transcript ?? [];
-      if (phraseMode) {
-          if (phraseStartIdx === null) { setPhraseStartIdx(idx); return; }
-          const from = Math.min(idx, phraseStartIdx); const to = Math.max(idx, phraseStartIdx);
-          const s = arr[from]?.timestamp?.[0]; const e = arr[to]?.timestamp?.[1];
-          if (s === undefined || e === undefined) { setPhraseStartIdx(null); return; }
-          findDeletionsInRange(comments, s, e).forEach((c) => syncCommentAction('delete', { id: c.id }));
-          const phraseText = rangeDeletionText(arr, from, to);
-          if (phraseText) syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete_phrase')}: «${phraseText}»`, timestamp: s, duration: Math.max(0.05, e - s), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
-          setPhraseStartIdx(null);
-          return;
-      }
-      const existing = findDeletionComment(comments, word);
-      if (existing) { syncCommentAction('delete', { id: existing.id }); return; }
-      const end = word.timestamp[1] ?? word.timestamp[0] + 0.5;
-      syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete')}: «${word.text.trim()}»`, timestamp: word.timestamp[0], duration: Math.max(0.05, end - word.timestamp[0]), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+      setSelectedWordIdx(idx);
   };
+  const deleteWord = (idx: number) => {
+      const w = (transcript ?? [])[idx]; if (!w?.timestamp) return;
+      const end = w.timestamp[1] ?? w.timestamp[0] + 0.5;
+      syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete')}: «${w.text.trim()}»`, timestamp: w.timestamp[0], duration: Math.max(0.05, end - w.timestamp[0]), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+      setSelectedWordIdx(null);
+  };
+  const restoreWord = (idx: number) => {
+      const w = (transcript ?? [])[idx]; if (!w?.timestamp) return;
+      findDeletionsInRange(comments, w.timestamp[0], w.timestamp[1] ?? w.timestamp[0] + 0.5).forEach(c => syncCommentAction('delete', { id: c.id }));
+      setSelectedWordIdx(null);
+  };
+  const deletePhraseRange = (from: number, to: number) => {
+      const arr = transcript ?? [];
+      const s = arr[from]?.timestamp?.[0]; const e = arr[to]?.timestamp?.[1];
+      if (s === undefined || e === undefined) { setSelectionStartIdx(null); setSelectedWordIdx(null); return; }
+      findDeletionsInRange(comments, s, e).forEach(c => syncCommentAction('delete', { id: c.id }));
+      const phraseText = rangeDeletionText(arr, from, to);
+      if (phraseText) syncCommentAction('create', { id: generateId(), text: `${t('player.transcript.delete_phrase')}: «${phraseText}»`, timestamp: s, duration: Math.max(0.05, e - s), status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+      setSelectionStartIdx(null); setSelectedWordIdx(null);
+  };
+  const isWordDeletedAt = (idx: number) => {
+      const w = (transcript ?? [])[idx];
+      return w?.timestamp ? isWordDeleted(comments, w) : false;
+  };
+  const rangeCount = (a: number, b: number) => Math.abs(b - a) + 1;
   // T-23: учёт экранной клавиатуры — поднимаем бар комментариев над ней (мобильные)
   const [kbLift, setKbLift] = useState(0);
   useEffect(() => {
@@ -1231,7 +1240,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       <input type="file" accept=".mp4,.mov,.mkv,.webm,video/mp4,video/quicktime" style={{ display: 'none' }} ref={localFileRef} onChange={handleLocalFileSelect} onClick={(e) => (e.currentTarget.value = '')} />
 
       {!isFullscreen && (
-        <header className="h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
+        <header className="safe-top h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
             {isTranscribing && (
@@ -1341,21 +1350,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                      <div className="max-w-3xl mx-auto px-4">
                          <div className="flex items-center justify-between mb-4">
                              <h3 className="text-sm font-bold text-white uppercase tracking-wider">{t('player.txt.title')}</h3>
-                             <div className="flex items-center gap-2">
-                                 {transcript && transcript.length > 0 && (
-                                     <button onClick={() => setPhraseMode(!phraseMode)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${phraseMode ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:text-white'}`}>{t('player.transcript.phrase_mode')}</button>
-                                 )}
-                                 <button onClick={() => setShowTxtOverlay(false)} className="p-2 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white" title={t('cancel')}><XIcon size={18} /></button>
-                             </div>
+                             <button onClick={() => setShowTxtOverlay(false)} className="p-2 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white" title={t('cancel')}><XIcon size={18} /></button>
                          </div>
                          {transcript && transcript.length > 0 ? (
                              <div className="text-sm leading-loose" data-testid="txt-overlay-words">
                                  {transcript.map((chunk: TranscriptChunk, i: number) => {
-                                     const deleted = isWordDeleted(comments, chunk);
+                                     const deleted = isWordDeletedAt(i);
                                      const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
-                                     const isPhraseStart = phraseMode && phraseStartIdx === i;
+                                     const inRange = selectionStartIdx !== null && selectedWordIdx !== null && i >= Math.min(selectionStartIdx, selectedWordIdx) && i <= Math.max(selectionStartIdx, selectedWordIdx);
                                      return (
-                                         <span key={i} data-testid="transcript-word" onClick={() => onWordClick(chunk, i)} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : isActive ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'} ${isPhraseStart ? 'underline decoration-indigo-400 decoration-2 underline-offset-4' : ''}`}>{chunk.text.trim()}</span>
+                                         <span key={i} data-testid="transcript-word" onClick={() => handleWordTap(chunk, i)} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : ''} ${inRange ? 'bg-indigo-500/15 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'} ${selectionStartIdx === i ? 'underline decoration-indigo-400 decoration-2 underline-offset-4' : ''}`}>{chunk.text.trim()}</span>
                                      );
                                  })}
                              </div>
@@ -1483,7 +1487,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
                 handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
                 setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
-                phraseMode={phraseMode} setPhraseMode={setPhraseMode} phraseStartIdx={phraseStartIdx} setPhraseStartIdx={setPhraseStartIdx} onWordClick={onWordClick} comments={comments}
+                handleWordTap={handleWordTap} isWordDeletedAt={isWordDeletedAt} selectedWordIdx={selectedWordIdx} selectionStartIdx={selectionStartIdx} comments={comments}
             />
         )}
 
@@ -1509,6 +1513,30 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             </div>
         )}
       </div>
+      {selectedWordIdx !== null && transcript && transcript[selectedWordIdx] && (
+          <div className="fixed bottom-0 left-0 right-0 z-[90] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl p-4 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }} data-testid="word-sheet">
+              <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">«{(transcript[selectedWordIdx] as any).text.trim()}»</span>
+                  <button onClick={() => { setSelectedWordIdx(null); setSelectionStartIdx(null); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"><XIcon size={16} /></button>
+              </div>
+              <div className="flex flex-col gap-2">
+                  {isWordDeletedAt(selectedWordIdx) ? (
+                      <button onClick={() => restoreWord(selectedWordIdx)} className="w-full py-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold" data-testid="word-restore">{t('player.transcript.menu_restore')}</button>
+                  ) : (
+                      <button onClick={() => deleteWord(selectedWordIdx)} className="w-full py-2.5 rounded-lg bg-red-600 text-white text-xs font-bold" data-testid="word-delete">{t('player.transcript.menu_delete_word')}</button>
+                  )}
+                  {selectionStartIdx === null ? (
+                      <button onClick={() => setSelectionStartIdx(selectedWordIdx)} className="w-full py-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold" data-testid="word-select-start">{t('player.transcript.menu_start_selection')}</button>
+                  ) : (
+                      <>
+                          <div className="text-[10px] text-indigo-500 text-center">{t('player.transcript.select_end_hint')}</div>
+                          <button onClick={() => deletePhraseRange(Math.min(selectionStartIdx, selectedWordIdx), Math.max(selectionStartIdx, selectedWordIdx))} className="w-full py-2.5 rounded-lg bg-red-600 text-white text-xs font-bold" data-testid="word-delete-phrase">{t('player.transcript.menu_delete_phrase')} ({rangeCount(selectionStartIdx, selectedWordIdx)})</button>
+                          <button onClick={() => setSelectionStartIdx(null)} className="w-full py-2 rounded-lg text-zinc-500 text-xs font-bold">{t('player.transcript.menu_cancel')}</button>
+                      </>
+                  )}
+              </div>
+          </div>
+      )}
 
       <FloatingControls 
         initialPos={controlsPos}
