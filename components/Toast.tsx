@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Info, X, AlertTriangle } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -33,12 +33,14 @@ export const ToastContainer: React.FC<ToastProps> = ({ toasts, removeToast }) =>
 };
 
 const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ toast, onRemove }) => {
+  // T-27: таймер живёт один раз на жизнь тоста — onRemove меняет идентичность каждый рендер родителя,
   useEffect(() => {
+  const onRemoveRef = useRef(onRemove); onRemoveRef.current = onRemove;
     const timer = setTimeout(() => {
-      onRemove();
+      onRemoveRef.current();
     }, TOAST_DURATION_MS[toast.type]);
     return () => clearTimeout(timer);
-  }, [onRemove, toast.type]);
+  }, []);
 
   const icons = {
     success: <CheckCircle size={16} className="text-green-400" />,

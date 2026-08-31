@@ -1,4 +1,3 @@
-﻿
 import { pipeline, env, type PipelineType } from '@huggingface/transformers';
 
 // Skip local model checks since we are running in browser
@@ -35,7 +34,7 @@ class TranscriptionPipeline {
 }
 
 self.addEventListener('message', async (event) => {
-      const { type, audio, language, model, modelBaseUrl, wordTimestamps } = event.data;
+      const { type, audio, language, model, modelBaseUrl, wordTimestamps, device } = event.data;
 
   if (type === 'transcribe') {
     try {
@@ -61,6 +60,9 @@ self.addEventListener('message', async (event) => {
         return_timestamps: wordTimestamps ? "word" : true,
       };
 
+      // T-27: WebGPU-ускорение (движок whisper-webgpu). При ошибке — авто-откат на WASM.
+      if (device === 'webgpu') options.device = 'webgpu';
+
       // If language is specified and not 'auto', force it.
       // If undefined or 'auto', Whisper detects language automatically.
       if (language && language !== 'auto') {
@@ -71,15 +73,19 @@ self.addEventListener('message', async (event) => {
       let output: any;
       try {
         output = await transcriber(audio, options);
-      } catch (wordErr: any) {
-        // T-25: устойчивость — некоторые модели/языки не поддерживают word-level таймстампы;
-        // повторяем без них, чтобы транскрипция не падала совсем
-        const msg = String(wordErr?.message || wordErr);
+      } catch (runErr: any) {
+        const msg = String(runErr?.message || runErr);
+        // T-25: устойчивость — некоторые модели/языки не поддерживают word-level таймстампы
         if (wordTimestamps && /word|timestamp|alignment/i.test(msg)) {
           self.postMessage({ type: 'warn', data: { message: 'word-level unsupported, falling back to sentence-level' } });
           output = await transcriber(audio, { ...options, return_timestamps: true });
+        }
+        // T-27: WebGPU не сработал (драйвер/память) — откат на WASM
+        else if (device === 'webgpu') {
+          self.postMessage({ type: 'warn', data: { message: 'webgpu failed, falling back to wasm' } });
+          output = await transcriber(audio, { ...options, device: 'wasm' });
         } else {
-          throw wordErr;
+          throw runErr;
         }
       }
 

@@ -8,6 +8,7 @@ import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
 import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
 import { loadTranscript, saveTranscript, clearTranscript } from '../services/transcriptStore';
+import { transcribeWithEngine, isEngineAvailable, type TranscribeEngineId } from '../services/transcriptionEngines';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
@@ -91,7 +92,7 @@ const PlayerSidebar = React.memo(({
     currentUser, currentTime, editingCommentId, selectedCommentId, 
     setSelectedCommentId, videoRef, setVideoError, setPreviousTime, setIsPlaying,
     startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
-    wordUi, comments: allComments,
+    wordUi, comments: allComments, transcribeEngine, changeTranscribeEngine,
     transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
     transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
     setTranscript, seekByFrame, videoFps, t
@@ -213,8 +214,16 @@ const PlayerSidebar = React.memo(({
                                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed max-w-[240px]">Use Client-Side AI to convert speech to text locally.</p>
                                     </div>
                                     <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                        <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">{t('player.transcribe.engine')}</label><div className="relative"><select value={transcribeEngine} onChange={(e) => { changeTranscribeEngine(e.target.value as TranscribeEngineId); }} data-testid="engine-select" className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">
+                                            <option value="whisper">{t('player.transcribe.engine_whisper')}</option>
+                                            <option value="whisper-webgpu" disabled={!isEngineAvailable('whisper-webgpu')}>{t('player.transcribe.engine_webgpu')}{!isEngineAvailable('whisper-webgpu') ? ' — n/a' : ''}</option>
+                                            <option value="vosk" disabled={!isEngineAvailable('vosk')}>{t('player.transcribe.engine_vosk')}{!isEngineAvailable('vosk') ? ' — n/a' : ''}</option>
+                                        </select><ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
+                                        {!isEngineAvailable('vosk') && (<p className="text-[9px] text-zinc-400 leading-relaxed">{t('player.transcribe.vosk_unavailable')}</p>)}
                                         <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Language</label><div className="relative"><select value={transcribeLanguage} onChange={(e) => setTranscribeLanguage(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_LANGUAGES.map(lang => (<option key={lang.code} value={lang.code}>{lang.label}</option>))}</select><ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
+                                        {transcribeEngine.startsWith('whisper') && (
                                         <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Model Quality</label><div className="relative"><select value={transcribeModel} onChange={(e) => setTranscribeModel(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_MODELS.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}</select><Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
+                                        )}
                                         <button onClick={handleTranscribe} disabled={loadingDrive || driveFileMissing || videoError} className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"><Wand2 size={14} /> Generate Transcript</button>
                                     </div>
                                 </div>
@@ -497,7 +506,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [transcript, setTranscript] = useState<TranscriptChunk[] | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState<{status: string, progress: number} | null>(null);
+  const [transcribeEngine, setTranscribeEngine] = useState<TranscribeEngineId>(() => (localStorage.getItem('anotee_transcribe_engine') as TranscribeEngineId) || 'whisper');
   const [transcribeLanguage, setTranscribeLanguage] = useState<string>('auto');
+  const changeTranscribeEngine = (id: TranscribeEngineId) => { setTranscribeEngine(id); try { localStorage.setItem('anotee_transcribe_engine', id); } catch { /* ignore */ } };
   const [transcribeModel, setTranscribeModel] = useState<string>('Xenova/whisper-tiny');
   const workerRef = useRef<Worker | null>(null);
 
@@ -544,31 +555,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     if (!sourceUrl) { notify("No video source available", "error"); return; }
     setIsTranscribing(true); setTranscript([]); setTranscribeProgress({ status: 'init', progress: 0 });
     try {
-        if (!workerRef.current) {
-             workerRef.current = new Worker(new URL('../services/transcriptionWorker.ts', import.meta.url), { type: 'module' });
-             workerRef.current.onmessage = (event) => {
-                const { type, data, result, error } = event.data;
-                if (type === 'download') {
-                    if (data.status === 'progress') setTranscribeProgress({ status: 'downloading', progress: data.progress || 0 });
-                    else if (data.status === 'done') setTranscribeProgress({ status: 'processing', progress: 0 });
-                } else if (type === 'complete') {
-                    if (result && Array.isArray(result.chunks)) { setTranscript(result.chunks); saveTranscript(version?.id || "", result.chunks); notify("Transcription complete", "success"); }
-                    setIsTranscribing(false); setTranscribeProgress(null);
-                } else if (type === 'error') { console.error("Worker Error:", error); notify(`Transcription Failed: ${error}`, "error"); setIsTranscribing(false); setTranscribeProgress(null); }
-             };
-        }
         notify("Extracting audio...", "info");
         const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
         const audioData = await extractAudioFromUrl(sourceUrl, isProxy);
         notify(`Starting AI Model...`, "info");
-        workerRef.current.postMessage({
-          type: 'transcribe',
-          audio: audioData, wordTimestamps: true,
-          language: transcribeLanguage,
-          model: transcribeModel,
-          // Не передаём modelBaseUrl, если зеркало не настроено — воркер ведёт себя как раньше
-          ...(WHISPER_MODEL_BASE_URL ? { modelBaseUrl: WHISPER_MODEL_BASE_URL } : {}),
+        const chunks = await transcribeWithEngine(transcribeEngine, {
+            audio: audioData,
+            language: transcribeLanguage,
+            model: transcribeModel,
+            wordTimestamps: true,
+            onProgress: (p) => setTranscribeProgress(p),
+            onWarn: (msg) => notify(msg, "warning"),
         });
+        if (!chunks || chunks.length === 0) throw new Error('Empty transcription');
+        setTranscript(chunks); saveTranscript(version?.id || "", chunks);
+        setIsTranscribing(false); setTranscribeProgress(null);
+        notify(t('player.transcribe.done'), "success");
     } catch (e: any) { console.error("Transcribe Error:", e); notify(e.message || "Failed to start", "error"); setIsTranscribing(false); setTranscribeProgress(null); }
   };
 
@@ -1548,7 +1550,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
                 handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
                 setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
-                wordUi={wordUi} comments={comments}
+                wordUi={wordUi} comments={comments} transcribeEngine={transcribeEngine} changeTranscribeEngine={changeTranscribeEngine}
             />
         )}
 
