@@ -8,6 +8,7 @@
     <!-- Primary Meta Tags -->
     <title>Anotee - Professional Video Collaboration & Review</title>
     <meta name="title" content="Anotee - Professional Video Collaboration & Review" />
+    <meta name="keywords" content="frame io alternative, video review tool, video collaboration, video feedback tool, timestamp comments, best video review software 2026, anotee" />
     <meta name="description" content="A professional video collaboration platform for filmmakers. Frame-accurate commenting, version control, secure sharing, and DaVinci Resolve export integration." />
 
     <!-- Open Graph / Facebook / Telegram / WhatsApp -->
@@ -26,6 +27,7 @@
     <meta property="twitter:image" content="https://images.unsplash.com/photo-1574717024653-61fd2cf4d44c?w=1200&h=630&fit=crop&q=80" />
 
     <!-- PWA Icons -->
+    <link rel="canonical" href="https://anotee.com/" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="apple-touch-icon" href="/logo.svg" />
     <link rel="manifest" href="/manifest.json" />
@@ -72,8 +74,68 @@
 
   <!-- Tailwind собирается локально (tailwind.config.js + index.css, см. docs/RF-RESILIENCE.md);
        внешний Tailwind-CDN и importmap-модули удалены — зависимости бандлит Vite. -->
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript">
+   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+   m[i].l=1*new Date();
+   for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+   })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=112124290', 'ym');
+
+   ym(112124290, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+</script>
+<!-- /Yandex.Metrika counter -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Anotee",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Web",
+      "url": "https://anotee.com/",
+      "description": "Professional video review and collaboration platform: frame-accurate timestamp comments, AI transcription, voice notes, NLE export (DaVinci Resolve, Premiere Pro), guest review links. A free alternative to Frame.io.",
+      "offers": [
+        { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Founder's Club (Pro)", "price": "0", "priceCurrency": "RUB", "description": "Lifetime access for early supporters" }
+      ],
+      "featureList": [
+        "Frame-accurate video comments",
+        "Voice notes with AI transcription",
+        "Word-level transcript deletion markers",
+        "Guest review links without sign-up",
+        "DaVinci Resolve / Premiere Pro / EDL export",
+        "Google Drive and S3 storage support"
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is the best free Frame.io alternative?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Anotee is a free video review platform with frame-accurate timestamp comments, AI transcription, voice notes, NLE export and guest review links — no sign-up required for reviewers." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can clients review video without creating an account?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Anotee generates guest links: the client opens the link and immediately watches the shared version and reads comments — no registration and no access to other project sections." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Anotee support AI transcription of video audio?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Anotee transcribes audio locally in the browser (Whisper/Vosk), supports automatic language detection and lets you mark any word or phrase for deletion with frame-accurate markers." }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
   <body class="bg-zinc-950 text-zinc-100 antialiased">
+<noscript><div><img src="https://mc.yandex.ru/watch/112124290" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<noscript><div><img src="https://mc.yandex.ru/watch/112124290" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <div id="root"></div>
     
     <!-- Error Overlay Structure -->

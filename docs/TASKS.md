@@ -189,3 +189,10 @@
 - Выбор движка персистится (localStorage anotee_transcribe_engine); Model Quality виден только для whisper-движков; язык передаётся явно с task:transcribe; word-фолбэк внутри воркера.
 - Тосты: таймер живёт один раз на жизнь тоста (раньше onRemove-идентичность сбрасывала таймер каждым рендером родителя — тост «Upload completed» зависал во время загрузки); клик-закрытие сохранено.
 - Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 23/23. Vosk-рантайм требует проверки на устройстве (в песочнице нет SAB/CDN).
+
+### T-29 P0 `done` React #321 (чёрный экран при транскрибации) + Яндекс.Метрика + SEO-база
+- Корень (воспроизведён и подтверждён): `useRef` внутри `useEffect` в ToastItem (мой фикс таймера из T-28) — Invalid hook call при монтировании ЛЮБОГО тоста (в т.ч. «Extracting audio...» при старте транскрибации) → ErrorBoundary → чёрный экран. Исправлено: ref в теле компонента, таймер — один раз на жизнь тоста (ref через useRef-паттерн).
+- Регрессионный тест `tests/e2e/transcribe-regression.spec.ts`: запуск транскрибации на WAV data-URI + ассерт отсутствия Invalid hook call.
+- Яндекс.Метрика (id 112124290, webvisor) в index.html: скрипт в head, noscript в body (noscript c div/img в head запрещён HTML-спекой — ловилось vite-сборкой).
+- SEO-база: keywords (frame.io alternative...), canonical, JSON-LD (SoftwareApplication + FAQPage: альтернативы Frame.io, гостевые ссылки, ИИ-транскрибация), robots.txt (закрыты /api, /admin, /test, /v), sitemap.xml.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 24/24 (вкл. регрессию #321).
