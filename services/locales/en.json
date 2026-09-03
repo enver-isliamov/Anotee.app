@@ -1,4 +1,4 @@
-﻿{
+{
   "app.name": "Anotee",
   "loading": "Loading...",
   "cancel": "Cancel",
@@ -176,6 +176,7 @@
                                                           "player.transcribe.engine_vosk": "Vosk — Russian (experimental)",
                                                           "player.transcribe.vosk_unavailable": "Vosk requires COOP/COEP headers (SharedArrayBuffer). See docs/RF-RESILIENCE.md.",
                                                           "player.transcribe.done": "Transcription ready",
+                                                          "player.transcribe.retry": "Retrying transcription…",
                                           "player.live.mic": "Background dictation: every phrase becomes a comment at its timecode",
                                   "player.comment.context": "Editing at",
                                   "player.transcribe.pill": "AI Transcription",

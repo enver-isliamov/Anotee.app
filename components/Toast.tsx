@@ -34,8 +34,8 @@ export const ToastContainer: React.FC<ToastProps> = ({ toasts, removeToast }) =>
 
 const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ toast, onRemove }) => {
   // T-27: таймер живёт один раз на жизнь тоста — onRemove меняет идентичность каждый рендер родителя,
-  useEffect(() => {
   const onRemoveRef = useRef(onRemove); onRemoveRef.current = onRemove;
+  useEffect(() => {
     const timer = setTimeout(() => {
       onRemoveRef.current();
     }, TOAST_DURATION_MS[toast.type]);
