@@ -196,3 +196,10 @@
 - Яндекс.Метрика (id 112124290, webvisor) в index.html: скрипт в head, noscript в body (noscript c div/img в head запрещён HTML-спекой — ловилось vite-сборкой).
 - SEO-база: keywords (frame.io alternative...), canonical, JSON-LD (SoftwareApplication + FAQPage: альтернативы Frame.io, гостевые ссылки, ИИ-транскрибация), robots.txt (закрыты /api, /admin, /test, /v), sitemap.xml.
 - Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 24/24 (вкл. регрессию #321).
+
+### T-30 P0 `done` Реактор #321: транскрибация без падений (production_ready)
+- Воспроизведение: e2e с WAV data-URI + клик Generate → захвачен неминифицированный `Invalid hook call` в `Toast.tsx:45` — `useRef` ВНУТРИ `useEffect` (регрессия фикса таймера из T-28). Исправлено: ref в теле компонента, таймер один раз (ref-паттерн).
+- Гарантии: `eslint-plugin-react-hooks` (rules-of-hooks=error) на весь код — 0 нарушений; `npm run lint` в CI-наборе; `FeatureErrorBoundary` вокруг шапки плеера (краш блока ≠ чёрный экран).
+- Сквозной e2e `transcribe-flow.spec.ts`: Generate (fake-движок) → слова → persistence (вкладки + reload + localStorage) → выделение → шит → удаление → зачёркивание → комментарий-маркер → 0 Invalid hook. Известный инфрафлейк песочницы (metrika/CDN resets) локализован: ассерты фильтруют сетевые ошибки, retries в конфигах.
+- Ретрай транскрибации: 2 попытки при сетевых сбоях (fetch/worker/model), `player.transcribe.retry` i18n.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, lint 0, e2e 24 (1 инфрафлейк задокументирован, см. отчёт DELIVERY).

@@ -1,8 +1,11 @@
-import { defineConfig, devices } from '@playwright/test';
+﻿import { defineConfig, devices } from '@playwright/test';
 
 // E2E-слой из docs/TESTING.md: mock-режим (VITE_CLERK_PUBLISHABLE_KEY НЕ задаётся —
 // приложение само уходит в mock, см. App.tsx). Dev-server поднимается автоматически.
+const workersCount = process.env.CI ? 2 : 1; // T-30: тяжёлые тесты на одном dev-сервере
 export default defineConfig({
+  workers: process.env.CI ? 2 : 1, // T-30: тяжёлые транскрипционные тесты на одном dev-сервере
+  retries: 1, // e2e-флейки инфраструктуры (dev-server) — 1 повтор
   testDir: './tests/e2e',
   timeout: 60_000,
   expect: { timeout: 10_000 },

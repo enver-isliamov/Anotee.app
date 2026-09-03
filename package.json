@@ -3,17 +3,21 @@
   "version": "1.2602.1",
   "private": true,
   "type": "module",
-  "scripts": {
+        "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "i18n:extract": "i18next",
-    "i18n:check": "i18next --fail-on-update",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "check:external": "node scripts/check-external.mjs"
+    "check:external": "node scripts/check-external.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "i18n:extract": "i18next",
+    "i18n:check": "i18next --fail-on-update"
   },
+
+
+
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",
@@ -36,8 +40,12 @@
     "@types/node": "^26.4.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "i18next-parser": "^9.0.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",

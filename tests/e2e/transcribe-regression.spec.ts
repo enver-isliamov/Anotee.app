@@ -35,7 +35,7 @@ test('REPRO: Generate Transcript → захват неминифицирован
   }, wav);
 
   await openPlayer(page);
-  await page.getByText('Transcript').first().click();
+  await page.getByTestId('transcript-tab').click();
   await page.getByRole('button', { name: /Generate Transcript/i }).dispatchEvent('click');
 
   // ждём либо прогресс (воспроизведение бага), либо ошибку

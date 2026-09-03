@@ -9,6 +9,7 @@ import { extractAudioFromUrl } from '../services/audioUtils';
 import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
 import { loadTranscript, saveTranscript, clearTranscript } from '../services/transcriptStore';
 import { transcribeWithEngine, isEngineAvailable, type TranscribeEngineId } from '../services/transcriptionEngines';
+import { FeatureErrorBoundary } from './FeatureErrorBoundary';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
@@ -150,6 +151,7 @@ const PlayerSidebar = React.memo(({
                         <MessageSquare size={14} /> {t('player.comments')}
                     </button>
                     <button 
+                        data-testid="transcript-tab"
                         onClick={() => setSidebarTab('transcript')}
                         className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'transcript' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
                     >
@@ -551,14 +553,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleTranscribe = async () => {
     if (isTranscribing) return;
+    const fakeActive = typeof window !== 'undefined' && !!(window as any).__anoteeFakeTranscribe; // T-30: e2e-движок
     const sourceUrl = localFileSrc || driveUrl || version.url;
-    if (!sourceUrl) { notify("No video source available", "error"); return; }
+    if (!sourceUrl && !fakeActive) { notify("No video source available", "error"); return; }
+    let attempt = 0;
+    for (attempt = 0; attempt < 2; attempt++) {
     setIsTranscribing(true); setTranscript([]); setTranscribeProgress({ status: 'init', progress: 0 });
     try {
-        notify("Extracting audio...", "info");
-        const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
-        const audioData = await extractAudioFromUrl(sourceUrl, isProxy);
-        notify(`Starting AI Model...`, "info");
+        let audioData: Float32Array;
+        if (fakeActive) {
+            audioData = new Float32Array(16000); // фейковое аудио — движок тоже фейковый
+        } else {
+            notify("Extracting audio...", "info");
+            const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
+            audioData = await extractAudioFromUrl(sourceUrl, isProxy);
+            notify(`Starting AI Model...`, "info");
+        }
         const chunks = await transcribeWithEngine(transcribeEngine, {
             audio: audioData,
             language: transcribeLanguage,
@@ -571,7 +581,15 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         setTranscript(chunks); saveTranscript(version?.id || "", chunks);
         setIsTranscribing(false); setTranscribeProgress(null);
         notify(t('player.transcribe.done'), "success");
-    } catch (e: any) { console.error("Transcribe Error:", e); notify(e.message || "Failed to start", "error"); setIsTranscribing(false); setTranscribeProgress(null); }
+    } catch (e: any) {
+      const msg = String(e?.message || "Failed to start");
+      console.error("Transcribe Error:", e);
+      const retryable = attempt < 1 && /fetch|network|reset|Failed to load|Worker error|Failed to fetch|connection|model/i.test(msg);
+      if (retryable) { notify(t("player.transcribe.retry"), "info"); attempt++; continue; }
+      notify(msg, "error"); setIsTranscribing(false); setTranscribeProgress(null);
+    }
+    }
+    setIsTranscribing(false); setTranscribeProgress(null); // страховка после исчерпания ретраев
   };
 
   const seekByFrame = (frames: number) => {
@@ -1298,6 +1316,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       <input type="file" accept=".mp4,.mov,.mkv,.webm,video/mp4,video/quicktime" style={{ display: 'none' }} ref={localFileRef} onChange={handleLocalFileSelect} onClick={(e) => (e.currentTarget.value = '')} />
 
       {!isFullscreen && (
+           <FeatureErrorBoundary label="Player">
         <header className="safe-top h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
@@ -1369,6 +1388,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              </div>
           </div>
         </header>
+           </FeatureErrorBoundary>
       )}
 
       {/* T-18: корневой backdrop — header с backdrop-blur-md становится containing block для

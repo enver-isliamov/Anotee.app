@@ -35,3 +35,5 @@ blob-report
 playwright.local.config.ts
 
 _repro321.spec.ts
+
+_debug.spec.ts
