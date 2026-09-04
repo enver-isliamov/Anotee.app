@@ -251,7 +251,7 @@ const PlayerSidebar = React.memo(({
                                             const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
                                             const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
                                             return (
-                                                <span key={i} data-idx={i} data-testid="transcript-word" title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-500/80' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}</span>
+                                                <span key={i} data-idx={i} data-testid="transcript-word" title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-500/80' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}{" "}</span>
                                             );
                                         })}
                                     </div>
@@ -1442,7 +1442,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                      const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
                                      const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
                                      return (
-                                         <span key={i} data-idx={i} data-testid="transcript-word" className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'}`}>{chunk.text.trim()}</span>
+                                         <span key={i} data-idx={i} data-testid="transcript-word" className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'}`}>{chunk.text.trim()}{" "}</span>
                                      );
                                  })}
                              </div>
