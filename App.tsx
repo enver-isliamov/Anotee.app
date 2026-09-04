@@ -724,6 +724,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 notify={notify}
                 isMockMode={isMockMode}
                 setIsPlayerActive={setIsPlayerActive} // Pass Smart Polling Control
+                onOpenStorageSettings={() => handleNavigate('PROFILE')}
             />
           </ErrorBoundary>
         )}

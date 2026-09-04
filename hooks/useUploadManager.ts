@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User, VideoVersion } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
@@ -320,6 +320,8 @@ export const useUploadManager = (
                     
                     updateTask({ status: 'done', progress: 100 });
                     notify("Upload completed", "success");
+                    // T-32: виджет загрузки ведёт себя как тост — авто-закрытие
+                    setTimeout(() => removeUploadTask(taskId), 2500);
 
                 } catch (syncError) {
                     console.error("Sync failed during upload finalization", syncError);
@@ -331,6 +333,7 @@ export const useUploadManager = (
             console.error("Upload failed", e);
             updateTask({ status: 'error', error: e.message || "Upload Failed" });
             notify(`Upload failed: ${e.message}`, "error");
+            setTimeout(() => removeUploadTask(taskId), 3500); // T-32: авто-закрытие после ошибки
             
             // Revert optimistic UI on failure
             setProjects(currentProjects => {
