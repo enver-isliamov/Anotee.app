@@ -34,6 +34,7 @@ interface PlayerProps {
   isDemo?: boolean;
   isMockMode?: boolean;
   setIsPlayerActive?: (active: boolean) => void; // Smart Polling Control
+  onOpenStorageSettings?: () => void; // T-32: «Проверить настройки S3» → страница настроек BYOS
 }
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
@@ -385,7 +386,7 @@ const FloatingControls = React.memo(({
 });
 
 // ... (Rest of file unchanged, just export Player) ...
-export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive }) => {
+export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive, onOpenStorageSettings }) => {
   const { t, language } = useLanguage();
   
   // Smart Polling: Activate on Mount, Deactivate on Unmount
@@ -509,7 +510,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState<{status: string, progress: number} | null>(null);
   const [transcribeEngine, setTranscribeEngine] = useState<TranscribeEngineId>(() => (localStorage.getItem('anotee_transcribe_engine') as TranscribeEngineId) || 'whisper');
-  const [transcribeLanguage, setTranscribeLanguage] = useState<string>('auto');
+  const [transcribeLanguage, setTranscribeLanguage] = useState<string>(language === 'ru' ? 'ru' : 'auto'); // T-32: для русского UI — русский по умолчанию
   const changeTranscribeEngine = (id: TranscribeEngineId) => { setTranscribeEngine(id); try { localStorage.setItem('anotee_transcribe_engine', id); } catch { /* ignore */ } };
   const [transcribeModel, setTranscribeModel] = useState<string>('Xenova/whisper-tiny');
   const workerRef = useRef<Worker | null>(null);
@@ -1506,7 +1507,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                     <RotateCcw size={16} /> {t('player.s3.retry')}
                                 </button>
                                 {isManager && (
-                                    <button onClick={() => onBack()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer">
+                                    <button onClick={() => (onOpenStorageSettings ? onOpenStorageSettings() : onBack())} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer">
                                         <Settings2 size={16} /> {t('player.s3.check_settings')}
                                     </button>
                                 )}
@@ -1597,7 +1598,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         )}
       </div>
       {selRange !== null && sheetOpen && transcript && transcript[selRange.start] && (
-          <div className="fixed bottom-0 left-0 right-0 z-[90] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }} data-testid="word-sheet">
+          <div className="fixed bottom-0 left-0 right-0 z-[120] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }} data-testid="word-sheet">
               <div className="flex justify-center pt-2"><div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div></div>
               <div className="px-4 pt-2 pb-1">
                   <div className="flex items-start justify-between gap-2">
