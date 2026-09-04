@@ -1,4 +1,4 @@
-
+﻿
 // Limit for browser-side processing to prevent tab crashes (Out Of Memory)
 const MAX_FILE_SIZE_MB = 300;
 // Stricter limit for Serverless Proxy (Vercel has 10s timeout, can't process huge files)
@@ -26,9 +26,14 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
     // 1. Safety Check for Remote URLs (Head Request)
     if (fetchUrl.startsWith('http')) {
         try {
-            const head = await fetch(fetchUrl, { method: 'HEAD' });
+            // T-31: для S3 presigned URL метод HEAD ломает подпись (метод участвует в canonical request) —
+            // используем GET с Range (Range не подписывается, это разрешено); для Drive-прокси HEAD работает как раньше
+            const head = await fetch(fetchUrl, isProxyRequest
+                ? { method: 'HEAD' }
+                : { method: 'GET', headers: { Range: 'bytes=0-1' } });
             if (head.ok) {
-                const size = parseInt(head.headers.get('content-length') || '0', 10);
+                    const contentRange = head.headers.get('content-range'); // 'bytes 0-1/123456'
+                    const size = contentRange ? parseInt(contentRange.split('/')[1] || '0', 10) : parseInt(head.headers.get('content-length') || '0', 10);
                 const limit = isProxyRequest ? MAX_PROXY_BYTES : MAX_BYTES;
                 const limitMb = isProxyRequest ? MAX_PROXY_SIZE_MB : MAX_FILE_SIZE_MB;
 

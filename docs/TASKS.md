@@ -203,3 +203,9 @@
 - Сквозной e2e `transcribe-flow.spec.ts`: Generate (fake-движок) → слова → persistence (вкладки + reload + localStorage) → выделение → шит → удаление → зачёркивание → комментарий-маркер → 0 Invalid hook. Известный инфрафлейк песочницы (metrika/CDN resets) локализован: ассерты фильтруют сетевые ошибки, retries в конфигах.
 - Ретрай транскрибации: 2 попытки при сетевых сбоях (fetch/worker/model), `player.transcribe.retry` i18n.
 - Верификация: tsc 0, unit 57, build 0, check:external 0, lint 0, e2e 24 (1 инфрафлейк задокументирован, см. отчёт DELIVERY).
+
+### T-31 P0 `done` R2/S3 пресайн 403: x-amz-checksum-mode + HEAD-метод
+- Диагноз по логам dev.anotee.com (подтверждён): пресайн-URL содержал `x-amz-checksum-mode=ENABLED` + `X-Amz-SignedHeaders=host` — SDK v3 (3.1119.0) добавляет чек-суммы по умолчанию, R2 такие параметры отбраковывает → 403 SignatureDoesNotMatch. Второе: фронт делал `HEAD` по GET-пресайну (audioUtils.ts размер перед транскрибацией) — метод входит в canonical request → 403.
+- Фикс: `api/_s3.js` — S3Client с `requestChecksumCalculation:'WHEN_REQUIRED'`, `responseChecksumValidation:'WHEN_REQUIRED'` (чек-суммы только по требованию, пресайн чистый: SignedHeaders=host). `services/audioUtils.ts` — проверка размера через GET+Range (bytes=0-1, Range не подписывается — разрешено); для Drive-прокси HEAD остался.
+- Перенос строк транскрипта: реальные пробелы между словами (`{" "}`) вместо margin + `break-words` на контейнерах (вкладка Transcript и полноэкранный TXT-оверлей) — текст больше не уходит за край.
+- Верификация: tsc 0, unit 57, build 0, node --check api/*.js OK. Проверка на живом R2 — после деплоя (см. инструкцию в отчёте).
