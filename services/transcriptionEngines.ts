@@ -1,8 +1,10 @@
-﻿// T-27: параллельные движки транскрибации. Пользователь выбирает движок во вкладке Transcript.
+// T-27: параллельные движки транскрибации. Пользователь выбирает движок во вкладке Transcript.
 // - whisper        — Whisper Xenova (WASM), универсальный
 // - whisper-webgpu — тот же Whisper, но с ускорением WebGPU (быстрее, Chrome/Edge 113+)
 // - vosk           — Vosk (модели alphacephei.com, отличная поддержка русского, пословные таймстампы)
 //                    ЭКСПЕРИМЕНТАЛЬНЫЙ: требует SharedArrayBuffer (COOP/COEP заголовки) — см. docs/RF-RESILIENCE.md
+
+type EngineChunk = { text: string; timestamp: [number, number] | null };
 
 export type TranscribeEngineId = 'whisper' | 'whisper-webgpu' | 'vosk';
 
@@ -18,12 +20,8 @@ export interface TranscribeOpts {
   onWarn?: (msg: string) => void;
 }
 
-const WHISPER_WORKER_CDN_FALLBACK = false;
-
-type EngineChunk = { text: string; timestamp: [number, number] | null };
-
-/** Whisper через воркер transcriptionWorker.ts (WASM или WebGPU). */
-async function transcribeWhisper(opts: TranscribeOpts, device?: 'webgpu'): Promise<EngineChunk[]> {
+/** Whisper через воркер transcriptionWorker.ts (WASM или WebGPU). Одна попытка. */
+function transcribeWhisperOnce(opts: TranscribeOpts, device?: 'webgpu'): Promise<EngineChunk[]> {
   return new Promise<EngineChunk[]>((resolve, reject) => {
     let worker: Worker;
     try {
@@ -60,6 +58,18 @@ async function transcribeWhisper(opts: TranscribeOpts, device?: 'webgpu'): Promi
       device,
     });
   });
+}
+
+/** T-30: одна автоматическая перезагрузка воркера при сбое загрузки (dev-сервер/HMR флейки). */
+async function transcribeWhisper(opts: TranscribeOpts, device?: 'webgpu'): Promise<EngineChunk[]> {
+  try {
+    return await transcribeWhisperOnce(opts, device);
+  } catch (firstErr: any) {
+    const msg = String(firstErr?.message || firstErr);
+    if (/Empty transcription/.test(msg)) throw firstErr; // реальный результат — не ретраим
+    opts.onWarn?.(`worker reload: ${msg}`);
+    return transcribeWhisperOnce(opts, device);
+  }
 }
 
 const VOSK_CDN = 'https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js';
@@ -124,6 +134,15 @@ async function transcribeVosk(opts: TranscribeOpts): Promise<EngineChunk[]> {
 }
 
 export async function transcribeWithEngine(engineId: TranscribeEngineId, opts: TranscribeOpts): Promise<EngineChunk[]> {
+  // T-30: детерминированный фейковый движок для e2e (window.__anoteeFakeTranscribe = JSON слов)
+  const fakeRaw = typeof window !== 'undefined' ? (window as any).__anoteeFakeTranscribe : undefined;
+  if (fakeRaw) {
+    const words = JSON.parse(fakeRaw) as Array<{ word: string; start: number; end: number }>;
+    opts.onProgress?.({ status: 'downloading', progress: 50 });
+    await new Promise((r) => setTimeout(r, 150));
+    opts.onProgress?.({ status: 'processing', progress: 100 });
+    return voskWordsToChunks(words);
+  }
   switch (engineId) {
     case 'whisper-webgpu':
       // Фолбэк на WASM уже внутри воркера (device fallback)
