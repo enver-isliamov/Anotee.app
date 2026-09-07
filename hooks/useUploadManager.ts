@@ -84,7 +84,8 @@ export const useUploadManager = (
             // Extract base name and extension
             let rawTitle = file.name.replace(/\.[^/.]+$/, "");
             // Sanitize: Keep alphanumeric, spaces, dashes, underscores.
-            let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
+            // T-35: Unicode-aware — кириллица и др. буквы сохраняются (\w в JS — только ASCII)
+            let assetTitle = rawTitle.replace(/[^\p{L}\p{N}\s\-_]/giu, '');
             if (!assetTitle) assetTitle = "Video_Asset";
 
             const ext = file.name.split('.').pop();
@@ -111,7 +112,7 @@ export const useUploadManager = (
             const optimisticVersion: VideoVersion = {
                 id: tempVersionId,
                 versionNumber: nextVersionNumber,
-                filename: finalFileName,
+                filename: file.name, // T-35: оригинальное имя (включая кириллицу)
                 url: localBlobUrl, // Use local blob temporarily
                 storageType: 'local', // Temporary
                 uploadedAt: 'Just now',
@@ -191,7 +192,8 @@ export const useUploadManager = (
                         },
                         body: JSON.stringify({
                             operation: 'put',
-                            key: `anotee/${projectId}/${finalFileName}`, 
+                            // T-35: ключ с оригинальным именем (UTF-8 поддерживается S3/R2); экранируем только путь-разделители
+                            key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, 
                             contentType: file.type,
                             projectId: projectId // CRITICAL: Upload to Project Owner's Bucket
                         })
