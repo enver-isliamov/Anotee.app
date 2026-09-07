@@ -84,7 +84,8 @@ export default async function handler(req, res) {
             }
 
             if (req.method === 'POST') {
-                const { provider, bucket, endpoint, region, accessKeyId, secretAccessKey, publicUrl } = req.body;
+                const { region, secretAccessKey, publicUrl } = req.body;
+                let { provider, bucket, endpoint, accessKeyId } = req.body;
 
                 if (!provider || !bucket || !endpoint || !accessKeyId) {
                     const missing = [];
@@ -92,7 +93,17 @@ export default async function handler(req, res) {
                     if (!bucket) missing.push('bucket');
                     if (!endpoint) missing.push('endpoint');
                     if (!accessKeyId) missing.push('accessKeyId');
-                    return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+                    // T-33b: частичное сохранение — пустые поля подтягиваются из существующего конфига пользователя,
+                    // чтобы повторное сохранение не требовало ввода всего заново.
+                    if (missing.length > 0) {
+                        const existingRows = await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_config WHERE user_id = ${user.id}`;
+                        const existingCfg = existingRows[0];
+                        if (!existingCfg) return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+                        if (!provider) provider = existingCfg.provider;
+                        if (!bucket) bucket = existingCfg.bucket;
+                        if (!endpoint) endpoint = existingCfg.endpoint;
+                        if (!accessKeyId) accessKeyId = existingCfg.access_key_id;
+                    }
                 }
 
                 let encryptedSecret = null;
