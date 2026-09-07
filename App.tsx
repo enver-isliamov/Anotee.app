@@ -51,8 +51,8 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
     if (tasks.length === 0) return null;
 
     return (
-        <div className="fixed bottom-4 right-4 z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300">
-            <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700">
+        <div className="fixed top-32 right-4 z-[9998] w-80 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300" data-testid="upload-widget">
+            <div className="bg-zinc-800/80 px-4 py-2 flex justify-between items-center border-b border-zinc-700">
                 <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
                     <UploadCloud size={14} /> Uploads ({tasks.length})
                 </span>
@@ -69,12 +69,10 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
                                 {task.status === 'done' && <CheckCircle size={14} className="text-green-500" />}
                                 {task.status === 'error' && <AlertCircle size={14} className="text-red-500" />}
                                 {task.status === 'uploading' && <span className="text-[10px] font-mono font-bold text-indigo-500">{task.progress}%</span>}
-                                {(task.status === 'done' || task.status === 'error') && (
-                                    <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
-                                        <X size={12} />
-                                    </button>
-                                )}
-                            </div>
+                                <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-200 p-1" title={task.status === 'uploading' ? 'Прервать загрузку' : 'Закрыть'}>
+                                    <X size={12} />
+                                </button>
+                                </div>
                         </div>
                         {task.status === 'uploading' && (
                             <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1 mt-1 overflow-hidden">

@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, AppConfig } from '../types';
-import { ArrowLeftRight, Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
+import { ArrowLeftRight, Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server , Wrench } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor, formatTimecode } from '../services/utils';
 import { ToastType } from './Toast';
@@ -1503,6 +1503,33 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                 </p>
                             )}
                             <div className="flex flex-col items-center gap-2 mb-2">
+                                {/* T-36: автофикс в один клик + пошаговая инструкция */}
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            setS3ErrorDetail(null);
+                                            const token = await getTokenRef.current?.() ?? null;
+                                            const res = await fetch(`/api/storage?action=configure_cors`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                                body: JSON.stringify({ projectId: project.id }),
+                                            });
+                                            const data = await res.json().catch(() => ({}));
+                                            if (res.ok && data.success) { notify(t('player.s3.autofix_done'), 'success'); setReloadTick((t) => t + 1); }
+                                            else { notify(data.error || t('player.s3.autofix_fail'), 'error'); }
+                                        } catch (e: any) { notify(e?.message || t('player.s3.autofix_fail'), 'error'); }
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm cursor-pointer"
+                                    data-testid="s3-autofix"
+                                >
+                                    <Wrench size={16} /> {t('player.s3.autofix')}
+                                </button>
+                                <div className="text-[11px] text-zinc-500 max-w-[320px] text-left leading-relaxed border border-zinc-800 rounded-lg p-3" data-testid="s3-steps">
+                                    <div className="font-bold text-zinc-400 uppercase text-[9px] mb-1">{t('player.s3.steps_title')}</div>
+                                    <div>1. {t('player.s3.step1')}</div>
+                                    <div>2. {t('player.s3.step2')}</div>
+                                    <div>3. {t('player.s3.step3')}</div>
+                                </div>
                                 <button onClick={() => { setVideoError(false); setDriveUrlRetried(false); setS3ErrorDetail(null); setReloadTick(t => t + 1); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm border border-zinc-700 cursor-pointer" data-testid="s3-retry">
                                     <RotateCcw size={16} /> {t('player.s3.retry')}
                                 </button>
