@@ -238,7 +238,7 @@ const PlayerSidebar = React.memo(({
                                         <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Transcript</span>
                                         <span className="flex items-center gap-3">
                                             {isTranscribing && <span className="text-[10px] text-indigo-400 font-bold">{transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span>}
-                                            <button onClick={() => { setTranscript(null); if (version) clearTranscript(version.id); }} className="text-[10px] text-zinc-400 hover:text-red-500 transition-colors">Clear</button>
+                                            <button onClick={() => { if (window.confirm('Очистить весь транскрипт?')) { setTranscript(null); if (version) clearTranscript(version.id); } }} className="text-zinc-400 hover:text-red-500 transition-colors p-1" title="Очистить транскрипт"><Trash2 size={11} /></button>
                                         </span>
                                     </div>
                                     <div className="px-4 py-3 text-[15px] leading-loose [touch-action:pan-y] select-none" data-testid="transcript-words"
