@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, S3Config } from '../types';
 import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
@@ -141,6 +141,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
+  const [noConfigFound, setNoConfigFound] = useState(false); // T-36
   
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
@@ -213,7 +214,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       }
                   } else {
                       setActiveProvider('google');
-                      setSelectedTab('google');
+                      setSelectedTab('google'); setNoConfigFound(true);
                   }
               }
           } catch (e) {
@@ -551,6 +552,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
                         ) : (
                             <div className="space-y-6 animate-in fade-in">
+  {noConfigFound && (
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200 leading-relaxed" data-testid="no-config-banner">
+          <b>Хранилище для этого аккаунта ещё не настроено.</b> Заполните поля ниже (ключи от вашего R2/S3), нажмите «Сохранить», затем «Проверить соединение» — Test также применит CORS к бакету.
+      </div>
+  
+  )}
                                 
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                     <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} color="bg-green-600" />
