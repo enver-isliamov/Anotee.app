@@ -297,7 +297,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               body: JSON.stringify(s3Form)
           });
 
-          if (!res.ok) throw new Error("Failed to save");
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Failed to save"); }
           
           setS3Saved(true);
           // Update active provider state

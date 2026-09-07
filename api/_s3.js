@@ -32,7 +32,12 @@ export async function getS3Client(userId) {
             secretAccessKey: secretKey,
         },
         // Important for some S3 providers (like MinIO or older R2) to force path style
-        forcePathStyle: true 
+                // Important for some S3 providers (like MinIO or older R2) to force path style
+        forcePathStyle: true,
+        // T-31: НЕ добавлять x-amz-checksum-mode в presigned URL — иначе R2 отвечает 403
+        // (SignedHeaders включает checksum-заголовок, которого нет в браузерном GET)
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED', 
     });
 
     return { s3, config };

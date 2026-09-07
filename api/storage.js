@@ -87,7 +87,12 @@ export default async function handler(req, res) {
                 const { provider, bucket, endpoint, region, accessKeyId, secretAccessKey, publicUrl } = req.body;
 
                 if (!provider || !bucket || !endpoint || !accessKeyId) {
-                    return res.status(400).json({ error: "Missing required fields" });
+                    const missing = [];
+                    if (!provider) missing.push('provider');
+                    if (!bucket) missing.push('bucket');
+                    if (!endpoint) missing.push('endpoint');
+                    if (!accessKeyId) missing.push('accessKeyId');
+                    return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
                 }
 
                 let encryptedSecret = null;
