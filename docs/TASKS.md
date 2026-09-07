@@ -238,3 +238,8 @@
 - CC-субтитры: кнопка CC в шапке — активные слова поверх видео (синхронно по currentTime), кликабельны (док действий как в транскрипте), помечены к удалению зачёркиванием.
 - Прогресс транскрибации: полоса сверху плеера (h-3 + %) вместо пилюли в шапке — шапка не съезжает.
 - Верификация: tsc 0, unit 57, build 0, lint 0, e2e 24/24 (playwright.local.config.ts — channel chrome).
+
+### T-38 P0 `done` iOS Safari: транскрибация не работает
+- Корень: `AudioContext({sampleRate: 16000})` на iOS Safari может игнорироваться или бросить — результат не гарантированно 16кГц. Плюс onnxruntime-web пытается создать многопоточный WASM (нет SharedArrayBuffer на iOS без COOP/COEP) → падение.
+- Фикс: `audioUtils.ts` — декодирование на нативной частоте + линейная интерполяция до 16000 Hz (без OfflineAudioContext); `webkitAudioContext` для старых iOS; `close()` с try/catch. `transcriptionWorker.ts` — `env.backends.onnx.wasm.numThreads = 1` если SharedArrayBuffer недоступен (iOS).
+- Верификация: tsc 0, unit 57, build 0. Живой тест на iPhone — после деплоя.
