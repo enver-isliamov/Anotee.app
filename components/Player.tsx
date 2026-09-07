@@ -9,6 +9,7 @@ import { extractAudioFromUrl } from '../services/audioUtils';
 import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
 import { loadTranscript, saveTranscript, clearTranscript } from '../services/transcriptStore';
 import { transcribeWithEngine, isEngineAvailable, type TranscribeEngineId } from '../services/transcriptionEngines';
+import { subscribeTranscription, startTranscription, isTranscriptionRunning } from '../services/transcriptionRunner';
 import { FeatureErrorBoundary } from './FeatureErrorBoundary';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
@@ -162,6 +163,8 @@ const PlayerSidebar = React.memo(({
                 {sidebarTab === 'comments' && (
                     <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 sticky top-0 z-20">
                         <div className="flex items-center gap-3"><span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total: ({filteredComments.length})</span></div>
+
+
                         <div className="flex items-center gap-2">
                             {isManager && (<><button onClick={handleToggleLock} className={`p-1 rounded transition-colors ${version.isLocked ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} title={version.isLocked ? t('player.unlock_ver') : t('player.lock_ver')}>{version.isLocked ? <Lock size={14} /> : <Unlock size={14} />}</button><div className="relative"><button id="tour-export-btn" onClick={() => setShowExportMenu(!showExportMenu)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title={t('player.export.title')}><Download size={14} /></button>{showExportMenu && (<div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100"><button onClick={() => handleExport('xml')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><Film size={14} className="text-indigo-500 dark:text-indigo-400" />{t('player.export.xml')}</button><button onClick={() => handleExport('csv')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileSpreadsheet size={14} className="text-green-500 dark:text-green-400" />{t('player.export.csv')}</button><button onClick={() => handleExport('edl')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileText size={14} className="text-orange-500 dark:text-orange-400" />{t('player.export.edl')}</button></div>)}{showExportMenu && (<div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>)}</div></>)}
                             {isManager && filteredComments.some((c: any) => c.status === CommentStatus.OPEN) && (<button onClick={handleBulkResolve} className="flex items-center gap-1 text-[9px] font-bold bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-900/50 hover:bg-green-200 dark:hover:bg-green-900/40 px-2 py-0.5 rounded transition-colors uppercase"><CheckSquare size={10} />{t('player.resolve_all')}</button>)}
@@ -242,7 +245,7 @@ const PlayerSidebar = React.memo(({
                                         </span>
                                     </div>
                                     <div className="px-4 py-3 text-[15px] leading-loose [touch-action:pan-y] select-none" data-testid="transcript-words"
-                                        onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } wordUi.onTap(Number(t.dataset.idx)); }}
+                                        onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } const wIdx = Number(t.dataset.idx); wordUi.onTap((transcript ?? [])[wIdx], wIdx); }}
                                         onPointerMove={(e) => { if (!selDragRef.current) return; const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null; const t = el?.closest('[data-idx]') as HTMLElement | null; if (t?.dataset.idx !== undefined) wordUi.onExtend(Number(t.dataset.idx)); }}
                                         onPointerUp={() => { selDragRef.current = false; }}
                                         onPointerCancel={() => { selDragRef.current = false; }}
@@ -553,44 +556,34 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // ... (Other event listeners for resize etc) ...
 
   const handleTranscribe = async () => {
-    if (isTranscribing) return;
-    const fakeActive = typeof window !== 'undefined' && !!(window as any).__anoteeFakeTranscribe; // T-30: e2e-движок
+    const st = (window as any).__anoteeTranscriptionState;
+    if (st?.isTranscribing) { notify(t('player.transcribe.pill'), "info"); return; }
+    const fakeActive = typeof window !== 'undefined' && !!(window as any).__anoteeFakeTranscribe;
     const sourceUrl = localFileSrc || driveUrl || version.url;
     if (!sourceUrl && !fakeActive) { notify("No video source available", "error"); return; }
-    let attempt = 0;
-    for (attempt = 0; attempt < 2; attempt++) {
     setIsTranscribing(true); setTranscript([]); setTranscribeProgress({ status: 'init', progress: 0 });
     try {
         let audioData: Float32Array;
         if (fakeActive) {
-            audioData = new Float32Array(16000); // фейковое аудио — движок тоже фейковый
+            audioData = new Float32Array(16000);
         } else {
-            notify("Extracting audio...", "info");
             const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
             audioData = await extractAudioFromUrl(sourceUrl, isProxy);
-            notify(`Starting AI Model...`, "info");
         }
-        const chunks = await transcribeWithEngine(transcribeEngine, {
+        // T-37: раннер-синглтон — воркер переживает уход со страницы
+        startTranscription(version?.id || "", {
             audio: audioData,
             language: transcribeLanguage,
             model: transcribeModel,
             wordTimestamps: true,
-            onProgress: (p) => setTranscribeProgress(p),
-            onWarn: (msg) => notify(msg, "warning"),
+            modelBaseUrl: (import.meta as any).env?.VITE_WHISPER_MODEL_BASE_URL,
+            engine: transcribeEngine,
         });
-        if (!chunks || chunks.length === 0) throw new Error('Empty transcription');
-        setTranscript(chunks); saveTranscript(version?.id || "", chunks);
-        setIsTranscribing(false); setTranscribeProgress(null);
-        notify(t('player.transcribe.done'), "success");
     } catch (e: any) {
-      const msg = String(e?.message || "Failed to start");
-      console.error("Transcribe Error:", e);
-      const retryable = attempt < 1 && /fetch|network|reset|Failed to load|Worker error|Failed to fetch|connection|model/i.test(msg);
-      if (retryable) { notify(t("player.transcribe.retry"), "info"); attempt++; continue; }
-      notify(msg, "error"); setIsTranscribing(false); setTranscribeProgress(null);
+        console.error("Transcribe Error:", e);
+        notify(e?.message || "Failed to start", "error");
+        setIsTranscribing(false); setTranscribeProgress(null);
     }
-    }
-    setIsTranscribing(false); setTranscribeProgress(null); // страховка после исчерпания ретраев
   };
 
   const seekByFrame = (frames: number) => {
@@ -1094,7 +1087,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       const w = (transcript ?? [])[idx];
       return w?.timestamp ? isWordDeleted(comments, w) : false;
   };
-  const wordUi = { onTap: beginSelection, onExtend: extendSelection, isDeletedAt: isWordDeletedAt, selRange };
+  const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
+      if (!word.timestamp) return;
+      setSelRange({ start: idx, end: idx }); setSheetOpen(true); setSheetMode('actions');
+  };
+  const wordUi = { onTap: handleWordTap, onExtend: extendSelection, isDeletedAt: isWordDeletedAt, selRange };
+  // T-37: подписка на синглтон транскрибации
+  const [showSubtitles, setShowSubtitles] = useState(false);
+  const [runnerState, setRunnerState] = useState<{ isTranscribing: boolean; versionId: string | null; progress: { status: string; progress: number } | null; chunks: { text: string; timestamp: [number, number] | null }[] | null }>({ isTranscribing: false, versionId: null, progress: null, chunks: null });
+  useEffect(() => {
+      const unsub = subscribeTranscription((s) => {
+          setRunnerState({ isTranscribing: s.isTranscribing, versionId: s.versionId, progress: s.progress, chunks: s.chunks });
+          if (!s.isTranscribing && s.chunks && s.versionId === version?.id) { setTranscript(s.chunks); setIsTranscribing(false); setTranscribeProgress(null); }
+          if (s.isTranscribing && s.versionId === version?.id) setIsTranscribing(true);
+      });
+      return unsub;
+  }, []);
   const rangeCount = (a: number, b: number) => Math.abs(b - a) + 1;
   // T-23: учёт экранной клавиатуры — поднимаем бар комментариев над ней (мобильные)
   const [kbLift, setKbLift] = useState(0);
@@ -1433,7 +1441,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                          </div>
                              {transcript && transcript.length > 0 ? (
                              <div className="text-sm leading-loose [touch-action:pan-y] select-none" data-testid="txt-overlay-words"
-                                 onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } wordUi.onTap(Number(t.dataset.idx)); }}
+                                 onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } const wIdx = Number(t.dataset.idx); wordUi.onTap((transcript ?? [])[wIdx], wIdx); }}
                                  onPointerMove={(e) => { if (!selDragRef.current) return; const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null; const t = el?.closest('[data-idx]') as HTMLElement | null; if (t?.dataset.idx !== undefined) wordUi.onExtend(Number(t.dataset.idx)); }}
                                  onPointerUp={() => { selDragRef.current = false; }}
                                  onPointerCancel={() => { selDragRef.current = false; }}
@@ -1457,7 +1465,28 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
-             {/* ... Comments Overlay ... */}
+                          {showSubtitles && transcript && transcript.length > 0 && (
+                 <div className="absolute bottom-16 left-0 right-0 z-[60] flex justify-center pointer-events-none px-6" data-testid="subtitles-overlay">
+                     <div className="bg-black/75 backdrop-blur-sm rounded-xl px-4 py-2 max-w-[85%] text-center pointer-events-auto">
+                         <div className="text-sm md:text-base leading-snug">
+                             {(() => {
+                                 const words = transcript.filter((w: any) => w.timestamp && currentTime >= w.timestamp[0] - 0.15 && currentTime <= w.timestamp[1] + 0.15);
+                                 const list = words.length > 0 ? words : (() => { const next = transcript.find((w: any) => w.timestamp && w.timestamp[0] >= currentTime); return next ? [next] : []; })();
+                                 if (list.length === 0) return <span className="text-zinc-400">…</span>;
+                                 return list.map((w: any, i: number) => {
+                                     const deleted = isWordDeletedAt(transcript.indexOf(w));
+                                     return (
+                                         <span key={i} data-testid="subtitle-word" onClick={() => handleWordTap(w, transcript.indexOf(w))} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : 'text-white hover:text-indigo-200'}`}>{w.text.trim()}</span>
+                                     );
+                                 });
+                             })()}
+                         </div>
+                         <div className="text-[9px] text-zinc-400 mt-1">{t('player.cc.hint')}</div>
+                     </div>
+                 </div>
+             )}
+
+{/* ... Comments Overlay ... */}
               {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
                  {activeOverlayComments.map(c => { const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
