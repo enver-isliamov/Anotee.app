@@ -48,9 +48,11 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
         }
     }
 
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000, // Whisper expects 16kHz
-    });
+    // T-38: iOS Safari — AudioContext({sampleRate: 16000}) может игнорироваться или бросить.
+    // Декодируем на нативной частоте, затем вручную ресемплим до 16000 Hz (линейная интерполяция).
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) throw new Error("Web Audio API не поддерживается этим браузером");
+    const audioContext = new AudioCtx();
 
     try {
         const response = await fetch(fetchUrl);
@@ -59,10 +61,23 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-        // Get the first channel (mono)
-        const audioData = audioBuffer.getChannelData(0);
+        // T-38: ресемплинг до 16000 Hz (Whisper ожидает 16кГц) — линейная интерполяция
+        const sourceRate = audioBuffer.sampleRate;
+        const targetRate = 16000;
+        const sourceData = audioBuffer.getChannelData(0);
+        if (sourceRate === targetRate) return sourceData; // уже 16кГц
 
-        return audioData;
+        const ratio = sourceRate / targetRate;
+        const targetLength = Math.round(sourceData.length / ratio);
+        const result = new Float32Array(targetLength);
+        for (let j = 0; j < targetLength; j++) {
+            const srcIdx = j * ratio;
+            const srcIdxFloor = Math.floor(srcIdx);
+            const srcIdxCeil = Math.min(srcIdxFloor + 1, sourceData.length - 1);
+            const frac = srcIdx - srcIdxFloor;
+            result[j] = sourceData[srcIdxFloor] * (1 - frac) + sourceData[srcIdxCeil] * frac;
+        }
+        return result;
     } catch (e: any) {
         console.error("Audio extraction failed", e);
         if (e.message.includes('too large')) throw e;
@@ -70,7 +85,7 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
     } finally {
         // CRITICAL: Close context to release hardware resources
         if (audioContext.state !== 'closed') {
-            await audioContext.close();
+            try { await audioContext.close(); } catch { /* iOS может бросить при close на suspended */ }
         }
     }
 }

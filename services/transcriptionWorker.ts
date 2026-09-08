@@ -1,8 +1,12 @@
-import { pipeline, env, type PipelineType } from '@huggingface/transformers';
+﻿import { pipeline, env, type PipelineType } from '@huggingface/transformers';
 
 // Skip local model checks since we are running in browser
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+// T-38: iOS Safari — нет SharedArrayBuffer без COOP/COEP → многопоточный WASM не работает.
+if (typeof SharedArrayBuffer === 'undefined') {
+  if (env.backends.onnx.wasm) env.backends.onnx.wasm.numThreads = 1;
+}
 
 // Дефолтный хост HF Hub (совпадает с env.remoteHost по умолчанию в transformers.js 3.8.1).
 // Может быть переопределён зеркалом через modelBaseUrl в сообщении воркера
