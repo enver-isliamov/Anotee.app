@@ -308,7 +308,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           setInputCache(prev => ({ ...prev, [selectedTab]: s3Form }));
           
           setTimeout(() => setS3Saved(false), 3000);
-      } catch (e) {
+      } catch (e: any) {
           alert(/Secret Key/.test(e?.message || "") ? (e.message + " — очистите поле «Секретный ключ» и введите ключ заново.") : (e?.message || "Ошибка сохранения настроек. Проверьте соединение."));
           throw e; // T-39: caller knows about failure
       } finally {
