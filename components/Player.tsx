@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, AppConfig } from '../types';
-import { ArrowLeftRight, Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server , Wrench } from 'lucide-react';
+import { ArrowLeftRight, Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, Captions, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server , Wrench } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor, formatTimecode } from '../services/utils';
 import { ToastType } from './Toast';
@@ -34,7 +34,9 @@ interface PlayerProps {
   notify: (msg: string, type: ToastType) => void;
   isDemo?: boolean;
   isMockMode?: boolean;
-  setIsPlayerActive?: (active: boolean) => void; // Smart Polling Control
+  setIsPlayerActive?: (active: boolean) => void;
+  uploadTasks?: any[];
+  cancelUpload?: (id: string) => void; // Smart Polling Control
   onOpenStorageSettings?: () => void; // T-32: «Проверить настройки S3» → страница настроек BYOS
 }
 
@@ -389,7 +391,7 @@ const FloatingControls = React.memo(({
 });
 
 // ... (Rest of file unchanged, just export Player) ...
-export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive, onOpenStorageSettings }) => {
+export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive, uploadTasks, cancelUpload, onOpenStorageSettings }) => {
   const { t, language } = useLanguage();
   
   // Smart Polling: Activate on Mount, Deactivate on Unmount
@@ -1094,10 +1096,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const wordUi = { onTap: handleWordTap, onExtend: extendSelection, isDeletedAt: isWordDeletedAt, selRange };
   // T-37: подписка на синглтон транскрибации
   const [showSubtitles, setShowSubtitles] = useState(false);
-  const [runnerState, setRunnerState] = useState<{ isTranscribing: boolean; versionId: string | null; progress: { status: string; progress: number } | null; chunks: { text: string; timestamp: [number, number] | null }[] | null }>({ isTranscribing: false, versionId: null, progress: null, chunks: null });
+  const [runnerState, setRunnerState] = useState<{ isTranscribing: boolean; versionId: string | null; progress: { status: string; progress: number } | null; chunks: { text: string; timestamp: [number, number] | null }[] | null; error: string | null }>({ isTranscribing: false, versionId: null, progress: null, chunks: null, error: null });
+  const lastRunnerErrRef = useRef<string | null>(null);
+  useEffect(() => { const e = runnerState.error; if (e && e !== lastRunnerErrRef.current) { lastRunnerErrRef.current = e; notify(e, 'error'); } }, [runnerState.error]);
   useEffect(() => {
       const unsub = subscribeTranscription((s) => {
-          setRunnerState({ isTranscribing: s.isTranscribing, versionId: s.versionId, progress: s.progress, chunks: s.chunks });
+          setRunnerState({ isTranscribing: s.isTranscribing, versionId: s.versionId, progress: s.progress, chunks: s.chunks, error: s.error });
           if (!s.isTranscribing && s.chunks && s.versionId === version?.id) { setTranscript(s.chunks); setIsTranscribing(false); setTranscribeProgress(null); }
           if (s.isTranscribing && s.versionId === version?.id) setIsTranscribing(true);
       });
@@ -1326,18 +1330,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       {!isFullscreen && (
            <FeatureErrorBoundary label="Player">
-        <header className="safe-top h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
+        <header className="safe-top h-auto md:h-14 border-b border-transparent md:border-zinc-200 md:dark:border-zinc-800 bg-gradient-to-b from-black/70 to-transparent md:bg-none md:bg-white/80 md:dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 absolute top-0 inset-x-0 md:relative backdrop-blur-sm md:backdrop-blur-md py-2 md:py-0 gap-2 text-white md:text-inherit">
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-            {isTranscribing && (
-              <div data-testid="transcribe-pill" title={t('player.transcribe.pill')} className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2.5 py-1 shrink-0">
-                <Wand2 size={12} className="text-indigo-400 animate-pulse" />
-                <span className="text-[10px] font-bold text-indigo-300 whitespace-nowrap">{t('player.transcribe.pill')} {transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span>
-              </div>
-            )}
-            <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
+            <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 md:bg-zinc-100 md:dark:bg-zinc-800 md:hover:bg-zinc-200 md:dark:hover:bg-zinc-700 text-white md:text-zinc-500 md:hover:text-black md:dark:text-zinc-400 md:dark:hover:text-white transition-colors border border-white/20 md:border-zinc-200 md:dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
             {(!isSearchOpen || isDesktopViewport) && (
-              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
+              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-white md:text-zinc-900 md:dark:text-zinc-100 leading-tight flex-1 min-w-0">
                    <div className="flex items-center gap-2 max-w-full">
                        <div className="relative group/title min-w-0" id="tour-version-selector">
                             <button onClick={() => setShowVersionSelector(!showVersionSelector)} className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 max-w-full">
@@ -1367,7 +1365,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                        <div className="hidden sm:block">{getSourceBadge()}</div>
                    </div>
                    
-                   <div className="flex items-center gap-2">
+                   <div className="hidden md:flex items-center gap-2">
                        {asset.versions.length > 1 && (
                             <div className="relative hidden md:block">
                                 <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>{compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : 'Compare'} <ChevronDown size={10} /></button>
@@ -1382,7 +1380,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             )}
           </div>
           <div className="flex items-center gap-1 md:gap-3 shrink-0">
-             <div className={`flex items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
+             {transcript && transcript.length > 0 && (<button onClick={() => setShowSubtitles(v => !v)} data-testid="cc-toggle" title={t('player.cc.toggle')} className={`w-8 h-8 flex items-center justify-center rounded-lg shrink-0 transition-colors border ${showSubtitles ? 'bg-indigo-500 text-white border-indigo-400' : 'bg-white/10 text-white border-white/20 md:bg-zinc-100 md:dark:bg-zinc-800 md:text-zinc-500 md:border-zinc-200 md:dark:border-zinc-700'}`}><Captions size={16} /></button>)}
+<div className={`hidden md:flex items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
                 {isSearchOpen && (<input autoFocus className="w-full bg-transparent text-xs text-zinc-900 dark:text-white outline-none py-1.5" placeholder={t('dash.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onBlur={() => !searchQuery && setIsSearchOpen(false)} />)}
                 <button onClick={() => { if (isSearchOpen && searchQuery) setSearchQuery(''); else setIsSearchOpen(!isSearchOpen); }} className={`p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white ${isSearchOpen ? 'text-zinc-900 dark:text-white' : ''}`}>{isSearchOpen && searchQuery ? <XIcon size={16} /> : <Search size={18} />}</button>
              </div>
@@ -1412,6 +1411,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           {/* ... Video container ... */}
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
+{isTranscribing && (<div data-testid="transcribe-pill" className="absolute top-2 left-2 z-40 flex items-center gap-1.5 bg-indigo-600/80 backdrop-blur-sm rounded-full px-2.5 py-1 pointer-events-none"><Wand2 size={12} className="text-white animate-pulse" /><span className="text-[10px] font-bold text-white whitespace-nowrap">{t('player.transcribe.pill')} {transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span></div>)}
              
              {/* ... Fullscreen button ... */}
               <div className={`absolute bottom-4 right-4 z-50 flex items-center gap-2 transition-opacity duration-300 ${isFullscreen ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100'}`}>
@@ -1486,6 +1486,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
+{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-16 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((t: any) => (<div key={t.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{t.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(t.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(t.progress || 0)}%</span>{cancelUpload && t.status === 'uploading' && (<button onClick={() => cancelUpload(t.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0"><XIcon size={12} /></button>)}</div>))}</div></div>)}
 {/* ... Comments Overlay ... */}
               {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
@@ -1668,9 +1669,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
               {sheetMode === 'actions' && (
                   <div className="px-4 pb-3 flex flex-col gap-2">
                       {rangeHasDeletion ? (
-                          <button onClick={restoreSelection} className="w-full py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold flex items-center justify-center gap-2" data-testid="sel-restore"><RotateCcw size={14} /> {t('player.sel.restore')}</button>
+                          <button onClick={restoreSelection} className="py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-restore"><RotateCcw size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.restore_word') : t('player.sel.restore')}</button>
                       ) : (
-                          <button onClick={markSelectionDeleted} className="w-full py-2.5 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-2" data-testid="sel-delete"><Trash2 size={14} /> {t('player.sel.delete')}</button>
+                          <button onClick={markSelectionDeleted} className="py-2 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-delete"><Trash2 size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.delete_word') : t('player.sel.delete')}</button>
                       )}
                       <div className="grid grid-cols-2 gap-2">
                           <button
@@ -1679,10 +1680,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                               onPointerCancel={stopSheetRecording}
                               onLostPointerCapture={stopSheetRecording}
                               onContextMenu={(e) => e.preventDefault()}
-                              className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
+                              className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
                               data-testid="sel-voice"
                           ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
-                          <button onClick={() => setSheetMode('typing')} className="py-2.5 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-2" data-testid="sel-type"><Pencil size={14} /> {t('player.sel.type')}</button>
+                          <button onClick={() => setSheetMode('typing')} className="py-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-type"><Pencil size={14} /> {t('player.sel.type')}</button>
                       </div>
                       {sheetRecording && sheetInterim && (<div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center truncate" data-testid="sheet-interim">{sheetInterim}…</div>)}
                   </div>

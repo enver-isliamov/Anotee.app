@@ -53,6 +53,7 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) throw new Error("Web Audio API не поддерживается этим браузером");
     const audioContext = new AudioCtx();
+    try { await audioContext.resume(); } catch { /* iOS: suspended context */ }
 
     try {
         const response = await fetch(fetchUrl);

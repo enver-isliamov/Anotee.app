@@ -722,14 +722,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 notify={notify}
                 isMockMode={isMockMode}
                 setIsPlayerActive={setIsPlayerActive} // Pass Smart Polling Control
+          uploadTasks={uploadTasks}
+          cancelUpload={cancelUpload}
                 onOpenStorageSettings={() => handleNavigate('PROFILE')}
             />
           </ErrorBoundary>
         )}
         
-        {view.type !== 'PROJECT_VIEW' && (
-            <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
-        )}
+{view.type !== 'PROJECT_VIEW' && !isPlayerActive && (
+  <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
+)}
         
         {tourTargetId && (
             <OnboardingWidget 
