@@ -1,4 +1,4 @@
-// T-37: синглтон транскрибации — воркер живёт вне React, переживает уход со страницы плеера.
+﻿// T-37: синглтон транскрибации — воркер живёт вне React, переживает уход со страницы плеера.
 // Состояние шарится между маунтами Player через подписки.
 import { saveTranscript } from './transcriptStore';
 
@@ -8,9 +8,10 @@ export type TranscriptionState = {
   versionId: string | null;
   progress: { status: 'init' | 'downloading' | 'processing'; progress: number } | null;
   chunks: TranscriptionChunk[] | null;
+  error: string | null;
 };
 
-let state: TranscriptionState = { isTranscribing: false, versionId: null, progress: null, chunks: null };
+let state: TranscriptionState = { isTranscribing: false, versionId: null, progress: null, chunks: null, error: null };
 let worker: Worker | null = null;
 const listeners = new Set<(s: TranscriptionState) => void>();
 
@@ -28,7 +29,7 @@ export function isTranscriptionRunning(): boolean { return state.isTranscribing;
 
 export function cancelTranscription(): void {
   if (worker) { try { worker.terminate(); } catch { /* ignore */ } worker = null; }
-  state = { isTranscribing: false, versionId: state.versionId, progress: null, chunks: state.chunks };
+  state = { isTranscribing: false, versionId: state.versionId, progress: null, chunks: state.chunks, error: null };
   emit();
 }
 
@@ -43,16 +44,16 @@ export function startTranscription(versionId: string, opts: {
   if (state.isTranscribing) return;
   // T-37: фейковый движок для e2e — детерминированно
   const fakeRaw = typeof window !== 'undefined' ? (window as any).__anoteeFakeTranscribe : undefined;
-  state = { isTranscribing: true, versionId, progress: { status: 'init', progress: 0 }, chunks: null };
+  state = { isTranscribing: true, versionId, progress: { status: 'init', progress: 0 }, chunks: null, error: null };
   emit();
   const finishOk = (chunks: TranscriptionChunk[]) => {
-    state = { ...state, isTranscribing: false, progress: null, chunks };
+    state = { ...state, isTranscribing: false, progress: null, chunks, error: null };
     try { saveTranscript(versionId, chunks); } catch { /* ignore */ }
     if (worker) { try { worker.terminate(); } catch { /* ignore */ } worker = null; }
     emit();
   };
   const fail = (msg: string) => {
-    state = { ...state, isTranscribing: false, progress: null };
+    state = { ...state, isTranscribing: false, progress: null, error: msg };
     if (worker) { try { worker.terminate(); } catch { /* ignore */ } worker = null; }
     emit();
     if (typeof window !== 'undefined') console.error('[transcription]', msg);
