@@ -115,7 +115,7 @@ export default async function handler(req, res) {
                     if (existing.length > 0) {
                         encryptedSecret = existing[0].secret_access_key;
                     } else {
-                        return res.status(400).json({ error: "Secret Key required for new configuration" });
+                        return res.status(400).json({ error: "Secret Key required: no saved configuration exists yet, so the masked value cannot be reused. Clear the secret field and re-enter the key." });
                     }
                 }
 

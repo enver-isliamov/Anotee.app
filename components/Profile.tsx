@@ -309,7 +309,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           
           setTimeout(() => setS3Saved(false), 3000);
       } catch (e) {
-          alert("Ошибка сохранения настроек. Проверьте соединение.");
+          alert(/Secret Key/.test(e?.message || "") ? (e.message + " — очистите поле «Секретный ключ» и введите ключ заново.") : (e?.message || "Ошибка сохранения настроек. Проверьте соединение."));
           throw e; // T-39: caller knows about failure
       } finally {
           setIsSavingS3(false);

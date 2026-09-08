@@ -1091,7 +1091,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       return w?.timestamp ? isWordDeleted(comments, w) : false;
   };
   const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
-      const v = (window as any).__anoteeVideoRef || videoRef?.current; if (word.timestamp && v) { v.currentTime = word.timestamp[0]; }
+      const t0 = word?.timestamp?.[0]; const v = videoRef?.current; if (v && typeof t0 === 'number' && Number.isFinite(t0)) v.currentTime = t0;
       if (!word.timestamp) return;
       setSelRange({ start: idx, end: idx }); setSheetOpen(true); setSheetMode('actions');
   };
@@ -1427,11 +1427,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                   </div>
               </div>
               {sheetMode === 'actions' && (
-                  <div className="px-4 pb-3 flex flex-col gap-2">
+                  <div className="px-4 pb-3 flex items-center gap-1.5">
                       {rangeHasDeletion ? (
-                          <button onClick={restoreSelection} className="py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-restore"><RotateCcw size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.restore_word') : t('player.sel.restore')}</button>
+                          <button onClick={restoreSelection} title={selRange && selRange.start === selRange.end ? t('player.sel.restore_word') : t('player.sel.restore')} className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 flex items-center justify-center shrink-0" data-testid="sel-restore"><RotateCcw size={16} /></button>
                       ) : (
-                          <button onClick={markSelectionDeleted} className="py-2 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-delete"><Trash2 size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.delete_word') : t('player.sel.delete')}</button>
+                          <button onClick={markSelectionDeleted} title={selRange && selRange.start === selRange.end ? t('player.sel.delete_word') : t('player.sel.delete')} className="w-10 h-10 rounded-xl bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shrink-0" data-testid="sel-delete"><Trash2 size={16} /></button>
                       )}
                       <div className="grid grid-cols-2 gap-2">
                           <button
@@ -1442,8 +1442,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                               onContextMenu={(e) => e.preventDefault()}
                               className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
                               data-testid="sel-voice"
-                          ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
-                          <button onClick={() => setSheetMode('typing')} className="py-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-type"><Pencil size={14} /> {t('player.sel.type')}</button>
+                          title={t('player.sel.voice')} ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
+                          <button onClick={() => setSheetMode('typing')} className="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 hover:bg-indigo-600/20 flex items-center justify-center" data-testid="sel-type" title={t('player.sel.type')}><Pencil size={16} /></button>
                       </div>
                       {sheetRecording && sheetInterim && (<div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center truncate" data-testid="sheet-interim">{sheetInterim}…</div>)}
                   </div>
