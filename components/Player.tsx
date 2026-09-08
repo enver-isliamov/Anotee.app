@@ -253,11 +253,12 @@ const PlayerSidebar = React.memo(({
                                         onPointerCancel={() => { selDragRef.current = false; }}
                                     >
                                         {transcript.map((chunk: TranscriptChunk, i: number) => {
-                                            const deleted = wordUi.isDeletedAt(i);
+                                            const activeW = (transcript ?? [])[i]?.timestamp && currentTime >= (transcript ?? [])[i].timestamp[0] && currentTime <= (transcript ?? [])[i].timestamp[1];
+  const deleted = wordUi.isDeletedAt(i);
                                             const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
                                             const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
                                             return (
-                                                <span key={i} data-idx={i} data-testid="transcript-word" title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-500/80' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}{" "}</span>
+                                                <span key={i} data-idx={i} data-testid="transcript-word" title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`transition-colors mr-[0.3em] ${activeW ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : ''} ${isActive ? 'text-indigo-300 font-semibold' : ''} ${deleted ? 'line-through text-red-500/80' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}{" "}</span>
                                             );
                                         })}
                                     </div>
@@ -1090,6 +1091,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       return w?.timestamp ? isWordDeleted(comments, w) : false;
   };
   const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
+      const v = (window as any).__anoteeVideoRef || videoRef?.current; if (word.timestamp && v) { v.currentTime = word.timestamp[0]; }
       if (!word.timestamp) return;
       setSelRange({ start: idx, end: idx }); setSheetOpen(true); setSheetMode('actions');
   };
@@ -1365,7 +1367,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                        <div className="hidden sm:block">{getSourceBadge()}</div>
                    </div>
                    
-                   <div className="hidden md:flex items-center gap-2">
+                   <div className="hidden items-center gap-2">
                        {asset.versions.length > 1 && (
                             <div className="relative hidden md:block">
                                 <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>{compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : 'Compare'} <ChevronDown size={10} /></button>
@@ -1380,8 +1382,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             )}
           </div>
           <div className="flex items-center gap-1 md:gap-3 shrink-0">
-             {transcript && transcript.length > 0 && (<button onClick={() => setShowSubtitles(v => !v)} data-testid="cc-toggle" title={t('player.cc.toggle')} className={`w-8 h-8 flex items-center justify-center rounded-lg shrink-0 transition-colors border ${showSubtitles ? 'bg-indigo-500 text-white border-indigo-400' : 'bg-white/10 text-white border-white/20 md:bg-zinc-100 md:dark:bg-zinc-800 md:text-zinc-500 md:border-zinc-200 md:dark:border-zinc-700'}`}><Captions size={16} /></button>)}
-<div className={`hidden md:flex items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
+<div className={`hidden items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
                 {isSearchOpen && (<input autoFocus className="w-full bg-transparent text-xs text-zinc-900 dark:text-white outline-none py-1.5" placeholder={t('dash.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onBlur={() => !searchQuery && setIsSearchOpen(false)} />)}
                 <button onClick={() => { if (isSearchOpen && searchQuery) setSearchQuery(''); else setIsSearchOpen(!isSearchOpen); }} className={`p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white ${isSearchOpen ? 'text-zinc-900 dark:text-white' : ''}`}>{isSearchOpen && searchQuery ? <XIcon size={16} /> : <Search size={18} />}</button>
              </div>
@@ -1413,18 +1414,64 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
 {isTranscribing && (<div data-testid="transcribe-pill" className="absolute top-2 left-2 z-40 flex items-center gap-1.5 bg-indigo-600/80 backdrop-blur-sm rounded-full px-2.5 py-1 pointer-events-none"><Wand2 size={12} className="text-white animate-pulse" /><span className="text-[10px] font-bold text-white whitespace-nowrap">{t('player.transcribe.pill')} {transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span></div>)}
              
+      {selRange !== null && sheetOpen && transcript && transcript[selRange.start] && (
+          <div className="fixed bottom-0 left-0 right-0 z-[120] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }} data-testid="word-sheet">
+              <div className="flex justify-center pt-2"><div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div></div>
+              <div className="px-4 pt-2 pb-1">
+                  <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">{t('player.sel.range')} · {formatTimecode(selStartTs, videoFps)} → {formatTimecode(selEndTs, videoFps)}</div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-300 truncate">«{selText}»</div>
+                      </div>
+                      <button onClick={closeSelSheet} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 shrink-0"><XIcon size={16} /></button>
+                  </div>
+              </div>
+              {sheetMode === 'actions' && (
+                  <div className="px-4 pb-3 flex flex-col gap-2">
+                      {rangeHasDeletion ? (
+                          <button onClick={restoreSelection} className="py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-restore"><RotateCcw size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.restore_word') : t('player.sel.restore')}</button>
+                      ) : (
+                          <button onClick={markSelectionDeleted} className="py-2 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-delete"><Trash2 size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.delete_word') : t('player.sel.delete')}</button>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onPointerDown={(e) => { e.preventDefault(); startSheetRecording(); }}
+                              onPointerUp={(e) => { e.preventDefault(); stopSheetRecording(); }}
+                              onPointerCancel={stopSheetRecording}
+                              onLostPointerCapture={stopSheetRecording}
+                              onContextMenu={(e) => e.preventDefault()}
+                              className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
+                              data-testid="sel-voice"
+                          ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
+                          <button onClick={() => setSheetMode('typing')} className="py-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-type"><Pencil size={14} /> {t('player.sel.type')}</button>
+                      </div>
+                      {sheetRecording && sheetInterim && (<div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center truncate" data-testid="sheet-interim">{sheetInterim}…</div>)}
+                  </div>
+              )}
+              {sheetMode === 'typing' && (
+                  <div className="px-4 pb-3 flex flex-col gap-2">
+                      <textarea autoFocus value={typedText} onChange={(e) => setTypedText(e.target.value)} rows={2} placeholder={t('player.sel.type_placeholder')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-[13px] text-zinc-900 dark:text-white outline-none focus:border-indigo-500 resize-none" data-testid="sel-typed" />
+                      <div className="flex gap-2">
+                          <button onClick={() => setSheetMode('actions')} className="flex-1 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold">{t('player.transcript.menu_cancel')}</button>
+                          <button onClick={sendTypedEdit} disabled={!typedText.trim()} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2" data-testid="sel-send"><Send size={14} /> {t('player.sel.send')}</button>
+                      </div>
+                  </div>
+              )}
+          </div>
+      )}
              {/* ... Fullscreen button ... */}
-              <div className={`absolute bottom-4 right-4 z-50 flex items-center gap-2 transition-opacity duration-300 ${isFullscreen ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100'}`}>
+              <div className={`absolute bottom-4 right-4 z-50 flex flex-col md:flex-row items-center md:items-end gap-2 transition-opacity duration-300 ${isFullscreen ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100'}`}>
                  {isFullscreen && (
                      <button onClick={() => setShowTxtOverlay(v => !v)} data-testid="txt-toggle" title={t('player.txt.toggle')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg border ${showTxtOverlay ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-white/10'}`}><FileText size={20} /></button>
                  )}
                  {isFullscreen && (
                      <button onClick={() => { if (isLiveDictating) stopLiveDictation(); else startLiveDictation(); }} data-testid="live-mic" title={t('player.live.mic')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg border ${isLiveDictating ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-white/10'}`}>{isLiveDictating ? <MicOff size={20} /> : <Mic size={20} />}</button>
                  )}
+{transcript && transcript.length > 0 && (<button onClick={() => setShowSubtitles(v => !v)} data-testid="cc-toggle" title={t('player.cc.toggle')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors ${showSubtitles ? 'bg-indigo-500 text-white' : 'bg-black/60 text-zinc-300 hover:text-white'}`}><Captions size={18} /></button>)}
                  <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
               </div>
              
-             <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
+             <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-14 md:top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
                 <div className={`font-mono text-white tracking-widest transition-all duration-200 ${scrubActive ? 'text-2xl md:text-3xl px-4 py-1.5' : 'text-xs px-2 py-0.5'}`}>{formatTimecode(currentTime, videoFps)}</div>
                 <div className={`${scrubActive ? 'h-8' : 'h-4'} w-px bg-white/20 transition-all`}></div>
                 <button onClick={cycleFps} className={`${scrubActive ? 'px-3 py-2' : 'px-1.5 py-0.5'} hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps`} title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
@@ -1465,28 +1512,43 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  </div>
              )}
 
-                          {showSubtitles && transcript && transcript.length > 0 && (
-                 <div className="absolute bottom-16 left-0 right-0 z-[60] flex justify-center pointer-events-none px-6" data-testid="subtitles-overlay">
-                     <div className="bg-black/75 backdrop-blur-sm rounded-xl px-4 py-2 max-w-[85%] text-center pointer-events-auto">
-                         <div className="text-sm md:text-base leading-snug">
-                             {(() => {
-                                 const words = transcript.filter((w: any) => w.timestamp && currentTime >= w.timestamp[0] - 0.15 && currentTime <= w.timestamp[1] + 0.15);
-                                 const list = words.length > 0 ? words : (() => { const next = transcript.find((w: any) => w.timestamp && w.timestamp[0] >= currentTime); return next ? [next] : []; })();
-                                 if (list.length === 0) return <span className="text-zinc-400">…</span>;
-                                 return list.map((w: any, i: number) => {
-                                     const deleted = isWordDeletedAt(transcript.indexOf(w));
-                                     return (
-                                         <span key={i} data-testid="subtitle-word" onClick={() => handleWordTap(w, transcript.indexOf(w))} className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : 'text-white hover:text-indigo-200'}`}>{w.text.trim()}</span>
-                                     );
-                                 });
-                             })()}
-                         </div>
-                         <div className="text-[9px] text-zinc-400 mt-1">{t('player.cc.hint')}</div>
-                     </div>
-                 </div>
-             )}
+{showSubtitles && transcript && transcript.length > 0 && (
+<div className="absolute bottom-16 left-0 right-0 z-[60] flex justify-center pointer-events-none px-4" data-testid="subtitles-overlay">
+<div className="bg-black/75 backdrop-blur-sm rounded-xl px-4 py-2 max-w-[92%] text-center pointer-events-auto">
+<div className="text-sm md:text-base leading-snug break-words">
+{(() => {
+  const t = transcript;
+  const groups: { ws: any[]; idx: number[] }[] = [];
+  let cur: { ws: any[]; idx: number[] } = { ws: [], idx: [] };
+  t.forEach((w: any, i: number) => {
+    if (!w.timestamp) return;
+    cur.ws.push(w); cur.idx.push(i);
+    const ends = /[.!?…]$/.test(w.text || '') || (cur.ws.length > 1 && w.timestamp[0] - (cur.ws[cur.ws.length - 2].timestamp?.[1] ?? w.timestamp[0]) > 0.9);
+    if (ends) { groups.push(cur); cur = { ws: [], idx: [] }; }
+  });
+  if (cur.ws.length) groups.push(cur);
+  let gi = groups.findIndex(g => currentTime <= (g.ws[g.ws.length - 1].timestamp?.[1] ?? 0) + 0.15);
+  if (gi === -1) gi = groups.length - 1;
+  const g = groups[gi];
+  if (!g) return <span className="text-zinc-400">…</span>;
+  return g.ws.map((w: any, k: number) => {
+    const idx = g.idx[k];
+    const deleted = wordUi.isDeletedAt(idx);
+    const active = currentTime >= w.timestamp[0] - 0.05 && currentTime <= w.timestamp[1] + 0.05;
+    const inSel = wordUi.selRange && idx >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && idx <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
+    return (
+      <span key={idx} data-testid="subtitle-word" onClick={() => { if (sheetOpen && wordUi.selRange) wordUi.onExtend(idx); else wordUi.onTap(w, idx); }}
+        className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400 opacity-60' : inSel ? 'bg-indigo-500/40 rounded px-0.5' : active ? 'text-yellow-300 font-bold' : 'text-white'}`}>{w.text}</span>
+    );
+  });
+})()}
+</div>
+<div className="text-[9px] text-zinc-400 mt-1">{t('player.cc.hint')}</div>
+</div>
+</div>
+)}
 
-{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-16 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((t: any) => (<div key={t.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{t.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(t.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(t.progress || 0)}%</span>{cancelUpload && t.status === 'uploading' && (<button onClick={() => cancelUpload(t.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0"><XIcon size={12} /></button>)}</div>))}</div></div>)}
+{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-24 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((t: any) => (<div key={t.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{t.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(t.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(t.progress || 0)}%</span>{cancelUpload && t.status === 'uploading' && (<button onClick={() => cancelUpload(t.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0"><XIcon size={12} /></button>)}</div>))}</div></div>)}
 {/* ... Comments Overlay ... */}
               {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
@@ -1654,51 +1716,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             </div>
         )}
       </div>
-      {selRange !== null && sheetOpen && transcript && transcript[selRange.start] && (
-          <div className="fixed bottom-0 left-0 right-0 z-[120] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }} data-testid="word-sheet">
-              <div className="flex justify-center pt-2"><div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div></div>
-              <div className="px-4 pt-2 pb-1">
-                  <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">{t('player.sel.range')} · {formatTimecode(selStartTs, videoFps)} → {formatTimecode(selEndTs, videoFps)}</div>
-                          <div className="text-xs text-zinc-600 dark:text-zinc-300 truncate">«{selText}»</div>
-                      </div>
-                      <button onClick={closeSelSheet} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 shrink-0"><XIcon size={16} /></button>
-                  </div>
-              </div>
-              {sheetMode === 'actions' && (
-                  <div className="px-4 pb-3 flex flex-col gap-2">
-                      {rangeHasDeletion ? (
-                          <button onClick={restoreSelection} className="py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-restore"><RotateCcw size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.restore_word') : t('player.sel.restore')}</button>
-                      ) : (
-                          <button onClick={markSelectionDeleted} className="py-2 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-delete"><Trash2 size={14} /> {selRange && selRange.start === selRange.end ? t('player.sel.delete_word') : t('player.sel.delete')}</button>
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                          <button
-                              onPointerDown={(e) => { e.preventDefault(); startSheetRecording(); }}
-                              onPointerUp={(e) => { e.preventDefault(); stopSheetRecording(); }}
-                              onPointerCancel={stopSheetRecording}
-                              onLostPointerCapture={stopSheetRecording}
-                              onContextMenu={(e) => e.preventDefault()}
-                              className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
-                              data-testid="sel-voice"
-                          ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
-                          <button onClick={() => setSheetMode('typing')} className="py-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-1" data-testid="sel-type"><Pencil size={14} /> {t('player.sel.type')}</button>
-                      </div>
-                      {sheetRecording && sheetInterim && (<div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center truncate" data-testid="sheet-interim">{sheetInterim}…</div>)}
-                  </div>
-              )}
-              {sheetMode === 'typing' && (
-                  <div className="px-4 pb-3 flex flex-col gap-2">
-                      <textarea autoFocus value={typedText} onChange={(e) => setTypedText(e.target.value)} rows={2} placeholder={t('player.sel.type_placeholder')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-[13px] text-zinc-900 dark:text-white outline-none focus:border-indigo-500 resize-none" data-testid="sel-typed" />
-                      <div className="flex gap-2">
-                          <button onClick={() => setSheetMode('actions')} className="flex-1 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold">{t('player.transcript.menu_cancel')}</button>
-                          <button onClick={sendTypedEdit} disabled={!typedText.trim()} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2" data-testid="sel-send"><Send size={14} /> {t('player.sel.send')}</button>
-                      </div>
-                  </div>
-              )}
-          </div>
-      )}
 
       <FloatingControls 
         initialPos={controlsPos}
