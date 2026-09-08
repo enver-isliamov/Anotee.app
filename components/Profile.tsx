@@ -310,6 +310,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           setTimeout(() => setS3Saved(false), 3000);
       } catch (e) {
           alert("Ошибка сохранения настроек. Проверьте соединение.");
+          throw e; // T-39: caller knows about failure
       } finally {
           setIsSavingS3(false);
       }
@@ -317,6 +318,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   const handleTestConnection = async () => {
       await handleSaveAndActivate(); 
+      try { await handleSaveAndActivate(); } catch { return; }
+
       setIsTestingS3(true);
       setTestResult(null);
       try {
@@ -340,6 +343,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   const handleAutoCors = async () => {
       await handleSaveAndActivate(); 
+      try { await handleSaveAndActivate(); } catch { return; }
+
       setIsConfiguringCors(true);
       setTestResult(null);
       try {
