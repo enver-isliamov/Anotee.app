@@ -17,6 +17,8 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+  // T-44: незавершённые задачи нежизнеспособны после перезагрузки страницы — чистим на маунте
+  useEffect(() => { setUploadTasks(prev => prev.filter(t => t.status !== 'uploading' && t.status !== 'processing')); }, []);
     
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
@@ -178,8 +180,9 @@ export const useUploadManager = (
                 }
                 assetUrl = localBlobUrl;
                 storageType = 'local';
-            } else if (useS3) {
-                let s3UploadSuccess = false;
+            } else {
+    let s3UploadSuccess = false;
+    if (!useDrive) {
                 try {
                     // --- S3 UPLOAD PATH ---
                     const token = await getToken();
@@ -244,7 +247,8 @@ export const useUploadManager = (
                     // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
                 }
 
-                if (!s3UploadSuccess) {
+                }
+  if (!s3UploadSuccess) {
                      // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
                     const isDriveReady = GoogleDriveService.isAuthenticated();
                     if (!isDriveReady) {
