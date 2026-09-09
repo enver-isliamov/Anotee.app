@@ -180,7 +180,8 @@ export const useUploadManager = (
                 }
                 assetUrl = localBlobUrl;
                 storageType = 'local';
-            } else if (useS3) {
+            } else {
+    if (!useDrive) {
                 let s3UploadSuccess = false;
                 try {
                     // --- S3 UPLOAD PATH ---
@@ -246,7 +247,8 @@ export const useUploadManager = (
                     // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
                 }
 
-                if (!s3UploadSuccess) {
+                }
+  if (!s3UploadSuccess) {
                      // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
                     const isDriveReady = GoogleDriveService.isAuthenticated();
                     if (!isDriveReady) {
