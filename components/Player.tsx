@@ -644,7 +644,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       updatedVersions[currentVersionIdx] = versionToUpdate; 
       const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); 
       onUpdateProject({ ...project, assets: updatedAssets }); 
-      if (!isDemo && currentUser) await api.comment(project.id, asset.id, version.id, action, payload, currentUser); 
+      if (!isDemo && currentUser) {
+            try {
+                await api.comment(project.id, asset.id, version.id, action, payload, currentUser);
+            } catch (err: any) {
+                if (String(err?.message || '').includes('409') || String(err?.message || '').includes('Conflict')) {
+                    await new Promise(r => setTimeout(r, 400));
+                    try { await api.comment(project.id, asset.id, version.id, action, payload, currentUser); } catch (e2: any) { notify(t('common.error'), 'error'); }
+                } else { notify(t('common.error'), 'error'); }
+            }
+        } 
   };
 
   useEffect(() => { 
@@ -799,7 +808,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
-  const handleVideoError = async () => { 
+  const handleVideoError = async () => {
+    if (localFileSrc && localFileSrc.startsWith('blob:')) { setLocalFileSrc(null); setLocalFileName(null); } 
       if (loadingDrive) return; 
       if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
           if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } 
@@ -1104,7 +1114,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   useEffect(() => {
       const unsub = subscribeTranscription((s) => {
           setRunnerState({ isTranscribing: s.isTranscribing, versionId: s.versionId, progress: s.progress, chunks: s.chunks, error: s.error });
-          if (!s.isTranscribing && s.chunks && s.versionId === version?.id) { setTranscript(s.chunks); setIsTranscribing(false); setTranscribeProgress(null); }
+          if (!s.isTranscribing && s.versionId === version?.id) { setTranscript(s.chunks); setIsTranscribing(false); setTranscribeProgress(null); }
           if (s.isTranscribing && s.versionId === version?.id) setIsTranscribing(true);
       });
       return unsub;
@@ -1332,12 +1342,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       {!isFullscreen && (
            <FeatureErrorBoundary label="Player">
-        <header className="safe-top h-auto md:h-14 border-b border-transparent md:border-zinc-200 md:dark:border-zinc-800 bg-gradient-to-b from-black/70 to-transparent md:bg-none md:bg-white/80 md:dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 absolute top-0 inset-x-0 md:relative backdrop-blur-sm md:backdrop-blur-md py-2 md:py-0 gap-2 text-white md:text-inherit">
+        <header className="safe-top h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-            <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 md:bg-zinc-100 md:dark:bg-zinc-800 md:hover:bg-zinc-200 md:dark:hover:bg-zinc-700 text-white md:text-zinc-500 md:hover:text-black md:dark:text-zinc-400 md:dark:hover:text-white transition-colors border border-white/20 md:border-zinc-200 md:dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
+            <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
             {(!isSearchOpen || isDesktopViewport) && (
-              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-white md:text-zinc-900 md:dark:text-zinc-100 leading-tight flex-1 min-w-0">
+              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
                    <div className="flex items-center gap-2 max-w-full">
                        <div className="relative group/title min-w-0" id="tour-version-selector">
                             <button onClick={() => setShowVersionSelector(!showVersionSelector)} className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 px-3 rounded-lg transition-colors text-left border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 max-w-full">
@@ -1471,7 +1481,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                  <button onClick={() => toggleFullScreen()} data-testid="fs-toggle" className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
               </div>
              
-             <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-14 md:top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
+             <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
                 <div className={`font-mono text-white tracking-widest transition-all duration-200 ${scrubActive ? 'text-2xl md:text-3xl px-4 py-1.5' : 'text-xs px-2 py-0.5'}`}>{formatTimecode(currentTime, videoFps)}</div>
                 <div className={`${scrubActive ? 'h-8' : 'h-4'} w-px bg-white/20 transition-all`}></div>
                 <button onClick={cycleFps} className={`${scrubActive ? 'px-3 py-2' : 'px-1.5 py-0.5'} hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps`} title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
@@ -1537,7 +1547,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     const active = currentTime >= w.timestamp[0] - 0.05 && currentTime <= w.timestamp[1] + 0.05;
     const inSel = wordUi.selRange && idx >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && idx <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
     return (
-      <span key={idx} data-testid="subtitle-word" onClick={() => { if (sheetOpen && wordUi.selRange) wordUi.onExtend(idx); else wordUi.onTap(w, idx); }}
+      <span key={idx} data-testid="subtitle-word" onClick={() => wordUi.onTap(w, idx)}
         className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400 opacity-60' : inSel ? 'bg-indigo-500/40 rounded px-0.5' : active ? 'text-yellow-300 font-bold' : 'text-white'}`}>{w.text}</span>
     );
   });
@@ -1548,7 +1558,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 </div>
 )}
 
-{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-24 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((t: any) => (<div key={t.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{t.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(t.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(t.progress || 0)}%</span>{cancelUpload && t.status === 'uploading' && (<button onClick={() => cancelUpload(t.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0"><XIcon size={12} /></button>)}</div>))}</div></div>)}
+{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-24 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((t: any) => (<div key={t.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{t.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(t.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(t.progress || 0)}%</span>{cancelUpload && (<button onClick={() => cancelUpload(t.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0" title={t('common.close')}><XIcon size={12} /></button>)}</div>))}</div></div>)}
 {/* ... Comments Overlay ... */}
               {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">

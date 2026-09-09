@@ -17,6 +17,8 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+  // T-44: незавершённые задачи нежизнеспособны после перезагрузки страницы — чистим на маунте
+  useEffect(() => { setUploadTasks(prev => prev.filter(t => t.status !== 'uploading' && t.status !== 'processing')); }, []);
     
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
