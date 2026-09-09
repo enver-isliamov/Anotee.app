@@ -181,8 +181,8 @@ export const useUploadManager = (
                 assetUrl = localBlobUrl;
                 storageType = 'local';
             } else {
+    let s3UploadSuccess = false;
     if (!useDrive) {
-                let s3UploadSuccess = false;
                 try {
                     // --- S3 UPLOAD PATH ---
                     const token = await getToken();
