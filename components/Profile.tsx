@@ -1,7 +1,7 @@
 ﻿
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock , Wrench } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -279,6 +279,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       }
   };
 
+
+  const handleMigrateStorage = async () => {
+    if (!confirm('Починить источники видео: версии с Google Drive получат корректный тип storage. Продолжить?')) return;
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/storage?action=migrateStorage', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok && data.success) alert(`Готово: исправлено версий — ${data.fixed}. Иконки источников теперь корректны.`);
+      else alert(data.error || 'Не удалось выполнить миграцию');
+    } catch (e: any) { alert(e?.message || 'Сбой сети'); }
+  };
   const handleSaveAndActivate = async () => {
       if (selectedTab === 'google') {
           alert("Для активации Google Drive убедитесь, что он подключен (кнопка выше). Настройки S3 не будут использоваться.");
@@ -731,7 +742,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             <div className="col-span-2 pt-4 border-t border-zinc-800 flex justify-between gap-3 flex-wrap items-center">
                                                 <div className="flex gap-3">
                                                     <button onClick={() => setShowCorsHelp(true)} className="text-[10px] text-zinc-500 hover:text-zinc-300 underline">CORS Config</button>
-                                                    <button onClick={handleAutoCors} disabled={isConfiguringCors} className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"><Wand2 size={10}/> Auto-Fix CORS</button>
+                                                    <button onClick={handleMigrateStorage} className="w-full py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-2"><Wrench size={14} /> Починить источники видео (Drive)</button>
+        <button onClick={handleAutoCors} disabled={isConfiguringCors} className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"><Wand2 size={10}/> Auto-Fix CORS</button>
                                                 </div>
 
                                                 <div className="flex gap-2">
@@ -909,7 +921,16 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
                         <button onClick={() => setShowProviderHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
                         <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">{currentProviderGuide.title}</h2>
-                        <p className="text-xs text-zinc-500 mb-4">Инструкция по получению ключей доступа</p>
+                        <details className="mb-4 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+          <summary className="text-xs font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer px-3 py-2">Cloudflare R2 — инструкция по получению ключей доступа</summary>
+          <div className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1.5">
+            <p>1. Cloudflare Dashboard → R2 → «API Tokens» → «Create API Token» (это <b>Account API Token</b>; User API Tokens не подходят).</p>
+            <p>2. Скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (Secret показывается один раз). «Token value» не нужен — он для Cloudflare API.</p>
+            <p>3. <b>Endpoint</b>: юрисдикция Default → <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code>; EU → добавить <code>.eu</code>; US → <code>.us</code>. Region — <code>auto</code>.</p>
+            <p>4. Bucket — имя бакета (например <code>anotee</code>). Затем нажмите «Test» — проверит доступ и настроит CORS.</p>
+            <p>5. Если Test просит ключ заново — очистите поле секрета и введите его повторно (при смене Access Key старый Secret не переиспользуется).</p>
+          </div>
+        </details>
                         {currentProviderGuide.warning && (
                             <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
                                 <AlertTriangle size={16} className="shrink-0 mt-0.5" />

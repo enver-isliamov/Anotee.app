@@ -180,110 +180,87 @@ export const useUploadManager = (
                 }
                 assetUrl = localBlobUrl;
                 storageType = 'local';
-            } else {
+  } else {
     let s3UploadSuccess = false;
     if (!useDrive) {
-                try {
-                    // --- S3 UPLOAD PATH ---
-                    const token = await getToken();
-                    // 1. Get Presigned URL (PUT)
-                    const presignRes = await fetch('/api/storage?action=presign', {
-                        method: 'POST',
-                        headers: { 
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            operation: 'put',
-                            // T-35: ключ с оригинальным именем (UTF-8 поддерживается S3/R2); экранируем только путь-разделители
-                            key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, 
-                            contentType: file.type,
-                            projectId: projectId // CRITICAL: Upload to Project Owner's Bucket
-                        })
-                    });
-
-                    if (presignRes.ok) {
-                        const { url: uploadUrl, key } = await presignRes.json();
-
-                        // 2. Upload to S3 directly
-                        await new Promise((resolve, reject) => {
-                            const xhr = new XMLHttpRequest();
-                            
-                            abortController.signal.addEventListener('abort', () => {
-                                xhr.abort();
-                                reject(new Error("Upload cancelled"));
-                            });
-
-                            xhr.open('PUT', uploadUrl);
-                            xhr.setRequestHeader('Content-Type', file.type);
-                            
-                            // Fix for Large Files (50GB+): Prevent browser from aborting long uploads
-                            xhr.timeout = 0;
-
-                            xhr.upload.onprogress = (e) => {
-                                if (e.lengthComputable) {
-                                    updateProgress(Math.round((e.loaded / e.total) * 100));
-                                }
-                            };
-
-                            xhr.onload = () => {
-                                if (xhr.status >= 200 && xhr.status < 300) {
-                                    resolve(true);
-                                } else {
-                                    reject(new Error(`S3 Upload failed: ${xhr.status}`));
-                                }
-                            };
-                            xhr.onerror = () => reject(new Error("Network error during S3 upload"));
-                            xhr.send(file);
-                        });
-
-                        storageType = 's3';
-                        s3Key = key;
-                        s3UploadSuccess = true;
-                    } 
-                } catch (e: any) {
-                    if (e.message === "Upload cancelled") throw e;
-                    console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
-                    // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
-                }
-
-                }
-  if (!s3UploadSuccess) {
-                     // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
-                    const isDriveReady = GoogleDriveService.isAuthenticated();
-                    if (!isDriveReady) {
-                        throw new Error("Storage Error: S3 not configured for this project, and Drive not connected.");
-                    }
-
-                    const safeProjectName = project ? project.name : "Unknown Project";
-
-                    try {
-                        const appFolder = await GoogleDriveService.ensureAppFolder();
-                        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                        
-                        let folderName = assetTitle;
-                        if (targetAssetId && project) {
-                                const existingAsset = project.assets.find(a => a.id === targetAssetId);
-                                if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
-                        }
-
-                        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
-
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName, abortController.signal);
-                        googleDriveId = result.id;
-                        storageType = 'drive';
-                        
-                        await GoogleDriveService.makeFilePublic(result.id);
-
-                    } catch (driveErr: any) {
-                        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
-                                throw new Error("Drive Session Expired. Please refresh page/reconnect.");
-                        }
-                        throw driveErr;
-                    }
-                }
-
-            } 
+      if (file.size > 64 * 1024 * 1024) {
+        // T-47: multipart для iOS/больших файлов — обходит лимит одного PUT
+        const token = await getToken();
+        const s3KeyPath = `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`;
+        const cm = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'createMultipart', key: s3KeyPath, contentType: file.type, projectId }) });
+        if (!cm.ok) throw new Error('Multipart init failed');
+        const { uploadId } = await cm.json();
+        const chunk = 32 * 1024 * 1024;
+        const totalParts = Math.ceil(file.size / chunk);
+        const parts: { ETag: string; PartNumber: number }[] = [];
+        for (let p = 1; p <= totalParts; p++) {
+          if (abortController.signal.aborted) throw new Error('Upload cancelled');
+          const pr = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'part', key: s3KeyPath, uploadId, partNumber: p, projectId }) });
+          if (!pr.ok) throw new Error('Multipart part presign failed');
+          const { url: partUrl } = await pr.json();
+          const blobPart = file.slice((p - 1) * chunk, Math.min(p * chunk, file.size));
+          const etag = await new Promise<string>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            abortController.signal.addEventListener('abort', () => { xhr.abort(); reject(new Error('Upload cancelled')); });
+            xhr.open('PUT', partUrl);
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable) updateProgress(Math.round(((p - 1) * chunk + e.loaded) / file.size * 100)); };
+            xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve((xhr.getResponseHeader('ETag') || '').replace(/"/g, '')); else reject(new Error('Part ' + p + ' failed: ' + xhr.status)); };
+            xhr.onerror = () => reject(new Error('Network error during part upload'));
+            xhr.send(blobPart);
+          });
+          parts.push({ ETag: etag, PartNumber: p });
+        }
+        const comp = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'completeMultipart', key: s3KeyPath, uploadId, projectId, parts }) });
+        if (!comp.ok) throw new Error('Multipart complete failed');
+        storageType = 's3'; s3Key = s3KeyPath; s3UploadSuccess = true;
+      } else {
+        try {
+          const token = await getToken();
+          const presignRes = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'put', key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, contentType: file.type, projectId }) });
+          if (presignRes.ok) {
+            const { url: uploadUrl, key } = await presignRes.json();
+            await new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              abortController.signal.addEventListener('abort', () => { xhr.abort(); reject(new Error('Upload cancelled')); });
+              xhr.open('PUT', uploadUrl);
+              xhr.setRequestHeader('Content-Type', file.type);
+              xhr.timeout = 0;
+              xhr.upload.onprogress = (e) => { if (e.lengthComputable) updateProgress(Math.round((e.loaded / e.total) * 100)); };
+              xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(true); else reject(new Error(`S3 Upload failed: ${xhr.status}`)); };
+              xhr.onerror = () => reject(new Error('Network error during S3 upload'));
+              xhr.send(file);
+            });
+            storageType = 's3'; s3Key = key; s3UploadSuccess = true;
+          }
+        } catch (e: any) {
+          if (e.message === 'Upload cancelled') throw e;
+          console.warn('S3 Upload attempt failed, falling back to Drive/Error', e);
+        }
+      }
+    }
+    if (!s3UploadSuccess) {
+      const isDriveReady = GoogleDriveService.isAuthenticated();
+      if (!isDriveReady) throw new Error('Storage Error: S3 not configured for this project, and Drive not connected.');
+      const safeProjectName = project ? project.name : 'Unknown Project';
+      try {
+        const appFolder = await GoogleDriveService.ensureAppFolder();
+        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+        let folderName = assetTitle;
+        if (targetAssetId && project) {
+          const existingAsset = project.assets.find(a => a.id === targetAssetId);
+          if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+        }
+        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
+        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName, abortController.signal);
+        googleDriveId = result.id;
+        storageType = 'drive';
+        await GoogleDriveService.makeFilePublic(result.id);
+      } catch (driveErr: any) {
+        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) throw new Error('Drive Session Expired. Please refresh page/reconnect.');
+        throw driveErr;
+      }
+    }
+  }
 
             // 4. Construct Final Project State (Seamless Swap)
             let finalProjectToSync: Project | null = null;
