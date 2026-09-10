@@ -274,7 +274,7 @@ if (file.size > 64 * 1024 * 1024) {
                         s3UploadSuccess = true;
                     }
       }
-    } catch (e: any) {
+    catch (e: any) {
       if (e.message === "Upload cancelled") throw e;
                     console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
                     // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
