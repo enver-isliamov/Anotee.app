@@ -133,6 +133,7 @@ interface AppLayoutProps {
     userObj?: any;
 }
 
+function usePageVisibility() { const [v, setV] = React.useState(typeof document === 'undefined' ? true : !document.hidden); React.useEffect(() => { const h = () => setV(!document.hidden); document.addEventListener('visibilitychange', h); return () => document.removeEventListener('visibilitychange', h); }, []); return v; }
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization, userObj }) => {
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -185,7 +186,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Smart Polling Logic: 
   // - If Player is ACTIVE (playing/interacting): Poll every 15s
   // - If Player is IDLE or Dashboard: Poll every 5 minutes (300s) to save resources
-  const pollingInterval = isPlayerActive ? 15000 : 300000;
+  const isPageVisible = usePageVisibility();
+  const pollingInterval = isPlayerActive && isPageVisible ? 45000 : 1800000; // T-48: экономия Vercel Edge Requests (75% лимита)
 
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
       refreshInterval: pollingInterval, 
