@@ -253,3 +253,9 @@
 - Док действий: компактный (py-2, gap-1.5), подписи «Удалить/Вернуть слово» для одиночного слова vs «фрагмент».
 - Runner: ошибка транскрибации теперь доходит до UI (тост); iOS: audioContext.resume() перед decodeAudioData.
 - Верификация: tsc 0, build 0, unit 57. Коммит 7086fe6.
+
+### T-49 P1 `done` Экономия Vercel Edge Requests (75% лимита)
+- Диагноз (Cloudflare API): 246 082 req/сутки через зону; 99,6% — dev.anotee.com; cachedRequests = 0 (всё на origin).
+- Фиксы кода: polling 15с→45с (активный плеер), 5мин→15мин (фон); опрос засыпает при скрытой вкладке (30мин) — usePageVisibility.
+- Инфра (действия владельца): Cloudflare Cache Rule для /assets/* (Cache Everything) — 80-90% трафика перестанет доходить до Vercel; Deployment Protection OFF для dev; Bot Fight Mode ON; Vercel Usage-уведомление на 90%.
+- Commit 9416079, c6a9396, 48703a2.
