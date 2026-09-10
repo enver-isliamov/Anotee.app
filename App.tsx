@@ -133,6 +133,7 @@ interface AppLayoutProps {
     userObj?: any;
 }
 
+function usePageVisibility() { const [v, setV] = React.useState(typeof document === 'undefined' ? true : !document.hidden); React.useEffect(() => { const h = () => setV(!document.hidden); document.addEventListener('visibilitychange', h); return () => document.removeEventListener('visibilitychange', h); }, []); return v; }
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization, userObj }) => {
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
