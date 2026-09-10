@@ -626,7 +626,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   );
 
   if (view.type === 'LIVE_DEMO') return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
-  if (view.type === 'TEST_RUNNER') return <TestRunner onBack={() => handleNavigate('DASHBOARD')} />; // New Render
+  if (view.type === 'TEST_RUNNER' && window.location.hostname !== 'anotee.com') return <TestRunner onBack={() => handleNavigate('DASHBOARD')} />; // T-46: скрыт на проде
 
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 

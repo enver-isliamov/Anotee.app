@@ -4,7 +4,7 @@ import { verifyUser } from './_auth.js';
 import { encrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
 import { checkProjectAccess } from './_permissions.js';
-import { ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
+import { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export default async function handler(req, res) {
@@ -63,7 +63,27 @@ export default async function handler(req, res) {
                 );
             `;
 
-            if (req.method === 'GET') {
+            
+            if (req.method === 'POST' && action === 'migrateStorage') {
+                // T-46: одноразовая починка исторических версий: Google Drive файлы ошибочно получили storageType='s3'
+                const rows = await sql`SELECT id, data FROM projects WHERE owner_id = ${user.id}`;
+                let fixed = 0;
+                for (const row of rows) {
+                    let changed = false;
+                    const data = row.data || {};
+                    for (const asset of (data.assets || [])) {
+                        for (const v of (asset.versions || [])) {
+                            if (v.storageType === 's3' && v.googleDriveId && !v.s3Key) { v.storageType = 'drive'; changed = true; fixed++; }
+                        }
+                    }
+                    if (changed) {
+                        const nv = (data._version || 0) + 1; data._version = nv;
+                        await sql`UPDATE projects SET data = ${JSON.stringify(data)}::jsonb, updated_at = ${Date.now()} WHERE id = ${row.id}`;
+                    }
+                }
+                return res.status(200).json({ success: true, fixed });
+            }
+if (req.method === 'GET') {
                 const { rows } = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
                 
                 if (rows.length === 0) {
@@ -202,7 +222,7 @@ export default async function handler(req, res) {
         if (action === 'presign') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
-            const { operation, key, contentType, projectId } = req.body;
+            const { operation, key, contentType, projectId, uploadId, partNumber, parts } = req.body || {};
 
             if (!operation || !key) {
                 return res.status(400).json({ error: "Missing operation or key" });
@@ -214,13 +234,27 @@ export default async function handler(req, res) {
             let command;
             let expiresIn = 3600; // 1 hour link validity
 
+                        if (operation === 'createMultipart') {
+                const cmd = new CreateMultipartUploadCommand({ Bucket: config.bucket, Key: key, ContentType: contentType || 'application/octet-stream' });
+                const mp = await s3.send(cmd);
+                return res.status(200).json({ uploadId: mp.UploadId, key });
+            }
+            if (operation === 'completeMultipart') {
+                const partsArr = (Array.isArray(parts) ? parts : []).map(p => ({ ETag: p.ETag, PartNumber: p.PartNumber }));
+                if (partsArr.length === 0) return res.status(400).json({ error: 'No parts provided' });
+                const cmd = new CompleteMultipartUploadCommand({ Bucket: config.bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: partsArr } });
+                await s3.send(cmd);
+                return res.status(200).json({ success: true, key });
+            }
             if (operation === 'put') {
                 command = new PutObjectCommand({
                     Bucket: config.bucket,
                     Key: key,
                     ContentType: contentType || 'application/octet-stream',
                 });
-            } else if (operation === 'get') {
+            } else if (operation === 'part') {
+            command = new UploadPartCommand({ Bucket: config.bucket, Key: key, UploadId: uploadId, PartNumber: partNumber });
+        } else if (operation === 'get') {
                 command = new GetObjectCommand({
                     Bucket: config.bucket,
                     Key: key

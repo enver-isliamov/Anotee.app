@@ -369,5 +369,8 @@
   "why.feat2.title": "Versioning 2.0",
   "why.feat3.desc": "Share secure links. The client doesn't need to register — they simply open the link and leave feedback.",
   "why.feat3.title": "Direct Access",
-  "why.title": "Why Anotee?"
+  "why.title": "Why Anotee?",
+  "player.more.title": "More",
+  "player.more.localfile": "Local file",
+  "player.synced": "Synced"
 }

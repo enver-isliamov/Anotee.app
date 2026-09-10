@@ -442,6 +442,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isLocked = project.isLocked || version?.isLocked || false;
   
   const [showMobileViewMenu, setShowMobileViewMenu] = useState(false);
+  const [showMobileMore, setShowMobileMore] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1392,11 +1393,20 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             )}
           </div>
           <div className="flex items-center gap-1 md:gap-3 shrink-0">
+<button onClick={() => setShowMobileMore(v => !v)} data-testid="mobile-more" title={t('player.more.title')} className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white"><MoreVertical size={20} /></button>
 <div className={`hidden items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
                 {isSearchOpen && (<input autoFocus className="w-full bg-transparent text-xs text-zinc-900 dark:text-white outline-none py-1.5" placeholder={t('dash.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onBlur={() => !searchQuery && setIsSearchOpen(false)} />)}
                 <button onClick={() => { if (isSearchOpen && searchQuery) setSearchQuery(''); else setIsSearchOpen(!isSearchOpen); }} className={`p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white ${isSearchOpen ? 'text-zinc-900 dark:text-white' : ''}`}>{isSearchOpen && searchQuery ? <XIcon size={16} /> : <Search size={18} />}</button>
              </div>
-             {/* T-08: переключатель вида доступен и на мобильных (ранее hidden md:block — единственная точка доступа к compare) */}
+             {showMobileMore && (
+<div className="md:hidden absolute top-full right-2 mt-1 z-[100] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl w-64 p-3 space-y-2">
+  <div className="flex items-center gap-2 text-[11px] font-bold text-zinc-500 uppercase tracking-wider"><Cloud size={12} /> {isSyncing ? t('player.syncing') : t('player.synced')}</div>
+  <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t('dash.search')} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-900 dark:text-white outline-none" />
+  <button onClick={() => { localFileRef.current?.click(); setShowMobileMore(false); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"><Upload size={14} /> {t('player.more.localfile')}</button>
+</div>
+)}
+{showMobileMore && <div className="fixed inset-0 z-[90] md:hidden" onClick={() => setShowMobileMore(false)} />}
+{/* T-08: переключатель вида доступен и на мобильных (ранее hidden md:block — единственная точка доступа к compare) */}
              <div className="block">
                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
                  {/* T-18: меню поднимается до z-[100] над backdrop z-[90] (образец — version selector) */}
