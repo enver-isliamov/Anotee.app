@@ -185,7 +185,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Smart Polling Logic: 
   // - If Player is ACTIVE (playing/interacting): Poll every 15s
   // - If Player is IDLE or Dashboard: Poll every 5 minutes (300s) to save resources
-  const pollingInterval = isPlayerActive ? 15000 : 300000;
+  const pollingInterval = isPlayerActive ? 45000 : 900000; // T-48: экономия Vercel Edge Requests (75% лимита)
 
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
       refreshInterval: pollingInterval, 
