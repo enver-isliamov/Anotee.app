@@ -44,6 +44,8 @@ test.describe('T-43: паритет текста (CC/фулскрин/док)', 
       } catch { await page.reload(); await page.getByTestId("transcript-tab").click(); }
     }
     expect(wordsVisible, 'транскрипт должен отрендериться').toBe(true);
+    const st = await page.evaluate(() => (window as any).__anoteeTranscriptionState);
+    console.log('RUNNER-STATE:', JSON.stringify(st));
     await expect(page.getByTestId('transcript-word')).toHaveCount(4, { timeout: 10000 });
 
     // 1) CC-кнопка появилась, клик включает оверлей
