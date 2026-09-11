@@ -3,7 +3,7 @@
   "version": "1.2602.1",
   "private": true,
   "type": "module",
-        "scripts": {
+  "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -13,11 +13,10 @@
     "check:external": "node scripts/check-external.mjs",
     "lint": "eslint . --max-warnings 0",
     "i18n:extract": "i18next",
-    "i18n:check": "i18next --fail-on-update"
+    "i18n:check": "i18next --fail-on-update",
+    "audit": "node scripts/audit.cjs",
+    "verify": "npm run lint && npm run test && npm run audit"
   },
-
-
-
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",

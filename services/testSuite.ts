@@ -1325,5 +1325,101 @@ export const TEST_SUITE: TestGroup[] = [
             });
             return res;
         }
+    },
+  {
+    id: 'project_audit',
+    title: 'Project Audit (T-51)',
+    icon: ShieldAlert,
+    description: 'Инварианты по найденным в аудите проблемам: честные иконки источников, парность локалей, устойчивость экспорта, отсутствие секретов в мок-данных.',
+    tests: () => {
+      const res: TestResult[] = [];
+
+      // 1. Честные иконки: Drive-версия не должна выглядеть как S3
+      const allVersions = (MOCK_PROJECTS || []).flatMap(p => (p.assets || []).flatMap(a => a.versions || []));
+      const mislabeled = allVersions.filter(v => v.googleDriveId && v.storageType === 's3' && !v.s3Key);
+      res.push({
+        name: 'Source Icons Truthful',
+        description: 'Версии с Google Drive не должны иметь storageType \'s3\' (иначе в UI чужая иконка).',
+        passed: mislabeled.length === 0,
+        severity: 'warning',
+        expected: '0 версий с googleDriveId и storageType=s3',
+        received: mislabeled.length + ' найдено',
+        passCondition: 'Каждая версия имеет storageType, соответствующий реальному источнику.',
+        failCondition: 'Иконка S3 показывается на видео из Google Drive — вводит пользователя в заблуждение.',
+        diagnosis: 'storageType проставлен не при загрузке (проверь useUploadManager: выбор Drive игнорировался до T-45) или история данных не миграции (кнопка «Починить источники видео»).',
+        task: regressionTask('Project Audit', 'честные иконки источников Drive/S3')
+      });
+
+      // 2. Секреты не должны лежать в мок-данных
+      const raw = JSON.stringify(MOCK_PROJECTS || []);
+      const hasSecret = /secretAccessKey\s*:\s*"(?!\*)/.test(raw) || /accessKeyId\s*:\s*"[A-Za-z0-9]{16,}"/.test(raw);
+      res.push({
+        name: 'No Secrets in Mock Data',
+        description: 'В мок-данных не должно быть реальных ключей хранилища.',
+        passed: !hasSecret,
+        severity: 'critical',
+        expected: 'Секретов нет',
+        received: hasSecret ? 'Найдены похожие на секреты значения' : 'Чисто',
+        passCondition: 'Мок-данные не содержат полей с ключами доступа.',
+        failCondition: 'Утечка ключей хранилища в клиентский бандл.',
+        diagnosis: 'Ключи попали в constants/MOCK_PROJECTS — убрать и ротировать токен.',
+        task: regressionTask('Project Audit', 'секреты в мок-данных')
+      });
+
+      // 3. Парность локалей ru/en
+      if (!i18n.isInitialized) {
+        res.push(skippedResult('Locale Parity ru/en', 'Равенство наборов ключей ru.json и en.json.'));
+      } else {
+        const ruB = i18n.getResourceBundle('ru', 'translation') || {};
+        const enB = i18n.getResourceBundle('en', 'translation') || {};
+        const onlyRu = Object.keys(ruB).filter(k => !(k in enB));
+        const onlyEn = Object.keys(enB).filter(k => !(k in ruB));
+        res.push({
+          name: 'Locale Parity ru/en',
+          description: 'Наборы ключей русской и английской локали совпадают.',
+          passed: onlyRu.length === 0 && onlyEn.length === 0,
+          severity: 'warning',
+          expected: '0 расхождений',
+          received: `ru-only: ${onlyRu.length}, en-only: ${onlyEn.length}`,
+          passCondition: 'ru.json и en.json содержат одинаковые ключи.',
+          failCondition: 'В одном языке текст есть, в другом показывается сырой ключ.',
+          diagnosis: `Расхождения: ${[...onlyRu.slice(0,3), ...onlyEn.slice(0,3)].join(', ') || '—'}`,
+          task: regressionTask('Project Audit', 'парность локалей ru/en')
+        });
+      }
+
+      // 4. Экспорт устойчив к пустым данным
+      let csvOk = true; let csvErr = '';
+      try { generateCSV([]); } catch (e: any) { csvOk = false; csvErr = String(e?.message || e); }
+      res.push({
+        name: 'Export Handles Empty Data',
+        description: 'Экспорт CSV не падает на проекте без комментариев.',
+        passed: csvOk,
+        severity: 'warning',
+        expected: 'Пустой CSV без исключения',
+        received: csvOk ? 'OK' : csvErr,
+        passCondition: 'generateCSV([]) завершается без ошибки.',
+        failCondition: 'Кнопка экспорта падает при пустом списке комментариев.',
+        diagnosis: 'В exportService нет обработки пустого массива.',
+        task: regressionTask('Project Audit', 'экспорт пустых данных')
+      });
+
+      // 5. Валидность таймкодов комментариев
+      const badTs = allVersions.flatMap(v => v.comments || []).filter(c => c.timestamp < 0 || (c.duration ?? 0) < 0);
+      res.push({
+        name: 'Comment Timecodes Valid',
+        description: 'Таймкоды и длительности комментариев неотрицательны.',
+        passed: badTs.length === 0,
+        severity: 'info',
+        expected: '0 некорректных значений',
+        received: badTs.length + ' некорректных',
+        passCondition: 'Все комментарии имеют timestamp >= 0 и duration >= 0.',
+        failCondition: 'Маркеры уезжают на таймлайне в отрицательную зону.',
+        diagnosis: 'Скраб/маркер записал отрицательное время — проверить seek и setMarkerInPoint.',
+        task: regressionTask('Project Audit', 'валидность таймкодов')
+      });
+
+      return res;
     }
+  }
 ];

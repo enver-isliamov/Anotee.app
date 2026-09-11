@@ -372,5 +372,10 @@
   "why.title": "Why Anotee?",
   "player.more.title": "More",
   "player.more.localfile": "Local file",
-  "player.synced": "Synced"
+  "player.synced": "Synced",
+  "common.close": "Close",
+  "profile.field.endpoint": "Endpoint",
+  "profile.field.bucket": "Bucket",
+  "profile.field.region": "Region",
+  "profile.field.accessKey": "Access Key ID"
 }
