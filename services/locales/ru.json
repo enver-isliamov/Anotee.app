@@ -372,5 +372,10 @@
   "why.title": "Почему Anotee?",
   "player.more.title": "Ещё",
   "player.more.localfile": "Локальный файл",
-  "player.synced": "Синхронизировано"
+  "player.synced": "Синхронизировано",
+  "common.close": "Закрыть",
+  "profile.field.endpoint": "Endpoint",
+  "profile.field.bucket": "Бакет",
+  "profile.field.region": "Регион",
+  "profile.field.accessKey": "Access Key ID"
 }
