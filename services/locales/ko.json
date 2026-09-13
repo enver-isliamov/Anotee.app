@@ -2,11 +2,7 @@
   "app.name": "Anotee",
   "nav.login": "로그인",
   "nav.dashboard": "대시보드",
-  "nav.workflow": "워크플로",
-  "nav.pricing": "가격",
-  "nav.about": "정보",
   "nav.demo": "데모",
-  "nav.ai": "기능",
   "nav.terms": "이용 약관",
   "nav.privacy": "개인 정보 보호 정책",
   "hero.demo": "라이브 데모",
@@ -22,7 +18,6 @@
   "common.share": "공유",
   "common.lock": "잠금",
   "common.unlock": "잠금 해제",
-  "common.upload": "업로드",
   "common.delete": "삭제",
   "common.edit": "편집",
   "player.comments": "댓글",
@@ -34,8 +29,6 @@
   "pv.upload_asset": "자산 업로드",
   "pv.invite": "초대",
   "pv.team": "팀",
-  "pv.share.title": "리뷰 초대",
-  "pv.share.link": "리뷰 링크",
   "land.integrations.title": "즐겨 사용하는 편집기와 호환",
   "upsell.free.title": "스타터 / 개인"
 }

@@ -123,7 +123,6 @@ export const LiveDemo: React.FC<LiveDemoProps> = ({ onBack }) => {
     const handleUpdateProject = (updatedProject: Project, skipSync?: boolean) => {
         setProject(updatedProject);
         if (!skipSync) {
-            console.log("Demo: Изменения сохранены локально");
         }
     };
 
