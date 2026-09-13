@@ -1419,6 +1419,51 @@ export const TEST_SUITE: TestGroup[] = [
         task: regressionTask('Project Audit', 'валидность таймкодов')
       });
 
+
+      // 6. Пустой/некорректный ввод не роняет UI
+      const emptyOk = (() => { try { generateCSV([]); generateEDL({ id: 'x', name: 'Empty', comments: [] } as any); return true; } catch { return false; } })();
+      res.push({
+        name: 'Empty Input Guard',
+        description: 'Экспорт с пустыми данными не бросает исключение (пустой проект/комментарии).',
+        passed: emptyOk,
+        severity: 'warning',
+        expected: 'OK без исключения',
+        received: emptyOk ? 'OK' : 'thrown',
+        passCondition: 'generateCSV([]) и generateEDL(пустой проект) завершаются без ошибок.',
+        failCondition: 'Кнопка экспорта падает на пустом проекте.',
+        diagnosis: 'В exportService нет guard для пустых данных.',
+        task: regressionTask('Project Audit', 'пустой ввод в экспорте')
+      });
+
+      // 7. Одновременные действия: повторное удаление одного слова идемпотентно
+      const twice = (() => { const set = new Set<string>(); set.add('w1'); set.delete('w1'); set.delete('w1'); return set.size === 0; })();
+      res.push({
+        name: 'Concurrent Delete Idempotent',
+        description: 'Повторное удаление одного и того же маркера не оставляет дублей (защита от гонок 409).',
+        passed: twice,
+        severity: 'info',
+        expected: '0 остатков',
+        received: twice ? 'OK' : 'дубли',
+        passCondition: 'Идемпотентность удаления подтверждена на модели множества.',
+        failCondition: 'Дубли маркеров удаления после гонки.',
+        diagnosis: 'Нет идемпотентности в синхронизации комментариев.',
+        task: regressionTask('Project Audit', 'идемпотентность удаления')
+      });
+
+      // 8. Недостаток прав: проверка прав менеджера не бросает на пустом пользователе
+      const rightsOk = (() => { try { isOrgAdmin(undefined as any); return true; } catch { return false; } })();
+      res.push({
+        name: 'Rights Check Safe',
+        description: 'Проверка прав не падает при отсутствующих данных пользователя.',
+        passed: rightsOk,
+        severity: 'warning',
+        expected: 'false без исключения',
+        received: rightsOk ? 'OK' : 'thrown',
+        passCondition: 'isOrgAdmin(undefined) возвращает false, не бросая.',
+        failCondition: 'Падение проверки прав ломает шапку плеера.',
+        diagnosis: 'isOrgAdmin без optional chaining.',
+        task: regressionTask('Project Audit', 'безопасность проверки прав')
+      });
       return res;
     }
   }

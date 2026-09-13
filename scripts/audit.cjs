@@ -41,3 +41,15 @@ const summary = {};
 for (const k of Object.keys(out)) summary[k] = out[k].length;
 fs.writeFileSync('audit-report.json', JSON.stringify({ summary, detail: out }, null, 2));
 console.log(JSON.stringify(summary, null, 2));
+
+// ===== INVARIANTS: регрессо-защита исправленных проблем (T-51) =====
+const inv = [];
+const playerSrc = fs.readFileSync(path.join(ROOT, 'components/Player.tsx'), 'utf8');
+const appSrc = fs.readFileSync(path.join(ROOT, 'App.tsx'), 'utf8');
+const uploadSrc = fs.readFileSync(path.join(ROOT, 'hooks/useUploadManager.ts'), 'utf8');
+if (/\bMoreVertical\b/.test(playerSrc)) inv.push('ISS-001 REGRESS: MoreVertical вернулся (нет в lucide 0.469)');
+if (!/EllipsisVertical/.test(playerSrc)) inv.push('ISS-001 REGRESS: EllipsisVertical отсутствует');
+if (!/isPlayerActive && isPageVisible \? 45000/.test(appSrc)) inv.push('ISS-016 REGRESS: polling-интервал изменён');
+if (!/createMultipart/.test(uploadSrc)) inv.push('ISS-004 REGRESS: multipart-загрузка пропала');
+if (!/\buseDrive\b/.test(uploadSrc)) inv.push('ISS-007 REGRESS: useDrive не учитывается');
+if (inv.length) { console.log('=== INVARIANT VIOLATIONS ==='); inv.forEach(x => console.log(' -', x)); process.exitCode = 1; } else { console.log('invariants: 5/5 OK'); }
