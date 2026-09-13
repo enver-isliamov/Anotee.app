@@ -1,4 +1,4 @@
-
+﻿
 import { generateEDL, generateResolveXML, generateCSV } from './exportService';
 import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from './utils';
 import { isOrgAdmin } from './userUtils';
@@ -1421,7 +1421,7 @@ export const TEST_SUITE: TestGroup[] = [
 
 
       // 6. Пустой/некорректный ввод не роняет UI
-      const emptyOk = (() => { try { generateCSV([]); generateEDL({ id: 'x', name: 'Empty', comments: [] } as any); return true; } catch { return false; } })();
+      const emptyOk = (() => { try { generateCSV([]); generateEDL('Empty', 1, [], 24); return true; } catch { return false; } })();
       res.push({
         name: 'Empty Input Guard',
         description: 'Экспорт с пустыми данными не бросает исключение (пустой проект/комментарии).',
@@ -1451,7 +1451,7 @@ export const TEST_SUITE: TestGroup[] = [
       });
 
       // 8. Недостаток прав: проверка прав менеджера не бросает на пустом пользователе
-      const rightsOk = (() => { try { isOrgAdmin(undefined as any); return true; } catch { return false; } })();
+      const rightsOk = (() => { try { isOrgAdmin('', []); return true; } catch { return false; } })();
       res.push({
         name: 'Rights Check Safe',
         description: 'Проверка прав не падает при отсутствующих данных пользователя.',

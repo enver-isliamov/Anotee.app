@@ -141,7 +141,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
-  const [noConfigFound, setNoConfigFound] = useState(false); // T-36
+  const [noConfigFound, setNoConfigFound] = useState(false);
+  const [configOwner, setConfigOwner] = useState(''); // T-36
   
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
@@ -201,7 +202,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                           publicUrl: data.publicUrl || ''
                       };
                       
-                      // Set Active Provider
+                      setConfigOwner(data.configOwner || user?.id || '');
+        // Set Active Provider
                       if (data.provider && data.endpoint) {
                           setActiveProvider(data.provider);
                           setSelectedTab(data.provider);

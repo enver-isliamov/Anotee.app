@@ -13,7 +13,7 @@
 | ISS-006 | P1 | Плашка ИИ-транскрибации висела после 100%/ошибки | components/Player.tsx (runner-подписка) | ✅ fixed (704f644) | Безусловный сброс isTranscribing |
 | ISS-007 | P1 | Чужая иконка источника (Drive → S3) | hooks/useUploadManager.ts:166 | 🟡 partial (bc53ed1) | Выбор Drive/S3 уважается; старые версии — кнопка «Починить источники видео» в BYOS (migrateStorage). Нажать 1 раз |
 | ISS-008 | P1 | Сырые ключи в UI (34 пропущенных перевода) | services/locales/*.json | ✅ fixed (T-52) | Все ключи добавлены; защита: tests/unit/i18n-parity.test.ts |
-| ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | 🟡 open | Предложено: локальная видеозаглушка в public/ для mock-режима |
+| ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | ✅ fixed (T-59) | installVideoMock + dispatchVideoLoadedMetadata в transcribe-flow и player-text-parity; прогон 2 passed |
 | ISS-010 | P2 | 33 × alert/confirm вместо тостов | components/* | 🟡 open | План: замена на Toast-компонент (механическая, ~2 ч) |
 | ISS-011 | P2 | 15 × console.log в коде | components/*, api/* | 🟡 open | Чистка/обёртка debug-флагом (~30 мин) |
 | ISS-012 | P2 | 4 × пустых catch (ошибки проглатываются) | api/data.js:134,185,505; api/payment.js:93 | 🟡 open | Логирование в каждый catch (~30 мин) |
@@ -23,6 +23,7 @@
 | ISS-016 | P1 | 246K req/день → 75% лимита Vercel | App.tsx (polling), Cloudflare | ✅ fixed (9416079, c6a9396, 48703a2) | Polling 45с/30мин + сон при скрытой вкладке. Дополнительно: CF Cache Rule для /assets/ (действие владельца) |
 | ISS-017 | P2 | Серверный _version-конфликт для комментариев | api/data.js (comment route) | 🟡 open | Предложено: убрать strict-lock для comment-роута (last-write-wins) |
 | ISS-018 | P3 | Битые blob-ссылки после reload | components/Player.tsx | ✅ fixed (704f644) очистка; полное решение — IndexedDB | — |
+| ISS-019 | P2 | BYOS: владелец конфига не показывался; маска секрета в кеше формы при отсутствии конфига | api/storage.js (GET config), components/Profile.tsx | ✅ fixed (a99052f) | configOwner в GET; очистка масок из кеша; user-id в ошибке 400 |
 
 ## Проверенные зоны аудита (`npm run audit`)
 

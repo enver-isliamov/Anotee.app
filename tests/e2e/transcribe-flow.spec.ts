@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openPlayer, resetMockData } from './support';
+import { openPlayer, resetMockData, installVideoMock, dispatchVideoLoadedMetadata } from './support';
 
 /**
  * T-30: сквозной тест транскрибации полного пути (фейковый движок — детерминированно):
@@ -21,6 +21,7 @@ test.describe('T-30: транскрибация полный путь', () => {
     page.on('requestfailed', (r) => console.log('REQFAIL:', r.url().slice(0, 90), '|', r.failure()?.errorText));
 
     resetMockData(page);
+    await installVideoMock(page);
     // фейковый движок подключается до загрузки приложения — окно __anoteeFakeTranscribe
     await page.addInitScript((words: any) => {
       (window as any).__anoteeFakeTranscribe = JSON.stringify(words);
@@ -30,6 +31,7 @@ test.describe('T-30: транскрибация полный путь', () => {
     let wordsVisible = false;
     for (let attempt = 0; attempt < 2 && !wordsVisible; attempt++) {
       await openPlayer(page);
+    await dispatchVideoLoadedMetadata(page);
       await page.getByTestId('transcript-tab').click();
       const generateBtn = page.getByRole('button', { name: /Generate Transcript/i });
       await generateBtn.waitFor({ state: 'visible' });

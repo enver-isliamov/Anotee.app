@@ -259,3 +259,9 @@
 - Фиксы кода: polling 15с→45с (активный плеер), 5мин→15мин (фон); опрос засыпает при скрытой вкладке (30мин) — usePageVisibility.
 - Инфра (действия владельца): Cloudflare Cache Rule для /assets/* (Cache Everything) — 80-90% трафика перестанет доходить до Vercel; Deployment Protection OFF для dev; Bot Fight Mode ON; Vercel Usage-уведомление на 90%.
 - Commit 9416079, c6a9396, 48703a2.
+
+### T-59 P1 `done` Стабилизация e2e: video-mock вместо внешнего URL
+- transcribe-flow и player-text-parity: installVideoMock (route abort mp4 + fake duration) + dispatchVideoLoadedMetadata после openPlayer — убрана зависимость от внешнего Google-бакета (источник флейка «Media Offline»).
+- Прогон: transcribe-flow + player-text-parity 2 passed (27.6s); контрольный (player/landing/dashboard/public-view) 7 passed, 1 flaky (dashboard mock — сетевой), 0 failed (2.0m).
+- Полный набор всех спек в песочнице занимает >20 мин (voice/PTT требуют микрофон в headless) — запуск локально или на CI.
+- Commit 537b142.

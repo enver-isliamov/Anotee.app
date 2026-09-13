@@ -99,6 +99,7 @@ if (req.method === 'GET') {
                     accessKeyId: config.access_key_id,
                     secretAccessKey: '********', // Masked
                     publicUrl: config.public_url,
+            configOwner: user.email || user.id,
                     isActive: true
                 });
             }
@@ -135,7 +136,7 @@ if (req.method === 'GET') {
                     if (existing.length > 0) {
                         encryptedSecret = existing[0].secret_access_key;
                     } else {
-                        return res.status(400).json({ error: "Secret Key required: no saved configuration exists yet, so the masked value cannot be reused. Clear the secret field and re-enter the key." });
+                        return res.status(400).json({ error: `Secret Key required (account: ${String(user.id).slice(0, 12)}…): no saved configuration exists for this account, so the masked value cannot be reused. Clear the secret field and re-enter the key.` });
                     }
                 }
 
