@@ -23,6 +23,7 @@
 | ISS-016 | P1 | 246K req/день → 75% лимита Vercel | App.tsx (polling), Cloudflare | ✅ fixed (9416079, c6a9396, 48703a2) | Polling 45с/30мин + сон при скрытой вкладке. Дополнительно: CF Cache Rule для /assets/ (действие владельца) |
 | ISS-017 | P2 | Серверный _version-конфликт для комментариев | api/data.js (comment route) | 🟡 open | Предложено: убрать strict-lock для comment-роута (last-write-wins) |
 | ISS-018 | P3 | Битые blob-ссылки после reload | components/Player.tsx | ✅ fixed (704f644) очистка; полное решение — IndexedDB | — |
+| ISS-019 | P2 | BYOS: владелец конфига не показывался; маска секрета в кеше формы при отсутствии конфига | api/storage.js (GET config), components/Profile.tsx | ✅ fixed (a99052f) | configOwner в GET; очистка масок из кеша; user-id в ошибке 400 |
 
 ## Проверенные зоны аудита (`npm run audit`)
 
