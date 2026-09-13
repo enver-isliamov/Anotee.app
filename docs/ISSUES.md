@@ -13,7 +13,7 @@
 | ISS-006 | P1 | Плашка ИИ-транскрибации висела после 100%/ошибки | components/Player.tsx (runner-подписка) | ✅ fixed (704f644) | Безусловный сброс isTranscribing |
 | ISS-007 | P1 | Чужая иконка источника (Drive → S3) | hooks/useUploadManager.ts:166 | 🟡 partial (bc53ed1) | Выбор Drive/S3 уважается; старые версии — кнопка «Починить источники видео» в BYOS (migrateStorage). Нажать 1 раз |
 | ISS-008 | P1 | Сырые ключи в UI (34 пропущенных перевода) | services/locales/*.json | ✅ fixed (T-52) | Все ключи добавлены; защита: tests/unit/i18n-parity.test.ts |
-| ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | 🟡 open | Предложено: локальная видеозаглушка в public/ для mock-режима |
+| ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | ✅ fixed (T-59) | installVideoMock + dispatchVideoLoadedMetadata в transcribe-flow и player-text-parity; прогон 2 passed |
 | ISS-010 | P2 | 33 × alert/confirm вместо тостов | components/* | 🟡 open | План: замена на Toast-компонент (механическая, ~2 ч) |
 | ISS-011 | P2 | 15 × console.log в коде | components/*, api/* | 🟡 open | Чистка/обёртка debug-флагом (~30 мин) |
 | ISS-012 | P2 | 4 × пустых catch (ошибки проглатываются) | api/data.js:134,185,505; api/payment.js:93 | 🟡 open | Логирование в каждый catch (~30 мин) |

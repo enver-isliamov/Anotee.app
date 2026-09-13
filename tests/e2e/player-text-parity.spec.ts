@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openPlayer, resetMockData } from './support';
+import { openPlayer, resetMockData, installVideoMock, dispatchVideoLoadedMetadata } from './support';
 
 /**
  * T-43: паритет работы с текстом (инвариант T-40).
@@ -20,11 +20,13 @@ test.describe('T-43: паритет текста (CC/фулскрин/док)', 
     page.on('pageerror', (e) => errors.push('PAGEERROR: ' + String(e?.stack || e)));
 
     resetMockData(page);
+    await installVideoMock(page);
     await page.addInitScript((words: any) => {
       (window as any).__anoteeFakeTranscribe = JSON.stringify(words);
     }, FAKE_WORDS);
 
     await openPlayer(page);
+    await dispatchVideoLoadedMetadata(page);
     await page.getByTestId('transcript-tab').click();
     const generateBtn = page.getByRole('button', { name: /Generate Transcript/i });
     let wordsVisible = false;
