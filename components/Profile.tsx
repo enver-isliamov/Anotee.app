@@ -640,8 +640,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
-                                                <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="text-[10px] text-emerald-400 hover:text-white flex items-center gap-1 font-bold">🧙 Мастер подключения</button>
-            <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
+                                                <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
                                                     <HelpCircle size={10} /> Инструкция по получению ключей
                                                 </button>
                                             </div>
@@ -1004,6 +1003,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         </details>
         <div data-testid="storage-manager" className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3">
         <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-wider mb-2">Хранилища</h5>
+        <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full mb-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1">🧙 Подключить за 3 шага (мастер)</button>
         <div className="space-y-1.5">
         {['cloudflare', 'backblaze', 'custom'].map(pid => {
         const isDisabled = storagePrefs.disabled.includes(pid);
