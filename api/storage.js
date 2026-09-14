@@ -1,7 +1,7 @@
 ﻿
 import { sql } from '@vercel/postgres';
 import { verifyUser } from './_auth.js';
-import { encrypt } from './_crypto.js';
+import { encrypt, decrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
 import { checkProjectAccess } from './_permissions.js';
 import { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
@@ -107,6 +107,7 @@ if (req.method === 'GET') {
                     secretAccessKey: '********', // Masked
                     publicUrl: config.public_url,
             configOwner: user.email || user.id,
+                secretIsMask: (decrypt(config.secret_access_key) || '') === '********',
                     isActive: true
                 });
             }

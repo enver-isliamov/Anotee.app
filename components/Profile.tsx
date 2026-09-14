@@ -142,7 +142,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
-  const [noConfigFound, setNoConfigFound] = useState(false);
+    const [noConfigFound, setNoConfigFound] = useState(false);
+  const [secretBroken, setSecretBroken] = useState(false);
+  const handleResetConfig = async () => {
+    if (!confirm('Сбросить конфигурацию хранилища? Сохранённые ключи для аккаунта будут удалены, после чего введите их заново.')) return;
+    try { const token = await getToken(); await fetch('/api/storage?action=reset_config', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); setNoConfigFound(true); setSecretBroken(false); setS3Form((pr: any) => ({ ...pr, secretAccessKey: '' })); setTestResult({ success: false, message: 'Конфиг сброшен — введите ключи заново и нажмите Test.' }); toast('Конфигурация хранилища сброшена', 'success'); } catch (e: any) { toast(e?.message || 'Не удалось сбросить', 'error'); }
+  };
   const [configOwner, setConfigOwner] = useState('');
   const [wizardStep, setWizardStep] = useState(0);
   const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
@@ -217,6 +222,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       };
                       
                       setConfigOwner(data.configOwner || user?.id || '');
+        setSecretBroken(!!data.secretIsMask);
         try { const token = await getToken(); const pr = await fetch('/api/storage?action=storage_prefs', { headers: { 'Authorization': `Bearer ${token}` } }); const pd = await pr.json(); if (pd.success && pd.activeProvider) { setStoragePrefs({ activeProvider: pd.activeProvider, disabled: pd.disabled || [] }); if (S3_PRESETS[pd.activeProvider]) setSelectedTab(pd.activeProvider); } } catch { /* prefs опциональны */ }
         // Set Active Provider
                       if (data.provider && data.endpoint) {
@@ -587,7 +593,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
                         ) : (
                             <div className="space-y-6 animate-in fade-in">
-  {noConfigFound && (
+  {secretBroken && (
+        <div className="mb-3 border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950 rounded-lg p-3 text-xs text-red-700 dark:text-red-300">В сохранённой конфигурации обнаружен повреждённый секрет (маска вместо ключа). Нажмите «Сбросить конфиг», затем введите Access Key ID и Secret Access Key заново.</div>
+        )}
+        {noConfigFound && (
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200 leading-relaxed" data-testid="no-config-banner">
           <b>Хранилище для этого аккаунта ещё не настроено.</b> Заполните поля ниже (ключи от вашего R2/S3), нажмите «Сохранить», затем «Проверить соединение» — Test также применит CORS к бакету.
       </div>
@@ -640,8 +649,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
-                                                <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="text-[10px] text-emerald-400 hover:text-white flex items-center gap-1 font-bold">🧙 Мастер подключения</button>
-            <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
+                                                <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
                                                     <HelpCircle size={10} /> Инструкция по получению ключей
                                                 </button>
                                             </div>
@@ -1004,6 +1012,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         </details>
         <div data-testid="storage-manager" className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3">
         <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-wider mb-2">Хранилища</h5>
+        <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full mb-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1">🧙 Подключить за 3 шага (мастер)</button>
         <div className="space-y-1.5">
         {['cloudflare', 'backblaze', 'custom'].map(pid => {
         const isDisabled = storagePrefs.disabled.includes(pid);
@@ -1021,6 +1030,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         </div>
         );
         })}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-[10px] text-zinc-500">Проблемы с ключами? Сбросьте конфиг и введите заново.</span>
+        <button onClick={handleResetConfig} data-testid="reset-config" className="text-[10px] px-2 py-0.5 rounded border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950">Сбросить конфиг</button>
         </div>
         <p className="text-[10px] text-zinc-500 mt-2">Активное хранилище используется для новых загрузок. Отключение не удаляет конфиг.</p>
         </div>
