@@ -47,23 +47,6 @@ export default async function handler(req, res) {
 
         // --- ACTION: CONFIG (GET/POST) ---
         // Config always relates to the CURRENT user's settings, not a project context.
-        if (action === 'config') {
-            // Lazy DB Migration
-            await sql`
-                CREATE TABLE IF NOT EXISTS storage_config (
-                    user_id TEXT PRIMARY KEY,
-                    provider TEXT NOT NULL,
-                    bucket TEXT NOT NULL,
-                    endpoint TEXT NOT NULL,
-                    region TEXT NOT NULL,
-                    access_key_id TEXT NOT NULL,
-                    secret_access_key TEXT NOT NULL,
-                    public_url TEXT,
-                    updated_at BIGINT
-                );
-            `;
-
-            
             if (req.method === 'POST' && action === 'migrateStorage') {
                 // T-46: одноразовая починка исторических версий: Google Drive файлы ошибочно получили storageType='s3'
                 const rows = await sql`SELECT id, data FROM projects WHERE owner_id = ${user.id}`;
@@ -83,6 +66,23 @@ export default async function handler(req, res) {
                 }
                 return res.status(200).json({ success: true, fixed });
             }
+        if (action === 'config') {
+            // Lazy DB Migration
+            await sql`
+                CREATE TABLE IF NOT EXISTS storage_config (
+                    user_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    bucket TEXT NOT NULL,
+                    endpoint TEXT NOT NULL,
+                    region TEXT NOT NULL,
+                    access_key_id TEXT NOT NULL,
+                    secret_access_key TEXT NOT NULL,
+                    public_url TEXT,
+                    updated_at BIGINT
+                );
+            `;
+
+            
 if (req.method === 'GET') {
                 const { rows } = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
                 

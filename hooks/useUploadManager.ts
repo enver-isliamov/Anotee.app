@@ -298,8 +298,16 @@ export const useUploadManager = (
 
             // 5. Try Sync
             if (finalProjectToSync) {
-                try {
-                    await forceSync([finalProjectToSync]);
+try {
+  let syncOk = false;
+  for (let attempt = 1; attempt <= 3 && !syncOk; attempt++) {
+    try {
+      await forceSync([finalProjectToSync]);
+      syncOk = true;
+    } catch (retryErr: any) {
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 600 * attempt)); } else { throw retryErr; }
+    }
+  }
                     
                     updateTask({ status: 'done', progress: 100 });
                     notify("Upload completed", "success");
@@ -308,7 +316,7 @@ export const useUploadManager = (
 
                 } catch (syncError) {
                     console.error("Sync failed during upload finalization", syncError);
-                    throw new Error("Failed to save project data. Upload cancelled.");
+        throw new Error("Файл загружен в хранилище, но не удалось сохранить проект (проверьте связь). Повторите загрузку — ключ тот же, файл не задублируется.");
                 }
             }
 

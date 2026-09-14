@@ -16,7 +16,7 @@
 | ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | ✅ fixed (T-59) | installVideoMock + dispatchVideoLoadedMetadata в transcribe-flow и player-text-parity; прогон 2 passed |
 | ISS-010 | P2 | 33 × alert/confirm вместо тостов | components/* | 🟡 open | План: замена на Toast-компонент (механическая, ~2 ч) |
 | ISS-011 | P2 | 15 × console.log в коде | components/*, api/* | 🟡 open | Чистка/обёртка debug-флагом (~30 мин) |
-| ISS-012 | P2 | 4 × пустых catch (ошибки проглатываются) | api/data.js:134,185,505; api/payment.js:93 | 🟡 open | Логирование в каждый catch (~30 мин) |
+| ISS-012 | P2 | 4 × пустых catch | api/data.js:134,185,505; api/payment.js:93 | ✅ wontfix | Проверено вручную: все 4 — легитимные fallback-парсеры (JSON.parse строки, ожидаемая ветка); логирование создало бы шум |
 | ISS-013 | P3 | 136 неиспользуемых ключей локалей | services/locales/*.json | 🟡 open | Чистка после i18n-теста (~30 мин) |
 | ISS-014 | P3 | 5 хардкод-RU строк в JSX | components/* | 🟡 open | Перевод в i18n (~30 мин) |
 | ISS-015 | P3 | 37 mock-ссылок | constants, services | ✅ решение юзера: демо-витрину оставить; TestRunner скрыт на проде (74ca7a6) | — |
@@ -24,6 +24,8 @@
 | ISS-017 | P2 | Серверный _version-конфликт для комментариев | api/data.js (comment route) | 🟡 open | Предложено: убрать strict-lock для comment-роута (last-write-wins) |
 | ISS-018 | P3 | Битые blob-ссылки после reload | components/Player.tsx | ✅ fixed (704f644) очистка; полное решение — IndexedDB | — |
 | ISS-019 | P2 | BYOS: владелец конфига не показывался; маска секрета в кеше формы при отсутствии конфига | api/storage.js (GET config), components/Profile.tsx | ✅ fixed (a99052f) | configOwner в GET; очистка масок из кеша; user-id в ошибке 400 |
+
+| ISS-020 | P0 | Краш «j is not a function» на билде fzOmaWTN (09:03) при загрузке видео | useUploadManager | 🟡 pending-user-retest | Причина: юзер тестировал билд e14b3a6 (сломанная типизация). Текущая голова ac851dd+ чистая (tsc/build/unit=0, crash-hunt e2e passed). Требуется: жёсткая перезагрузка + повтор; если повторится — прислать стек нового билда |
 
 ## Известные ограничения среды песочницы
 
