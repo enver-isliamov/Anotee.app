@@ -939,8 +939,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         <div className="p-6">
         {wizardStep === 1 && (
         <div className="space-y-4">
-          <p className="text-sm text-zinc-700 dark:text-zinc-300">Сейчас откроется Cloudflare — создайте R2 API Token с правами <b>Object Read & Write</b>. На финальном экране скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (показывается один раз).</p>
-          <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer" className="block w-full text-center py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-900 text-sm font-bold">☁️ Открыть Cloudflare → создать токен</a>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">Откроется раздел <b>R2</b> вашего аккаунта. Слева выберите <b>Manage API Tokens</b> (или «API Tokens») → <b>Create API token</b> → права <b>Object Read & Write</b>. <b>Не</b> используйте общий Account API Token и «Write all resources» — не нужен. На финальном экране скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (показывается один раз).</p>
+          <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="block w-full text-center py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-900 text-sm font-bold">☁️ Открыть Cloudflare → создать токен</a>
           <button onClick={() => setWizardStep(2)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">Ключи готовы →</button>
           <p className="text-xs text-zinc-500">Уже подключали ранее? Нажмите «Ключи готовы» и просто повторно вставьте значения.</p>
         </div>
@@ -985,7 +985,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         <details className="mb-4 border border-zinc-200 dark:border-zinc-800 rounded-lg">
           <summary className="text-xs font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer px-3 py-2">Cloudflare R2 — инструкция по получению ключей доступа</summary>
           <div className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1.5">
-            <p>1. Cloudflare Dashboard → R2 → «API Tokens» → «Create API Token» (это <b>Account API Token</b>; User API Tokens не подходят).</p>
+            <p>1. Cloudflare Dashboard → раздел <b>R2</b> → «Manage R2 API Tokens» → «Create API token» → права <b>Object Read & Write</b> → выбрать бакет (или все). Это R2-токен; общие Account/User API Tokens не подходят.</p>
             <p>2. Скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (Secret показывается один раз). «Token value» не нужен — он для Cloudflare API.</p>
             <p>3. <b>Endpoint</b>: юрисдикция Default → <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code>; EU → добавить <code>.eu</code>; US → <code>.us</code>. Region — <code>auto</code>.</p>
             <p>4. Bucket — имя бакета (например <code>anotee</code>). Затем нажмите «Test» — проверит доступ и настроит CORS.</p>
