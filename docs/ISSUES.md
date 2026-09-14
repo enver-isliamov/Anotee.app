@@ -21,7 +21,7 @@
 | ISS-014 | P3 | 5 хардкод-RU строк в JSX | components/* | 🟡 open | Перевод в i18n (~30 мин) |
 | ISS-015 | P3 | 37 mock-ссылок | constants, services | ✅ решение юзера: демо-витрину оставить; TestRunner скрыт на проде (74ca7a6) | — |
 | ISS-016 | P1 | 246K req/день → 75% лимита Vercel | App.tsx (polling), Cloudflare | ✅ fixed (9416079, c6a9396, 48703a2) | Polling 45с/30мин + сон при скрытой вкладке. Дополнительно: CF Cache Rule для /assets/ (действие владельца) |
-| ISS-017 | P2 | Серверный _version-конфликт для комментариев | api/data.js (comment route) | 🟡 open | Предложено: убрать strict-lock для comment-роута (last-write-wins) |
+| ISS-017 | P2 | Серверный _version-конфликт для комментариев (409) | api/data.js (comment route) | ✅ fixed (a0e93f0) | Retry-with-merge: при конфликте сервер перечитывает свежие данные и применяет ту же comment-операцию (last-write-wins, идемпотентно по id) |
 | ISS-018 | P3 | Битые blob-ссылки после reload | components/Player.tsx | ✅ fixed (704f644) очистка; полное решение — IndexedDB | — |
 | ISS-019 | P2 | BYOS: владелец конфига не показывался; маска секрета в кеше формы при отсутствии конфига | api/storage.js (GET config), components/Profile.tsx | ✅ fixed (a99052f) | configOwner в GET; очистка масок из кеша; user-id в ошибке 400 |
 

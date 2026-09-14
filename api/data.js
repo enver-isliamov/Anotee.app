@@ -238,7 +238,36 @@ export default async function handler(req, res) {
               AND ((data->>'_version')::int = ${currentVersion} OR data->>'_version' IS NULL);
           `;
 
-          if (updateResult.rowCount === 0) return res.status(409).json({ error: "Conflict" });
+          if (updateResult.rowCount === 0) {
+          // T-80: last-write-wins для comment-действий — перечитываем свежие данные, применяем ту же операцию
+          const fresh = await sql`SELECT data FROM projects WHERE id = ${projectId}`;
+          if (fresh.length === 0) return res.status(404).json({ error: "Project not found" });
+          const freshData = fresh[0].data || {};
+          const freshCurrent = freshData._version || 0;
+          const fAsset = (freshData.assets || []).find(a => a.id === assetId);
+          if (!fAsset) return res.status(404).json({ error: "Asset not found" });
+          const fVersion = (fAsset.versions || []).find(v => v.id === versionId);
+          if (!fVersion) return res.status(404).json({ error: "Version not found" });
+          if (!fVersion.comments) fVersion.comments = [];
+          switch (commentAction) {
+              case 'create':
+                  fVersion.comments.push({ ...payload, userId: user.id, createdAt: 'Just now' });
+                  break;
+              case 'update': {
+                  const uIdx = fVersion.comments.findIndex(cc => cc.id === payload.id);
+                  if (uIdx !== -1) fVersion.comments[uIdx] = { ...fVersion.comments[uIdx], ...payload };
+                  break;
+              }
+              case 'delete': {
+                  const dIdx = fVersion.comments.findIndex(cc => cc.id === payload.id);
+                  if (dIdx !== -1) fVersion.comments.splice(dIdx, 1);
+                  break;
+              }
+          }
+          freshData._version = freshCurrent + 1;
+          await sql`UPDATE projects SET data = ${JSON.stringify(freshData)}::jsonb, updated_at = ${Date.now()} WHERE id = ${projectId}`;
+          return res.status(200).json({ success: true, _version: freshData._version });
+      }
           return res.status(200).json({ success: true, _version: newVersion });
       }
 
