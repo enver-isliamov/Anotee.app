@@ -218,7 +218,10 @@ if (req.method === 'GET') {
 
             // Usually user configures their own bucket, but theoretically an admin could configure a shared one.
             // Using getContextS3 allows flexibility.
-            const { s3, config } = await getContextS3(req.body.projectId);
+            let s3, config;
+            try { ({ s3, config } = await getContextS3(req.body.projectId)); } catch (cfgErr) {
+                return res.status(400).json({ success: false, error: 'Хранилище ещё не настроено для этого аккаунта: сначала заполните и сохраните ключи выше.' });
+            }
 
             const corsParams = {
                 Bucket: config.bucket,
