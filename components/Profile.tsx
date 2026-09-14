@@ -142,7 +142,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
-  const [noConfigFound, setNoConfigFound] = useState(false);
+    const [noConfigFound, setNoConfigFound] = useState(false);
+  const [secretBroken, setSecretBroken] = useState(false);
+  const handleResetConfig = async () => {
+    if (!confirm('Сбросить конфигурацию хранилища? Сохранённые ключи для аккаунта будут удалены, после чего введите их заново.')) return;
+    try { const token = await getToken(); await fetch('/api/storage?action=reset_config', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); setNoConfigFound(true); setSecretBroken(false); setS3Form((pr: any) => ({ ...pr, secretAccessKey: '' })); setTestResult({ success: false, message: 'Конфиг сброшен — введите ключи заново и нажмите Test.' }); toast('Конфигурация хранилища сброшена', 'success'); } catch (e: any) { toast(e?.message || 'Не удалось сбросить', 'error'); }
+  };
   const [configOwner, setConfigOwner] = useState('');
   const [wizardStep, setWizardStep] = useState(0);
   const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
