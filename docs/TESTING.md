@@ -56,3 +56,10 @@
 - Реальные платежи (ЮKassa/Prodamus) — только контрактные проверки эндпоинтов.
 - Реальный Google Drive/S3 — в e2e используется mock-режим; интеграции проверяются Diagnostics на живом окружении.
 - Safari/iOS-специфика (SpeechRecognition, fullscreen fallback) — ручной чеклист перед релизом (см. AGENTS.md §5 mobile-checklist).
+
+## Стабилизация e2e (T-59)
+
+- transcribe-flow и player-text-parity используют installVideoMock (route abort для *.mp4 + подмена duration) + dispatchVideoLoadedMetadata после openPlayer — зависимость от внешнего демо-видео убрана.
+- Команда полной проверки качества: npm run verify (lint -> unit 60 -> аудит кода с инвариантами фиксов ISS-001/004/007/016).
+- Тесты админки: группа Project Audit (T-51) в TestRunner — 8 кейсов-инвариантов.
+- voice.spec в headless-песочнице может падать по page.goto timeout (dev-сервер cold start) — не баг приложения.

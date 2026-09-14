@@ -2,11 +2,7 @@
   "app.name": "Anotee",
   "nav.login": "Entrar",
   "nav.dashboard": "Painel",
-  "nav.workflow": "Fluxo",
-  "nav.pricing": "Preços",
-  "nav.about": "Sobre",
   "nav.demo": "Demonstração",
-  "nav.ai": "Recursos",
   "nav.terms": "Termos",
   "nav.privacy": "Privacidade",
   "hero.demo": "Demo ao Vivo",
@@ -22,7 +18,6 @@
   "common.share": "Compartilhar",
   "common.lock": "Bloquear",
   "common.unlock": "Desbloquear",
-  "common.upload": "Carregar",
   "common.delete": "Excluir",
   "common.edit": "Editar",
   "player.comments": "Comentários",
@@ -34,8 +29,6 @@
   "pv.upload_asset": "Carregar Arquivo",
   "pv.invite": "Convidar",
   "pv.team": "Equipe",
-  "pv.share.title": "Convidar para Revisão",
-  "pv.share.link": "Link de Revisão",
   "land.integrations.title": "Funciona com seu editor favorito",
   "upsell.free.title": "Iniciante / Pessoal"
 }
