@@ -29,6 +29,8 @@
 
 | ISS-021 | P1 | GET /api/storage?action=config -> 500 после добавления storage_prefs/audit таблиц | api/storage.js (config GET + lazy DDL) | 🟡 open | Нужны Vercel Function Logs (Runtime Logs) — вероятен сбой CREATE TABLE в транзакционном пуле Neon; откат: revert cc2213a |
 
+| ISS-022 | P0 | Устройство юзера грузит устаревший бандл: манифест BTVOE7AL не меняется с 09.09 при ~20 деплоях — все фиксы недели не активны на устройстве (маска в Save, Drive-роутинг, нет честного CORS) | Кеш Safari для dev.anotee.com (SSO-wrapped ассеты) ИЛИ неуспешные/остановленные деплои Vercel | 🔵 user-action | Safari: Настройки → Данные сайтов → dev.anotee.com → Удалить; затем жёсткая перезагрузка. Проверить Vercel → Deployments: последний коммит = Ready. После этого в консоли должен появиться НОВЫЙ manifest-хеш |
+
 ## Известные ограничения среды песочницы
 
 - voice.spec: 1 падение из 2 — page.goto timeout 60с (dev-сервер cold start в песочнице), не код приложения; в повторном прогоне той же спеки 1 passed.
