@@ -197,7 +197,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           try {
               const token = await getToken();
               if ((s3Form.secretAccessKey || '') === '********' && noConfigFound) {
-        alert('Очистите поле «Secret Access Key» и введите ключ заново — в базе для этого аккаунта ещё нет сохранённого конфига.');
+        toast('Очистите поле «Secret Access Key» и введите ключ заново — в базе для этого аккаунта ещё нет сохранённого конфига.');
         return;
       }
       const res = await fetch('/api/storage?action=config', {
