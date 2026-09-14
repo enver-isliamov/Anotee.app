@@ -163,7 +163,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           notify("No storage connected. Please connect Google Drive or configure S3.", "error");
           return;
       }
-      onUploadAsset(e.target.files[0], project.id, true);
+      onUploadAsset(e.target.files[0], project.id, !isS3Configured && isDriveReady); // T-65: провайдер по конфигурации, не жёстко Drive
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -175,7 +175,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             return;
         }
         // Phase XXX: Pass targetAssetId (uploadingVersionFor) to handleUploadAsset
-        onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor);
+        onUploadAsset(e.target.files[0], project.id, !isS3Configured && isDriveReady, uploadingVersionFor);
     }
     setUploadingVersionFor(null);
     if (versionInputRef.current) versionInputRef.current.value = '';
@@ -419,7 +419,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               if (files.length > 0) notify("Only video files supported", "warning");
               return;
           }
-          onUploadAsset(videoFiles[0], project.id, true);
+          onUploadAsset(videoFiles[0], project.id, !isS3Configured && isDriveReady);
       };
 
       const handleClick = () => {
