@@ -217,6 +217,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       };
                       
                       setConfigOwner(data.configOwner || user?.id || '');
+        setSecretBroken(!!data.secretIsMask);
         try { const token = await getToken(); const pr = await fetch('/api/storage?action=storage_prefs', { headers: { 'Authorization': `Bearer ${token}` } }); const pd = await pr.json(); if (pd.success && pd.activeProvider) { setStoragePrefs({ activeProvider: pd.activeProvider, disabled: pd.disabled || [] }); if (S3_PRESETS[pd.activeProvider]) setSelectedTab(pd.activeProvider); } } catch { /* prefs опциональны */ }
         // Set Active Provider
                       if (data.provider && data.endpoint) {
@@ -587,7 +588,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
                         ) : (
                             <div className="space-y-6 animate-in fade-in">
-  {noConfigFound && (
+  {secretBroken && (
+        <div className="mb-3 border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950 rounded-lg p-3 text-xs text-red-700 dark:text-red-300">В сохранённой конфигурации обнаружен повреждённый секрет (маска вместо ключа). Нажмите «Сбросить конфиг», затем введите Access Key ID и Secret Access Key заново.</div>
+        )}
+        {noConfigFound && (
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200 leading-relaxed" data-testid="no-config-banner">
           <b>Хранилище для этого аккаунта ещё не настроено.</b> Заполните поля ниже (ключи от вашего R2/S3), нажмите «Сохранить», затем «Проверить соединение» — Test также применит CORS к бакету.
       </div>
@@ -1021,6 +1025,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         </div>
         );
         })}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-[10px] text-zinc-500">Проблемы с ключами? Сбросьте конфиг и введите заново.</span>
+        <button onClick={handleResetConfig} data-testid="reset-config" className="text-[10px] px-2 py-0.5 rounded border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950">Сбросить конфиг</button>
         </div>
         <p className="text-[10px] text-zinc-500 mt-2">Активное хранилище используется для новых загрузок. Отключение не удаляет конфиг.</p>
         </div>
