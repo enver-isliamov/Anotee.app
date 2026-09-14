@@ -16,7 +16,7 @@
 | ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | ✅ fixed (T-59) | installVideoMock + dispatchVideoLoadedMetadata в transcribe-flow и player-text-parity; прогон 2 passed |
 | ISS-010 | P2 | 33 × alert/confirm вместо тостов | components/* | 🟡 open | План: замена на Toast-компонент (механическая, ~2 ч) |
 | ISS-011 | P2 | 15 × console.log в коде | components/*, api/* | 🟡 open | Чистка/обёртка debug-флагом (~30 мин) |
-| ISS-012 | P2 | 4 × пустых catch (ошибки проглатываются) | api/data.js:134,185,505; api/payment.js:93 | 🟡 open | Логирование в каждый catch (~30 мин) |
+| ISS-012 | P2 | 4 × пустых catch | api/data.js:134,185,505; api/payment.js:93 | ✅ wontfix | Проверено вручную: все 4 — легитимные fallback-парсеры (JSON.parse строки, ожидаемая ветка); логирование создало бы шум |
 | ISS-013 | P3 | 136 неиспользуемых ключей локалей | services/locales/*.json | 🟡 open | Чистка после i18n-теста (~30 мин) |
 | ISS-014 | P3 | 5 хардкод-RU строк в JSX | components/* | 🟡 open | Перевод в i18n (~30 мин) |
 | ISS-015 | P3 | 37 mock-ссылок | constants, services | ✅ решение юзера: демо-витрину оставить; TestRunner скрыт на проде (74ca7a6) | — |
