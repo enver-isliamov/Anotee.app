@@ -179,7 +179,7 @@ if (req.method === 'GET') {
                     const { activeProvider, disabled, auditAction } = req.body || {};
                     try { await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`; } catch (ddlErr3) { console.warn("prefs DDL warning:", ddlErr3 && ddlErr3.message); }
                     await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${activeProvider || null}, ${JSON.stringify(disabled || [])}) ON CONFLICT (user_id) DO UPDATE SET active_provider = ${activeProvider || null}, disabled = ${JSON.stringify(disabled || [])}`;
-                    if (auditAction) { try  await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`.then(() => sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, ${auditAction}, ${activeProvider || null})`).catch(() => {}); } catch (auditErr) { console.warn("audit warning:", auditErr && auditErr.message); } }
+                    if (auditAction) { try { await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`; await sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, ${auditAction}, ${activeProvider || null})`; } catch (auditErr) { console.warn("audit warning:", auditErr && auditErr.message); } }
                     return res.status(200).json({ success: true });
                 }
             }
