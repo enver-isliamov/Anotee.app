@@ -2,7 +2,11 @@
   "app.name": "Anotee",
   "nav.login": "ログイン",
   "nav.dashboard": "ダッシュボード",
+  "nav.workflow": "ワークフロー",
+  "nav.pricing": "価格",
+  "nav.about": "約",
   "nav.demo": "デモ",
+  "nav.ai": "機能",
   "nav.terms": "利用規約",
   "nav.privacy": "プライバシー",
   "hero.demo": "ライブデモ",
@@ -18,6 +22,7 @@
   "common.share": "共有",
   "common.lock": "ロック",
   "common.unlock": "ロック解除",
+  "common.upload": "アップロード",
   "common.delete": "削除",
   "common.edit": "編集",
   "player.comments": "コメント",
@@ -29,6 +34,8 @@
   "pv.upload_asset": "アセットをアップロード",
   "pv.invite": "招待",
   "pv.team": "チーム",
+  "pv.share.title": "レビューに招待",
+  "pv.share.link": "レビューリンク",
   "land.integrations.title": "お気に入りのエディタと連携",
   "upsell.free.title": "スターター / 個人"
 }
