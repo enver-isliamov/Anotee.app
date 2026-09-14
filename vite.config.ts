@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     build: {
+    sourcemap: true, // T-70: расшифровка юзер-стеков крашей
       outDir: 'dist',
     },
     resolve: hasRealClerkKey

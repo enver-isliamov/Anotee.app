@@ -361,9 +361,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       }
   };
 
-  const handleAutoCors = async () => {
-      await handleSaveAndActivate(); 
-      try { await handleSaveAndActivate(); } catch { return; }
+  const handleAutoCors = async (): Promise<boolean> => {
+      try { await handleSaveAndActivate(); } catch { return false; }
 
       setIsConfiguringCors(true);
       setTestResult(null);
@@ -380,11 +379,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           const data = await res.json();
           if (res.ok && data.success) {
               setTestResult({ success: true, message: "CORS успешно настроен! Загрузка должна работать." });
+              return true;
           } else {
               setTestResult({ success: false, message: data.error || "Не удалось настроить CORS." });
+              return false;
           }
       } catch (e) {
           setTestResult({ success: false, message: "Сбой сети при настройке CORS." });
+          return false;
       } finally {
           setIsConfiguringCors(false);
       }
