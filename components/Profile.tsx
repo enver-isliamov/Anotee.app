@@ -968,13 +968,13 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           <span className={wizChecks[idx] ? 'text-zinc-700 dark:text-zinc-200' : 'text-zinc-500'}>{label}</span>
           </div>
         ))}
-        <button onClick={async () => { setWizChecks([true, false, false, false, false]); try { await handleSaveAndActivate(); } catch { return; } setWizChecks([true, true, false, false, false]); try { await handleTestConnection(); setWizChecks([true, true, true, true, true]); try { await handleAutoCors(); } catch { /* CORS отдельно */ } notify('Хранилище подключено и проверено', 'success'); setTimeout(() => setWizardStep(0), 1200); } catch { setWizChecks([true, true, true, false, false]); } }} className="w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">🚀 Запустить автонастройку</button>
+        <button onClick={async () => { setWizChecks([true, false, false, false, false]); try { await handleSaveAndActivate(); } catch { return; } setWizChecks([true, true, false, false, false]); try { await handleTestConnection(); setWizChecks([true, true, true, true, true]); try { await handleAutoCors(); } catch { /* CORS отдельно */ } toast('Хранилище подключено и проверено', 'success'); setTimeout(() => setWizardStep(0), 1200); } catch { setWizChecks([true, true, true, false, false]); } }} className="w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">🚀 Запустить автонастройку</button>
         <p className="text-xs text-zinc-500">Если какой-то шаг не пройдёт — увидите точную причину. Кнопку можно нажать повторно.</p>
         </div>
         )}
         </div>
       </div></div>
-      }
+)}
 {/* HELP MODALS (Unchanged logic, just ensure render) */}
             {showProviderHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
