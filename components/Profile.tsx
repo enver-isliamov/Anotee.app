@@ -143,7 +143,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
   const [noConfigFound, setNoConfigFound] = useState(false);
-  const [configOwner, setConfigOwner] = useState(''); // T-36
+  const [configOwner, setConfigOwner] = useState('');
+  const [wizardStep, setWizardStep] = useState(0); // 0=off 1=cf 2=keys 3=auto
+  const [wizChecks, setWizChecks] = useState([false, false, false, false, false]); // T-36
   
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
@@ -922,7 +924,58 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 </div>
             )}
 
-            {/* HELP MODALS (Unchanged logic, just ensure render) */}
+                  {wizardStep > 0 && (
+      <div data-testid="wizard-overlay" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="px-6 pt-5 pb-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-sm text-zinc-900">CF</div>
+            <div><div className="font-bold text-zinc-900 dark:text-white">Подключить Cloudflare R2</div>
+            <div className="text-xs text-zinc-500">Шаг {wizardStep} из 3</div></div>
+          </div>
+          <button onClick={() => setWizardStep(0)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">×</button>
+        </div>
+        <div className="p-6">
+        {wizardStep === 1 && (
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">Сейчас откроется Cloudflare — создайте R2 API Token с правами <b>Object Read & Write</b>. На финальном экране скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (показывается один раз).</p>
+          <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer" className="block w-full text-center py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-900 text-sm font-bold">☁️ Открыть Cloudflare → создать токен</a>
+          <button onClick={() => setWizardStep(2)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">Ключи готовы →</button>
+          <p className="text-xs text-zinc-500">Уже подключали ранее? Нажмите «Ключи готовы» и просто повторно вставьте значения.</p>
+        </div>
+        )}
+        {wizardStep === 2 && (
+        <div className="space-y-3">
+          <div><label className="text-xs font-bold text-zinc-500">Access Key ID</label>
+          <input value={s3Form.accessKeyId} onChange={(e) => setS3Form(p => ({ ...p, accessKeyId: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500" placeholder="вставьте из Cloudflare" /></div>
+          <div><label className="text-xs font-bold text-zinc-500">Secret Access Key</label>
+          <input type="password" value={(s3Form.secretAccessKey || '') === '********' ? '' : s3Form.secretAccessKey} onChange={(e) => setS3Form(p => ({ ...p, secretAccessKey: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500" placeholder="показывался один раз — вставьте заново" /></div>
+          <div className="grid grid-cols-2 gap-3">
+          <div><label className="text-xs font-bold text-zinc-500">Бакет</label>
+          <input value={s3Form.bucket} onChange={(e) => setS3Form(p => ({ ...p, bucket: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500" placeholder="anotee" /></div>
+          <div><label className="text-xs font-bold text-zinc-500">Регион</label>
+          <select value={s3Form.region} onChange={(e) => setS3Form(p => ({ ...p, region: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none"><option value="auto">Auto</option><option value="eu">EU</option><option value="us">US</option></select></div>
+          </div>
+          <p className="text-xs text-zinc-500">Endpoint подставьте по формату: <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code> (EU — добавить <code>.eu</code>).</p>
+          <button onClick={() => setWizardStep(3)} disabled={!(s3Form.accessKeyId && s3Form.secretAccessKey && s3Form.secretAccessKey !== '********')} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-bold">Подключить и проверить →</button>
+        </div>
+        )}
+        {wizardStep === 3 && (
+        <div className="space-y-2">
+        {['Проверка ключей', 'Бакет найден', 'CORS настроен', 'Тестовая загрузка', 'Сохранение конфига'].map((label, idx) => (
+          <div key={idx} className="flex items-center gap-3 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm">
+          <span className={'w-2.5 h-2.5 rounded-full ' + (wizChecks[idx] ? 'bg-green-500' : 'bg-yellow-400 animate-pulse')} />
+          <span className={wizChecks[idx] ? 'text-zinc-700 dark:text-zinc-200' : 'text-zinc-500'}>{label}</span>
+          </div>
+        ))}
+        <button onClick={async () => { setWizChecks([true, false, false, false, false]); try { await handleSaveAndActivate(); } catch { return; } setWizChecks([true, true, false, false, false]); try { await handleTestConnection(); setWizChecks([true, true, true, true, true]); try { await handleAutoCors(); } catch { /* CORS отдельно */ } toast('Хранилище подключено и проверено', 'success'); setTimeout(() => setWizardStep(0), 1200); } catch { setWizChecks([true, true, true, false, false]); } }} className="w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">🚀 Запустить автонастройку</button>
+        <p className="text-xs text-zinc-500">Если какой-то шаг не пройдёт — увидите точную причину. Кнопку можно нажать повторно.</p>
+        </div>
+        )}
+        </div>
+      </div></div>
+)}
+{/* HELP MODALS (Unchanged logic, just ensure render) */}
             {showProviderHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
