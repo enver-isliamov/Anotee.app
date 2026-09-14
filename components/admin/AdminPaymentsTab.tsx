@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from '../../services/toastBus';
 import { useAuth } from '@clerk/clerk-react';
 import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../../types';
 import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check, Lock, Unlock, Hash, Link as LinkIcon, Eye, EyeOff, Heart } from 'lucide-react';
@@ -224,10 +225,10 @@ export const AdminPaymentsTab: React.FC = () => {
                 },
                 body: JSON.stringify(paymentConfig)
             });
-            alert("Настройки интеграций сохранены!");
+            toast("Настройки интеграций сохранены!");
             setIsEditingGateway(false); // Lock gateway selection after save
         } catch (e) {
-            alert("Не удалось сохранить настройки платежей");
+            toast("Не удалось сохранить настройки платежей");
         } finally {
             setIsSavingPayment(false);
         }

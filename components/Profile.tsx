@@ -1,5 +1,6 @@
 ﻿
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { toast } from '../services/toastBus';
 import { User, S3Config } from '../types';
 import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock , Wrench } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
@@ -186,7 +187,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       const loadS3Config = async () => {
           try {
               const token = await getToken();
-              const res = await fetch('/api/storage?action=config', {
+              if ((s3Form.secretAccessKey || '') === '********' && noConfigFound) {
+        alert('Очистите поле «Secret Access Key» и введите ключ заново — в базе для этого аккаунта ещё нет сохранённого конфига.');
+        return;
+      }
+      const res = await fetch('/api/storage?action=config', {
                   headers: { 'Authorization': `Bearer ${token}` }
               });
               if (res.ok) {
@@ -288,13 +293,13 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       const token = await getToken();
       const res = await fetch('/api/storage?action=migrateStorage', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
-      if (res.ok && data.success) alert(`Готово: исправлено версий — ${data.fixed}. Иконки источников теперь корректны.`);
-      else alert(data.error || 'Не удалось выполнить миграцию');
-    } catch (e: any) { alert(e?.message || 'Сбой сети'); }
+      if (res.ok && data.success) toast(`Готово: исправлено версий — ${data.fixed}. Иконки источников теперь корректны.`);
+      else toast(data.error || 'Не удалось выполнить миграцию');
+    } catch (e: any) { toast(e?.message || 'Сбой сети'); }
   };
   const handleSaveAndActivate = async () => {
       if (selectedTab === 'google') {
-          alert("Для активации Google Drive убедитесь, что он подключен (кнопка выше). Настройки S3 не будут использоваться.");
+          toast("Для активации Google Drive убедитесь, что он подключен (кнопка выше). Настройки S3 не будут использоваться.");
           setActiveProvider('google'); 
           return;
       }
@@ -322,7 +327,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           
           setTimeout(() => setS3Saved(false), 3000);
       } catch (e: any) {
-          alert(/Secret Key/.test(e?.message || "") ? (e.message + " — очистите поле «Секретный ключ» и введите ключ заново.") : (e?.message || "Ошибка сохранения настроек. Проверьте соединение."));
+          toast(/Secret Key/.test(e?.message || "") ? (e.message + " — очистите поле «Секретный ключ» и введите ключ заново.") : (e?.message || "Ошибка сохранения настроек. Проверьте соединение."));
           throw e; // T-39: caller knows about failure
       } finally {
           setIsSavingS3(false);
@@ -412,9 +417,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (res.ok) { await checkStatus(); alert("Автопродление отключено."); } 
-          else { alert("Не удалось отключить."); }
-      } catch (e) { alert("Ошибка сети"); } finally { setIsCanceling(false); }
+          if (res.ok) { await checkStatus(); toast("Автопродление отключено."); } 
+          else { toast("Не удалось отключить."); }
+      } catch (e) { toast("Ошибка сети"); } finally { setIsCanceling(false); }
   };
 
   const handleDonate = async () => {
@@ -433,14 +438,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           if (res.ok && data.confirmationUrl) {
               window.open(data.confirmationUrl, '_blank') || (window.location.href = data.confirmationUrl);
           } else {
-              alert(data.error || "Ошибка инициализации платежа. Укажите ссылку на донат в Админке (раздел 'Платежи').");
+              toast(data.error || "Ошибка инициализации платежа. Укажите ссылку на донат в Админке (раздел 'Платежи').");
           }
-      } catch (e) { alert("Network error"); } finally { setIsDonating(false); }
+      } catch (e) { toast("Network error"); } finally { setIsDonating(false); }
   };
 
   const copyToClipboard = (text: string) => {
       navigator.clipboard.writeText(text);
-      alert("Скопировано!");
+      toast("Скопировано!");
   };
 
   const hasMigrated = (currentUser as any).unsafeMetadata?.migrated === true;

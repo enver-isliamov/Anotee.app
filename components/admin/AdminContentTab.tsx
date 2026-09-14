@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from '../../services/toastBus';
 import { Copy, Sparkles, Wand2, RefreshCw, MessageSquare, Edit3, Terminal, CheckCircle2, AlertTriangle, Loader2, Image as ImageIcon, Settings, Save, Key, Check, Target, Lightbulb, TrendingUp, BookOpen, Briefcase, Eye } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 
@@ -75,7 +76,7 @@ const AdminContentTabInner: React.FC = () => {
             setAiConfig(prev => ({ ...prev, hasOpenAiKey: newOpenAiKey ? true : prev.hasOpenAiKey }));
             setShowSettings(false);
         } catch (e) {
-            alert("Ошибка сохранения настроек");
+            toast("Ошибка сохранения настроек");
         } finally {
             setIsSavingSettings(false);
         }
@@ -178,7 +179,7 @@ const AdminContentTabInner: React.FC = () => {
             
             setGeneratedImage(data.image);
         } catch (e: any) {
-            alert(`Ошибка генерации: ${e.message}`);
+            toast(`Ошибка генерации: ${e.message}`);
         } finally {
             setIsGeneratingImage(false);
         }

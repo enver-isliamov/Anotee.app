@@ -26,6 +26,7 @@ import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw, PartyPopp
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
+import { setToastHandler } from './services/toastBus';
 import { DriveProvider, useDrive } from './services/driveContext';
 import { OnboardingWidget } from './components/OnboardingWidget';
 import useSWR, { mutate } from 'swr';
@@ -239,6 +240,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
 
   const notify = (message: string, type: ToastType = 'info') => {
+  useEffect(() => { setToastHandler((m, t) => notify(m, (t as any) || 'info')); return () => setToastHandler(null); }, [notify]);
     const id = generateId();
     setToasts(prev => [...prev, { id, message, type }]);
   };

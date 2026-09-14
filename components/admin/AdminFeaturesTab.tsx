@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from '../../services/toastBus';
 import { useAuth } from '@clerk/clerk-react';
 import { AppConfig, DEFAULT_CONFIG, FeatureRule } from '../../types';
 import { useAppVersion } from '../../hooks/useAppVersion';
@@ -216,9 +217,9 @@ export const AdminFeaturesTab: React.FC = () => {
                 },
                 body: JSON.stringify(domains)
             });
-            alert("Ссылки для доменов успешно обновлены!");
+            toast("Ссылки для доменов успешно обновлены!");
         } catch (e) {
-            alert("Ошибка сохранения ссылок для доменов");
+            toast("Ошибка сохранения ссылок для доменов");
         } finally {
             setIsSavingDomains(false);
         }
@@ -236,9 +237,9 @@ export const AdminFeaturesTab: React.FC = () => {
                 },
                 body: JSON.stringify(config)
             });
-            alert("Конфигурация сохранена!");
+            toast("Конфигурация сохранена!");
         } catch (e) {
-            alert("Не удалось сохранить конфигурацию");
+            toast("Не удалось сохранить конфигурацию");
         } finally {
             setIsSavingConfig(false);
         }
@@ -256,9 +257,9 @@ export const AdminFeaturesTab: React.FC = () => {
                 },
                 body: JSON.stringify({ version: appVersion })
             });
-            alert("Версия обновлена!");
+            toast("Версия обновлена!");
         } catch (e) {
-            alert("Ошибка обновления версии");
+            toast("Ошибка обновления версии");
         } finally {
             setIsSavingVersion(false);
         }

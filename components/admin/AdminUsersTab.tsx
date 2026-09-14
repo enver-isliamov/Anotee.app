@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from '../../services/toastBus';
 import { useAuth } from '@clerk/clerk-react';
 import { AdminUser, UserPlan } from '../../types';
 import { RefreshCw, Search, Crown, CheckCircle, Zap, Shield, Filter, Repeat } from 'lucide-react';
@@ -85,7 +86,7 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
             setSelectedUser(null);
             fetchUsers();
         } catch (e) {
-            alert("Ошибка при изменении плана");
+            toast("Ошибка при изменении плана");
         } finally {
             setIsGranting(false);
         }
@@ -107,7 +108,7 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
             });
             fetchUsers();
         } catch (e) {
-            alert("Ошибка изменения роли");
+            toast("Ошибка изменения роли");
         }
     };
 

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from '../services/toastBus';
 import { Lock, Check, Zap, Infinity as InfinityIcon, Loader2, CreditCard, Calendar, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { useAuth } from '@clerk/clerk-react';
@@ -81,7 +82,7 @@ export const RoadmapBlock: React.FC = () => {
 
   const handleBuy = async (planType: 'lifetime' | 'monthly') => {
       if (!isSignedIn) {
-          alert("Please sign in to purchase.");
+          toast("Please sign in to purchase.");
           return;
       }
       
@@ -102,12 +103,12 @@ export const RoadmapBlock: React.FC = () => {
           if (res.ok && data.confirmationUrl) {
               window.location.href = data.confirmationUrl;
           } else {
-              alert("Payment initialization failed: " + (data.error || "Unknown error"));
+              toast("Payment initialization failed: " + (data.error || "Unknown error"));
               setIsBuying(null);
           }
       } catch (e) {
           console.error(e);
-          alert("Network error");
+          toast("Network error");
           setIsBuying(null);
       }
   };
