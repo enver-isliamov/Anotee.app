@@ -135,6 +135,7 @@ interface AppLayoutProps {
 }
 
 function usePageVisibility() { const [v, setV] = React.useState(typeof document === 'undefined' ? true : !document.hidden); React.useEffect(() => { const h = () => setV(!document.hidden); document.addEventListener('visibilitychange', h); return () => document.removeEventListener('visibilitychange', h); }, []); return v; }
+  React.useEffect(() => { setToastHandler((m, t) => notify(m, (t as any) || 'info')); }, [notify]);
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization, userObj }) => {
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -240,7 +241,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
 
   const notify = (message: string, type: ToastType = 'info') => {
-  useEffect(() => { setToastHandler((m, t) => notify(m, (t as any) || 'info')); return () => setToastHandler(null); }, [notify]);
     const id = generateId();
     setToasts(prev => [...prev, { id, message, type }]);
   };
