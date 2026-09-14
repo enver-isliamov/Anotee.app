@@ -68,6 +68,7 @@ export default async function handler(req, res) {
             }
         if (action === 'config') {
             // Lazy DB Migration
+            try {
             await sql`
                 CREATE TABLE IF NOT EXISTS storage_config (
                     user_id TEXT PRIMARY KEY,
@@ -83,6 +84,10 @@ export default async function handler(req, res) {
             CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT);
             CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
             `;
+            } catch (ddlErr) {
+            // T-73: сбой DDL не должен ломать основной поток config
+            console.warn("Storage DDL warning:", ddlErr && ddlErr.message ? ddlErr.message : ddlErr);
+            }
 
             
 if (req.method === 'GET') {
@@ -164,7 +169,7 @@ if (req.method === 'GET') {
         // --- ACTION: STORAGE PREFS (GET/POST) ---
             if (action === 'storage_prefs') {
                 if (req.method === 'GET') {
-                    await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`;
+                    try { await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`; } catch (ddlErr2) { console.warn("prefs DDL warning:", ddlErr2 && ddlErr2.message); }
                     const pr = await sql`SELECT active_provider, disabled FROM storage_prefs WHERE user_id = ${user.id}`;
                     let disabled = [];
                     if (pr.length > 0 && pr[0].disabled) { try { disabled = JSON.parse(pr[0].disabled); } catch (e) { disabled = []; } }
@@ -172,9 +177,9 @@ if (req.method === 'GET') {
                 }
                 if (req.method === 'POST') {
                     const { activeProvider, disabled, auditAction } = req.body || {};
-                    await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`;
+                    try { await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`; } catch (ddlErr3) { console.warn("prefs DDL warning:", ddlErr3 && ddlErr3.message); }
                     await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${activeProvider || null}, ${JSON.stringify(disabled || [])}) ON CONFLICT (user_id) DO UPDATE SET active_provider = ${activeProvider || null}, disabled = ${JSON.stringify(disabled || [])}`;
-                    if (auditAction) await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`.then(() => sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, ${auditAction}, ${activeProvider || null})`).catch(() => {});
+                    if (auditAction) { try { await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`; await sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, ${auditAction}, ${activeProvider || null})`; } catch (auditErr) { console.warn("audit warning:", auditErr && auditErr.message); } }
                     return res.status(200).json({ success: true });
                 }
             }
