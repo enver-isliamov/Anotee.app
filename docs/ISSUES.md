@@ -25,6 +25,8 @@
 | ISS-018 | P3 | Битые blob-ссылки после reload | components/Player.tsx | ✅ fixed (704f644) очистка; полное решение — IndexedDB | — |
 | ISS-019 | P2 | BYOS: владелец конфига не показывался; маска секрета в кеше формы при отсутствии конфига | api/storage.js (GET config), components/Profile.tsx | ✅ fixed (a99052f) | configOwner в GET; очистка масок из кеша; user-id в ошибке 400 |
 
+| ISS-020 | P0 | Краш «j is not a function» на билде fzOmaWTN (09:03) при загрузке видео | useUploadManager | 🟡 pending-user-retest | Причина: юзер тестировал билд e14b3a6 (сломанная типизация). Текущая голова ac851dd+ чистая (tsc/build/unit=0, crash-hunt e2e passed). Требуется: жёсткая перезагрузка + повтор; если повторится — прислать стек нового билда |
+
 ## Известные ограничения среды песочницы
 
 - voice.spec: 1 падение из 2 — page.goto timeout 60с (dev-сервер cold start в песочнице), не код приложения; в повторном прогоне той же спеки 1 passed.
