@@ -27,6 +27,8 @@
 
 | ISS-020 | P0 | Краш «j is not a function» на билде fzOmaWTN (09:03) при загрузке видео | useUploadManager | 🟡 pending-user-retest | Причина: юзер тестировал билд e14b3a6 (сломанная типизация). Текущая голова ac851dd+ чистая (tsc/build/unit=0, crash-hunt e2e passed). Требуется: жёсткая перезагрузка + повтор; если повторится — прислать стек нового билда |
 
+| ISS-021 | P1 | GET /api/storage?action=config -> 500 после добавления storage_prefs/audit таблиц | api/storage.js (config GET + lazy DDL) | 🟡 open | Нужны Vercel Function Logs (Runtime Logs) — вероятен сбой CREATE TABLE в транзакционном пуле Neon; откат: revert cc2213a |
+
 ## Известные ограничения среды песочницы
 
 - voice.spec: 1 падение из 2 — page.goto timeout 60с (dev-сервер cold start в песочнице), не код приложения; в повторном прогоне той же спеки 1 passed.
