@@ -630,7 +630,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
-                                                <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
+                                                <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="text-[10px] text-emerald-400 hover:text-white flex items-center gap-1 font-bold">🧙 Мастер подключения</button>
+            <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
                                                     <HelpCircle size={10} /> Инструкция по получению ключей
                                                 </button>
                                             </div>
