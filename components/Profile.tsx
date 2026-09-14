@@ -144,7 +144,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [isS3Loading, setIsS3Loading] = useState(true);
   const [noConfigFound, setNoConfigFound] = useState(false);
   const [configOwner, setConfigOwner] = useState('');
-  const [wizardStep, setWizardStep] = useState(0); // 0=off 1=cf 2=keys 3=auto
+  const [wizardStep, setWizardStep] = useState(0);
+  const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
+  const saveStoragePrefs = async (activeProvider: string, disabled: string[], auditAction: string) => {
+    try {
+      const token = await getToken();
+      await fetch('/api/storage?action=storage_prefs', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ activeProvider, disabled, auditAction }) });
+    } catch { /* prefs не критичны */ }
+  }; // 0=off 1=cf 2=keys 3=auto
   const [wizChecks, setWizChecks] = useState([false, false, false, false, false]); // T-36
   
   // Sensitive Data Visibility Toggles
@@ -210,6 +217,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       };
                       
                       setConfigOwner(data.configOwner || user?.id || '');
+        try { const token = await getToken(); const pr = await fetch('/api/storage?action=storage_prefs', { headers: { 'Authorization': `Bearer ${token}` } }); const pd = await pr.json(); if (pd.success && pd.activeProvider) { setStoragePrefs({ activeProvider: pd.activeProvider, disabled: pd.disabled || [] }); if (S3_PRESETS[pd.activeProvider]) setSelectedTab(pd.activeProvider); } } catch { /* prefs опциональны */ }
         // Set Active Provider
                       if (data.provider && data.endpoint) {
                           setActiveProvider(data.provider);
@@ -994,6 +1002,28 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             <p>5. Если Test просит ключ заново — очистите поле секрета и введите его повторно (при смене Access Key старый Secret не переиспользуется).</p>
           </div>
         </details>
+        <div data-testid="storage-manager" className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3">
+        <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-wider mb-2">Хранилища</h5>
+        <div className="space-y-1.5">
+        {['cloudflare', 'backblaze', 'custom'].map(pid => {
+        const isDisabled = storagePrefs.disabled.includes(pid);
+        const isActive = (storagePrefs.activeProvider || activeProvider) === pid;
+        return (
+        <div key={pid} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">
+        <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-200 cursor-pointer flex-1">
+        <input type="radio" name="active-storage" checked={isActive} onChange={() => { setStoragePrefs(p => ({ ...p, activeProvider: pid })); setStoragePrefs(prev => ({ ...prev, activeProvider: pid })); setSelectedTab(pid as any); saveStoragePrefs(pid, storagePrefs.disabled, 'switch'); }} className="accent-indigo-600" />
+        <span className="font-semibold">{S3_PRESETS[pid]?.provider || pid}</span>
+        {isActive && <span className="text-[10px] text-green-600 dark:text-green-400 font-bold">активно</span>}
+        </label>
+        <button onClick={() => { const nd = isDisabled ? storagePrefs.disabled.filter(x => x !== pid) : [...storagePrefs.disabled, pid]; setStoragePrefs(p => ({ ...p, disabled: nd })); saveStoragePrefs(storagePrefs.activeProvider || activeProvider, nd, isDisabled ? 'enable' : 'disable'); }} className="text-[10px] px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
+        {isDisabled ? 'Включить' : 'Отключить'}
+        </button>
+        </div>
+        );
+        })}
+        </div>
+        <p className="text-[10px] text-zinc-500 mt-2">Активное хранилище используется для новых загрузок. Отключение не удаляет конфиг.</p>
+        </div>
                         {currentProviderGuide.warning && (
                             <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
                                 <AlertTriangle size={16} className="shrink-0 mt-0.5" />
