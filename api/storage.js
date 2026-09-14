@@ -80,6 +80,8 @@ export default async function handler(req, res) {
                     public_url TEXT,
                     updated_at BIGINT
                 );
+            CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT);
+            CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
             `;
 
             
@@ -159,7 +161,29 @@ if (req.method === 'GET') {
             }
         }
 
-        // --- ACTION: TEST CONNECTION (POST) ---
+        // --- ACTION: STORAGE PREFS (GET/POST) ---
+            if (action === 'storage_prefs') {
+                if (req.method === 'GET') {
+                    await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`;
+                    const pr = await sql`SELECT active_provider, disabled FROM storage_prefs WHERE user_id = ${user.id}`;
+                    let disabled = [];
+                    if (pr.length > 0 && pr[0].disabled) { try { disabled = JSON.parse(pr[0].disabled); } catch (e) { disabled = []; } }
+                    return res.status(200).json({ success: true, activeProvider: pr.length > 0 ? pr[0].active_provider : null, disabled });
+                }
+                if (req.method === 'POST') {
+                    const { activeProvider, disabled, auditAction } = req.body || {};
+                    await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`;
+                    await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${activeProvider || null}, ${JSON.stringify(disabled || [])}) ON CONFLICT (user_id) DO UPDATE SET active_provider = ${activeProvider || null}, disabled = ${JSON.stringify(disabled || [])}`;
+                    if (auditAction) await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`.then(() => sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, ${auditAction}, ${activeProvider || null})`).catch(() => {});
+                    return res.status(200).json({ success: true });
+                }
+            }
+            if (action === 'storage_audit') {
+                await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`;
+                const rows = await sql`SELECT action, provider, created_at FROM storage_audit WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 20`;
+                return res.status(200).json({ success: true, audit: rows });
+            }
+// --- ACTION: TEST CONNECTION (POST) ---
         if (action === 'test') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
