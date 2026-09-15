@@ -1708,6 +1708,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         </div>
 
         {!isFullscreen && (
+            <FeatureErrorBoundary label="Транскрипт/комментарии">
             <PlayerSidebar 
                 sidebarTab={sidebarTab} setSidebarTab={setSidebarTab} filteredComments={filteredComments} isManager={isManager}
                 version={version} handleToggleLock={handleToggleLock} setShowExportMenu={setShowExportMenu} showExportMenu={showExportMenu}
@@ -1722,6 +1723,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
                 wordUi={wordUi} comments={comments} transcribeEngine={transcribeEngine} changeTranscribeEngine={changeTranscribeEngine}
             />
+            </FeatureErrorBoundary>
         )}
 
         {!isFullscreen && sidebarTab === 'comments' && (
