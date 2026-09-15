@@ -115,6 +115,8 @@ export default async function handler(req, res) {
 
             
 if (req.method === 'GET') {
+                // T-97: per-provider чтение не должно валить 500 (ISS-021: сбой DDL/чтения в Neon) — fallback на legacy
+                try {
                 await ensurePerProviderConfigs();
                 // T-93: per-provider — конфиг активного провайдера; список настроенных для статусов карточек
                 let active = null;
@@ -141,6 +143,26 @@ if (req.method === 'GET') {
                     isActive: true,
                     configured
                 });
+                } catch (ppErr) {
+                    // T-97 fallback: старое поведение на legacy-таблице
+                    console.warn('per-provider GET failed, legacy fallback:', ppErr && ppErr.message ? ppErr.message : ppErr);
+                    const legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
+                    if (legacyRows.length === 0) return res.status(200).json(null);
+                    const config = legacyRows[0];
+                    return res.status(200).json({
+                        provider: config.provider,
+                        bucket: config.bucket,
+                        endpoint: config.endpoint,
+                        region: config.region,
+                        accessKeyId: config.access_key_id,
+                        secretAccessKey: '********',
+                        publicUrl: config.public_url,
+                        configOwner: user.email || user.id,
+                        secretIsMask: (decrypt(config.secret_access_key) || '') === '********',
+                        isActive: true,
+                        configured: []
+                    });
+                }
             }
 
             if (req.method === 'POST') {
@@ -156,7 +178,8 @@ if (req.method === 'GET') {
                     // T-33b: частичное сохранение — пустые поля подтягиваются из существующего конфига пользователя,
                     // чтобы повторное сохранение не требовало ввода всего заново.
                     if (missing.length > 0) {
-                        const sameProviderRows = await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider || ''}`;
+                        let sameProviderRows = [];
+                        try { sameProviderRows = await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider || ''}`; } catch (e) { console.warn('storage_configs read warning:', e && e.message ? e.message : e); }
                         const existingRows = sameProviderRows.length > 0 ? sameProviderRows : await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_config WHERE user_id = ${user.id}`;
                         const existingCfg = existingRows[0];
                         if (!existingCfg) return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
@@ -216,9 +239,13 @@ if (req.method === 'GET') {
             if (!ALLOWED.includes(provider)) return res.status(400).json({ error: 'Unknown provider: ' + provider });
             try { await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`; } catch (e) {}
             if (provider !== 'google') {
-                await ensurePerProviderConfigs();
-                const rows = await sql`SELECT provider FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider}`;
-                if (rows.length === 0) return res.status(400).json({ error: 'Провайдер не настроен — сначала сохраните его ключи' });
+                let configured = false;
+                try {
+                    await ensurePerProviderConfigs();
+                    const rows = await sql`SELECT provider FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider}`;
+                    configured = rows.length > 0;
+                } catch (e) { console.warn('switch_provider read warning:', e && e.message ? e.message : e); }
+                if (!configured) return res.status(400).json({ error: 'Провайдер не настроен — сначала сохраните его ключи' });
             }
             const existing = await sql`SELECT user_id FROM storage_prefs WHERE user_id = ${user.id}`;
             if (existing.length > 0) {
