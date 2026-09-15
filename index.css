@@ -7,10 +7,15 @@
 /* T-89: safe-area всегда (в Safari env() = 0, на iPhone с «островом» — реальный отступ).
    Ранее правило работало только в PWA-режиме и шапка уезжала под статус-бар/остров. */
 .safe-top {
-  padding-top: env(safe-area-inset-top, 0px);
+  /* мобильный: сохраняем базовый py-2 шапки + inset (Codex P2) */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
 }
 .safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+@media (min-width: 768px) {
+  /* md: у шапки py-0 — добавляем только inset, без лишних 8px */
+  .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 }
 /* T-25: iA-принцип — комфортная длина строки для чтения транскрипта */
 .reading-column {
