@@ -4,11 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* T-25: PWA standalone — контент не уезжает под статус-бар */
-@media (display-mode: standalone) {
-  .safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
+/* T-89: safe-area всегда (в Safari env() = 0, на iPhone с «островом» — реальный отступ).
+   Ранее правило работало только в PWA-режиме и шапка уезжала под статус-бар/остров. */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 /* T-25: iA-принцип — комфортная длина строки для чтения транскрипта */
 .reading-column {
