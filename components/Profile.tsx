@@ -146,7 +146,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [secretBroken, setSecretBroken] = useState(false);
   const handleResetConfig = async () => {
     if (!confirm('Сбросить конфигурацию хранилища? Сохранённые ключи для аккаунта будут удалены, после чего введите их заново.')) return;
-    try { const token = await getToken(); await fetch('/api/storage?action=reset_config', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); setNoConfigFound(true); setSecretBroken(false); setS3Form((pr: any) => ({ ...pr, secretAccessKey: '' })); setTestResult({ success: false, message: 'Конфиг сброшен — введите ключи заново и нажмите Test.' }); toast('Конфигурация хранилища сброшена', 'success'); } catch (e: any) { toast(e?.message || 'Не удалось сбросить', 'error'); }
+    try { const token = await getToken(); await fetch('/api/storage?action=reset_config', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); setNoConfigFound(true); setSecretBroken(false); setS3Form((pr: any) => ({ ...pr, secretAccessKey: '', accessKeyId: '' })); setTestResult({ success: false, message: 'Конфиг сброшен — введите ключи заново и нажмите Test.' }); toast('Конфигурация хранилища сброшена', 'success'); } catch (e: any) { toast(e?.message || 'Не удалось сбросить', 'error'); }
   };
   const [configOwner, setConfigOwner] = useState('');
   const [wizardStep, setWizardStep] = useState(0);
@@ -365,6 +365,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           const data = await res.json();
           if (res.ok && data.success) {
               setTestResult({ success: true, message: `Успешно! Доступ к бакету '${data.bucket}' есть.` });
+          setNoConfigFound(false); setSecretBroken(false);
           } else {
               setTestResult({ success: false, message: data.error || "Ошибка соединения" });
           }
@@ -596,7 +597,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   {secretBroken && (
         <div className="mb-3 border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950 rounded-lg p-3 text-xs text-red-700 dark:text-red-300">В сохранённой конфигурации обнаружен повреждённый секрет (маска вместо ключа). Нажмите «Сбросить конфиг», затем введите Access Key ID и Secret Access Key заново.</div>
         )}
-        {noConfigFound && (
+        {noConfigFound && !(testResult && testResult.success) && (
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200 leading-relaxed" data-testid="no-config-banner">
           <b>Хранилище для этого аккаунта ещё не настроено.</b> Заполните поля ниже (ключи от вашего R2/S3), нажмите «Сохранить», затем «Проверить соединение» — Test также применит CORS к бакету.
       </div>
