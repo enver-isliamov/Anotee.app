@@ -1011,6 +1011,31 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             <p>5. Если Test просит ключ заново — очистите поле секрета и введите его повторно (при смене Access Key старый Secret не переиспользуется).</p>
           </div>
         </details>
+                        {currentProviderGuide.warning && (
+                            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                <p className="font-medium">{currentProviderGuide.warning}</p>
+                            </div>
+                        )}
+                        <div className="space-y-3 mb-6">
+                            {currentProviderGuide.steps.map((step, idx) => (
+                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">{idx + 1}</div>
+                                    <p>{step}</p>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                            <a href={currentProviderGuide.link} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-bold">
+                                {currentProviderGuide.linkText} <ExternalLink size={12} />
+                            </a>
+                            <button onClick={() => setShowProviderHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Закрыть</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+{/* T-92: блок «Хранилища» вынесен из help-модалки — рендерится всегда */}
         <div data-testid="storage-manager" className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3">
         <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-wider mb-2">Хранилища</h5>
         <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full mb-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1">🧙 Подключить за 3 шага (мастер)</button>
@@ -1038,29 +1063,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         </div>
         <p className="text-[10px] text-zinc-500 mt-2">Активное хранилище используется для новых загрузок. Отключение не удаляет конфиг.</p>
         </div>
-                        {currentProviderGuide.warning && (
-                            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
-                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                                <p className="font-medium">{currentProviderGuide.warning}</p>
-                            </div>
-                        )}
-                        <div className="space-y-3 mb-6">
-                            {currentProviderGuide.steps.map((step, idx) => (
-                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">{idx + 1}</div>
-                                    <p>{step}</p>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                            <a href={currentProviderGuide.link} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-bold">
-                                {currentProviderGuide.linkText} <ExternalLink size={12} />
-                            </a>
-                            <button onClick={() => setShowProviderHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Закрыть</button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {showCorsHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
