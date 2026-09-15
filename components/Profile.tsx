@@ -760,13 +760,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         // SAVED STATE
                                                         <div className="flex items-center">
                                                             <input 
-                                                                type="password"
+                                                                type="text"
+                                                                readOnly
                                                                 disabled
-                                                                value="........................"
+                                                                value="••••••••••••  (секрет сохранён — не меняйте без необходимости)"
                                                                 className="w-full bg-zinc-900/50 border border-green-900/30 rounded-lg pl-9 pr-20 py-2.5 text-sm text-green-500 font-mono cursor-not-allowed opacity-70"
                                                             />
                                                             <div className="absolute right-2 top-2 flex items-center gap-2">
-                                                                <span className="text-[10px] text-green-600 font-bold uppercase bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/50">Saved</span>
+                                                                <span className="text-[10px] text-green-600 font-bold uppercase bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/50">сохранён</span>
                                                                 <button 
                                                                     onClick={() => setS3Form(p => ({...p, secretAccessKey: ''}))}
                                                                     className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
@@ -784,7 +785,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                                 value={s3Form.secretAccessKey} 
                                                                 onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
                                                                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
-                                                                placeholder="Enter New Secret Key"
+                                                                placeholder="Новый Secret Access Key (при смене Access Key старый секрет не переиспользуется)"
                                                             />
                                                             <button onClick={() => setShowSecretKey(!showSecretKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
                                                                 {showSecretKey ? <EyeOff size={14} /> : <Eye size={14} />} 
