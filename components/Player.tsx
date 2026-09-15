@@ -1014,7 +1014,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           pendingInterimRef.current = interim;
           applyDictation();
       };
-      try { recognition.start(); } catch (e) { console.warn("SpeechRecognition start failed", e); setIsListening(false); }
+      requestMicThenStart(recognition, () => setIsListening(false));
   };
   const toggleListening = () => { if (isListening) recognitionRef.current?.stop(); else startListening(); };
   // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
@@ -1078,7 +1078,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           else if (code === 'network') notify(t('player.voice.err_network'), 'error');
       };
       recognition.onend = () => { setSheetRecording(false); sheetRecRef.current = null; setSheetInterim(''); };
-      try { recognition.start(); } catch (e) { console.warn('sheet recording start failed', e); }
+      requestMicThenStart(recognition);
   };
   const stopSheetRecording = () => {
       const rec = sheetRecRef.current;
@@ -1149,6 +1149,16 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const pttCancelRef = useRef(false);
   const pttStartedAtRef = useRef(0);
   const isPTTActiveRef = useRef(false);
+  // T-94: сначала системный запрос микрофона (гарантированный автозапрос), затем запуск распознавания
+  const requestMicThenStart = (rec: any, onFail?: () => void) => {
+      const md: any = (navigator as any).mediaDevices;
+      if (md && typeof md.getUserMedia === 'function') {
+          md.getUserMedia({ audio: true })
+              .then((st: MediaStream) => { try { st.getTracks().forEach((tr: any) => tr.stop()); } catch (e) {} try { rec.start(); } catch (e) { console.warn('SR start after mic failed', e); } })
+              .catch(() => { try { rec.start(); } catch (e) { console.warn('SR start denied', e); } if (onFail) onFail(); });
+      } else { try { rec.start(); } catch (e) { console.warn('SR start failed', e); } if (onFail) onFail(); }
+  };
+
   const startPTT = () => {
       if (isPTTActiveRef.current) return;
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -1192,7 +1202,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           else { pttErrorRef.current = true; notify(`${t("player.voice.err_generic")}${code}`, "error"); }
       };
       recognition.onend = () => { finishPTTCommit(); };
-      try { recognition.start(); } catch (e) { console.warn("PTT start failed", e); }
+      requestMicThenStart(recognition);
   };
   const finishPTTCommit = () => {
       if (!pttRecognitionRef.current) return; // идемпотентность: onend может прийти повторно
@@ -1273,7 +1283,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           else if (code !== "no-speech") notify(`${t("player.voice.err_generic")}${code}`, "error");
       };
       recognition.onend = () => { isLiveRef.current = false; setIsLiveDictating(false); liveRecognitionRef.current = null; setLiveText(""); };
-      try { recognition.start(); } catch (e) { console.warn("Live dictation start failed", e); }
+      requestMicThenStart(recognition);
   };
   const stopLiveDictation = () => {
       try { liveRecognitionRef.current?.stop(); } catch { /* уже остановлено */ }
