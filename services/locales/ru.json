@@ -227,7 +227,7 @@
   "player.txt.title": "Транскрипция",
   "player.txt.toggle": "Текст транскрипции",
   "player.unlock_ver": "Открыть версию",
-  "player.voice.err_denied": "Доступ к микрофону запрещён — разрешите его в настройках браузера.",
+  "player.voice.err_denied": "Доступ к микрофону запрещён. iOS: Настройки → Safari → Микрофон → Разрешить (в PWA — Настройки iPhone → Anotee). ПК: значок замка слева от адреса сайта → Микрофон.",
   "player.voice.err_generic": "Ошибка распознавания речи: ",
   "player.voice.err_network": "Сервис распознавания речи недоступен (нужен интернет).",
   "player.voice.listening": "Слушаю...",

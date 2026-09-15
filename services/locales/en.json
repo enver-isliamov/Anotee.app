@@ -227,7 +227,7 @@
   "player.txt.title": "Transcript",
   "player.txt.toggle": "Transcript text",
   "player.unlock_ver": "Unlock Version",
-  "player.voice.err_denied": "Microphone access denied — allow it in your browser settings.",
+  "player.voice.err_denied": "Microphone access denied. iOS: Settings → Safari → Microphone → Allow (in PWA: iPhone Settings → Anotee). Desktop: the padlock icon next to the site address → Microphone.",
   "player.voice.err_generic": "Speech recognition error: ",
   "player.voice.err_network": "Speech recognition service unavailable (internet connection required).",
   "player.voice.listening": "Listening...",
