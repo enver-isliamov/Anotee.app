@@ -151,6 +151,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [configOwner, setConfigOwner] = useState('');
   const [wizardStep, setWizardStep] = useState(0);
   const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
+    const [configuredProviders, setConfiguredProviders] = useState<string[]>([]); // T-93: настроенные S3-провайдеры (с сервера)
   const saveStoragePrefs = async (activeProvider: string, disabled: string[], auditAction: string) => {
     try {
       const token = await getToken();
@@ -223,6 +224,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       
                       setConfigOwner(data.configOwner || user?.id || '');
         setSecretBroken(!!data.secretIsMask);
+        setConfiguredProviders(Array.isArray((data as any).configured) ? (data as any).configured : []);
         try { const token = await getToken(); const pr = await fetch('/api/storage?action=storage_prefs', { headers: { 'Authorization': `Bearer ${token}` } }); const pd = await pr.json(); if (pd.success && pd.activeProvider) { setStoragePrefs({ activeProvider: pd.activeProvider, disabled: pd.disabled || [] }); if (S3_PRESETS[pd.activeProvider]) setSelectedTab(pd.activeProvider); } } catch { /* prefs опциональны */ }
         // Set Active Provider
                       if (data.provider && data.endpoint) {
@@ -237,7 +239,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       }
                   } else {
                       setActiveProvider('google');
-                      setSelectedTab('google'); setNoConfigFound(true);
+                      setSelectedTab('google'); setNoConfigFound(true); setConfiguredProviders([]);
                   }
               }
           } catch (e) {
@@ -303,7 +305,24 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   };
 
 
-  const handleMigrateStorage = async () => {
+  // T-93: переключение активного хранилища одним кликом (без повторного ввода ключей)
+    const handleSwitchProvider = async (pid: ExtendedProvider) => {
+        if (activeProvider === pid) { setSelectedTab(pid); return; }
+        try {
+            const token = await getToken();
+            const res = await fetch('/api/storage?action=switch_provider', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: pid }) });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                setActiveProvider(pid); setSelectedTab(pid);
+                toast(`Активное хранилище: ${pid === 'google' ? 'Google Drive' : (S3_PRESETS[pid]?.provider || pid)}`);
+                // подтянуть конфиг активного провайдера в форму
+                const cfg = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (cfg.ok) { const d = await cfg.json(); if (d && d.provider === pid && d.endpoint) { setS3Form({ provider: d.provider, bucket: d.bucket, endpoint: d.endpoint, region: d.region, accessKeyId: d.accessKeyId, secretAccessKey: d.secretAccessKey, publicUrl: d.publicUrl || '' }); setNoConfigFound(false); } }
+            } else { toast(data.error || 'Не удалось переключить хранилище'); }
+        } catch (e: any) { toast(e?.message || 'Сбой сети'); }
+    };
+
+    const handleMigrateStorage = async () => {
     if (!confirm('Починить источники видео: версии с Google Drive получат корректный тип storage. Продолжить?')) return;
     try {
       const token = await getToken();
@@ -470,7 +489,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const hasMigrated = (currentUser as any).unsafeMetadata?.migrated === true;
   const currentProviderGuide = PROVIDER_GUIDES[s3Form.provider] || PROVIDER_GUIDES['aws'];
 
-  const ProviderCard = ({ id, label, icon, color }: { id: ExtendedProvider, label: string, icon: any, color: string }) => {
+  const ProviderCard = ({ id, label, icon, color, configured, onSwitch }: { id: ExtendedProvider, label: string, icon: any, color: string, configured?: boolean, onSwitch?: () => void }) => {
       const isActive = activeProvider === id;
       const isSelected = selectedTab === id;
       return (
@@ -492,6 +511,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
                   {label}
               </span>
+              {/* T-93: статус и одно-клик переключение активного */}
+              <span className={`text-[10px] ${isActive ? 'text-green-500 font-bold' : (configured ? 'text-zinc-400' : 'text-zinc-600')}`}>{isActive ? '● активно' : (configured ? 'настроено' : 'не настроено')}</span>
+              {!isActive && configured && onSwitch && (
+                  <span
+                      role="radio"
+                      aria-checked={false}
+                      title="Сделать активным"
+                      onClick={(e) => { e.stopPropagation(); onSwitch(); }}
+                      className="mt-0.5 w-full text-center text-[10px] font-bold text-emerald-500 border border-emerald-500/30 rounded-lg py-0.5 hover:bg-emerald-500/10 transition-colors"
+                  >сделать активным</span>
+              )}
           </button>
       );
   };
@@ -590,6 +620,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                             </div>
                         </div>
 
+                        {/* T-93: мастер подключения — всегда доступен (Codex-урок: триггер в всегда-рендерящихся блоках) */}
+                        <div className="mb-4">
+                            <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2">🧙 Подключить хранилище за 3 шага (мастер)</button>
+                        </div>
+
                         {isS3Loading ? (
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
                         ) : (
@@ -605,11 +640,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   )}
                                 
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                    <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} color="bg-green-600" />
-                                    <ProviderCard id="yandex" label="Yandex" icon="Y" color="bg-red-500" />
-                                    <ProviderCard id="cloudflare" label="R2" icon="C" color="bg-orange-500" />
-                                    <ProviderCard id="selectel" label="Selectel" icon="S" color="bg-blue-500" />
-                                    <ProviderCard id="custom" label="Custom" icon="?" color="bg-zinc-600" />
+                                    <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} configured={activeProvider === 'google'} onSwitch={() => handleSwitchProvider('google' as ExtendedProvider)} color="bg-green-600" />
+                                    <ProviderCard id="yandex" label="Yandex" configured={configuredProviders.includes('yandex')} onSwitch={() => handleSwitchProvider('yandex' as ExtendedProvider)} icon="Y" color="bg-red-500" />
+                                    <ProviderCard id="cloudflare" label="R2" configured={configuredProviders.includes('cloudflare')} onSwitch={() => handleSwitchProvider('cloudflare' as ExtendedProvider)} icon="C" color="bg-orange-500" />
+                                    <ProviderCard id="selectel" label="Selectel" configured={configuredProviders.includes('selectel')} onSwitch={() => handleSwitchProvider('selectel' as ExtendedProvider)} icon="S" color="bg-blue-500" />
+                                    <ProviderCard id="custom" label="Custom" configured={configuredProviders.includes('custom')} onSwitch={() => handleSwitchProvider('custom' as ExtendedProvider)} icon="?" color="bg-zinc-600" />
                                 </div>
 
                                 <div className="bg-zinc-950/50 p-5 rounded-xl border border-zinc-800/50 min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
@@ -771,7 +806,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             <div className="col-span-2 pt-4 border-t border-zinc-800 flex justify-between gap-3 flex-wrap items-center">
                                                 <div className="flex gap-3">
                                                     <button onClick={() => setShowCorsHelp(true)} className="text-[10px] text-zinc-500 hover:text-zinc-300 underline">CORS Config</button>
-                                                    <button onClick={handleMigrateStorage} className="w-full py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-2"><Wrench size={14} /> Починить источники видео (Drive)</button>
         <button onClick={handleAutoCors} disabled={isConfiguringCors} className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"><Wand2 size={10}/> Auto-Fix CORS</button>
                                                 </div>
 
@@ -799,6 +833,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             </div>
                                         </div>
                                     )}
+                                    {/* T-93: сервисные действия — больше не перемешаны с формой и карточками */}
+                                    <details className="col-span-2 mt-4" data-testid="storage-service-actions">
+                                        <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none">Сервисные действия</summary>
+                                        <div className="mt-3 flex flex-col gap-2">
+                                            <button onClick={handleMigrateStorage} className="py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold hover:bg-amber-500/20 transition-colors">🛠 Починить источники видео (Drive) — исправить тип storage у старых версий</button>
+                                            <button onClick={handleResetConfig} data-testid="reset-config" className="py-2 rounded-xl bg-zinc-800/50 text-zinc-400 border border-zinc-700 text-xs font-bold hover:bg-zinc-800 transition-colors">♻️ Сбросить конфигурацию хранилища (если ключи «застряли»)</button>
+                                        </div>
+                                    </details>
                                 </div>
                             </div>
                         )}
@@ -1036,34 +1078,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             )}
 
 {/* T-92: блок «Хранилища» вынесен из help-модалки — рендерится всегда */}
-        <div data-testid="storage-manager" className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3">
-        <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-wider mb-2">Хранилища</h5>
-        <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full mb-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1">🧙 Подключить за 3 шага (мастер)</button>
-        <div className="space-y-1.5">
-        {['cloudflare', 'backblaze', 'custom'].map(pid => {
-        const isDisabled = storagePrefs.disabled.includes(pid);
-        const isActive = (storagePrefs.activeProvider || activeProvider) === pid;
-        return (
-        <div key={pid} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">
-        <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-200 cursor-pointer flex-1">
-        <input type="radio" name="active-storage" checked={isActive} onChange={() => { setStoragePrefs(p => ({ ...p, activeProvider: pid })); setStoragePrefs(prev => ({ ...prev, activeProvider: pid })); setSelectedTab(pid as any); saveStoragePrefs(pid, storagePrefs.disabled, 'switch'); }} className="accent-indigo-600" />
-        <span className="font-semibold">{S3_PRESETS[pid]?.provider || pid}</span>
-        {isActive && <span className="text-[10px] text-green-600 dark:text-green-400 font-bold">активно</span>}
-        </label>
-        <button onClick={() => { const nd = isDisabled ? storagePrefs.disabled.filter(x => x !== pid) : [...storagePrefs.disabled, pid]; setStoragePrefs(p => ({ ...p, disabled: nd })); saveStoragePrefs(storagePrefs.activeProvider || activeProvider, nd, isDisabled ? 'enable' : 'disable'); }} className="text-[10px] px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
-        {isDisabled ? 'Включить' : 'Отключить'}
-        </button>
-        </div>
-        );
-        })}
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-[10px] text-zinc-500">Проблемы с ключами? Сбросьте конфиг и введите заново.</span>
-        <button onClick={handleResetConfig} data-testid="reset-config" className="text-[10px] px-2 py-0.5 rounded border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950">Сбросить конфиг</button>
-        </div>
-        <p className="text-[10px] text-zinc-500 mt-2">Активное хранилище используется для новых загрузок. Отключение не удаляет конфиг.</p>
-        </div>
-
+        
             {showCorsHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
