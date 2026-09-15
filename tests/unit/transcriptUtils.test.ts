@@ -26,13 +26,22 @@ describe('transcriptUtils', () => {
     expect(isDeletionComment(mkComment({ timestamp: 1 }))).toBe(false);
   });
 
-  it('overlapsDeletion: перекрытие, касание с допуском EPS, отсутствие пересечения', () => {
+  it('overlapsDeletion: перекрытие по центру слова (T-95)', () => {
     const del = mkComment({ timestamp: 2, duration: 0.5, editKind: 'delete' }); // [2.0, 2.5]
-    expect(overlapsDeletion(del, 2.1, 2.3)).toBe(true);   // внутри
-    expect(overlapsDeletion(del, 2.5, 3.0)).toBe(true);   // касается края (в EPS)
-    expect(overlapsDeletion(del, 1.95, 2.0)).toBe(true);  // касается слева (в EPS)
-    expect(overlapsDeletion(del, 2.6, 3.0)).toBe(false);  // за пределами EPS
+    expect(overlapsDeletion(del, 2.1, 2.3)).toBe(true);   // центр 2.2 внутри
+    expect(overlapsDeletion(del, 1.95, 2.05)).toBe(true); // центр 2.0 внутри
+    expect(overlapsDeletion(del, 2.45, 2.55)).toBe(true); // центр 2.5 внутри (в EPS)
+    expect(overlapsDeletion(del, 2.5, 3.0)).toBe(false);  // T-95: СОСЕДНЕЕ слово справа больше не удаляется
+    expect(overlapsDeletion(del, 1.5, 2.0)).toBe(false);  // T-95: соседнее слева больше не удаляется
+    expect(overlapsDeletion(del, 2.6, 3.0)).toBe(false);
     expect(overlapsDeletion(del, 1.0, 1.9)).toBe(false);
+  });
+
+  it('T-95 регрессия: удаление фразы не задевает соседние слова', () => {
+    const del = mkComment({ timestamp: 1.4, duration: 0.4, editKind: 'delete' }); // фраза [1.4, 1.8]
+    expect(overlapsDeletion(del, 1.0, 1.4)).toBe(false); // слово до фразы
+    expect(overlapsDeletion(del, 1.45, 1.75)).toBe(true); // слово фразы
+    expect(overlapsDeletion(del, 1.8, 2.2)).toBe(false); // слово после фразы
   });
 
   it('overlapsDeletion: не-удаление и комментарий без duration', () => {

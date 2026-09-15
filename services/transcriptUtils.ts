@@ -20,7 +20,11 @@ export function overlapsDeletion(c: Comment, start: number, end: number): boolea
   if (!isDeletionComment(c)) return false;
   const cs = c.timestamp;
   const ce = c.timestamp + (c.duration ?? 0);
-  return start < ce + OVERLAP_EPS && end > cs - OVERLAP_EPS;
+  // T-95: критерий «центр слова внутри диапазона удаления». Прежний критерий
+  // (start < ce+EPS && end > cs-EPS) считал пересекающимися и СОСЕДНИЕ слова
+  // (start соседа == ce комментария), из-за чего удаление расползалось на невыделенные слова.
+  const center = (start + end) / 2;
+  return center >= cs - OVERLAP_EPS && center <= ce + OVERLAP_EPS;
 }
 
 /** Комментарий-удаление, перекрывающий данное слово (или null). */
