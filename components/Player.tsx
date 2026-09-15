@@ -1578,7 +1578,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 </div>
 )}
 
-{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-24 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((t: any) => (<div key={t.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{t.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(t.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(t.progress || 0)}%</span>{cancelUpload && (<button onClick={() => cancelUpload(t.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0" title={t('common.close')}><XIcon size={12} /></button>)}</div>))}</div></div>)}
+{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-24 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((task: any) => (<div key={task.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{task.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(task.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(task.progress || 0)}%</span>{cancelUpload && (<button onClick={() => cancelUpload(task.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0" title={t('common.close')}><XIcon size={12} /></button>)}</div>))}</div></div>)}
 {/* ... Comments Overlay ... */}
               {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
@@ -1708,7 +1708,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         </div>
 
         {!isFullscreen && (
-            <FeatureErrorBoundary label="Транскрипт/комментарии">
+            <FeatureErrorBoundary label={t('player.transcript.zone')}>
             <PlayerSidebar 
                 sidebarTab={sidebarTab} setSidebarTab={setSidebarTab} filteredComments={filteredComments} isManager={isManager}
                 version={version} handleToggleLock={handleToggleLock} setShowExportMenu={setShowExportMenu} showExportMenu={showExportMenu}

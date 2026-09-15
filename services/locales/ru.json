@@ -238,6 +238,7 @@
   "player.voice.ptt_hint": "Зажми и говори — отпусти, чтобы сохранить правку",
   "player.voice.range": "Комментарий к диапазону",
   "player.voice.transcript": "Транскрипт",
+  "player.transcript.zone": "Транскрипт и комментарии",
   "player.voice.unsupported": "Распознавание речи не поддерживается в этом браузере.",
   "profile.founder_msg": "Вы участник Клуба Основателей. Спасибо за поддержку Anotee!",
   "profile.language": "Язык интерфейса",

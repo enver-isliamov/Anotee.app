@@ -238,6 +238,7 @@
   "player.voice.ptt_hint": "Hold to dictate — release to save the comment",
   "player.voice.range": "Range Comment",
   "player.voice.transcript": "Transcript",
+  "player.transcript.zone": "Transcript & comments",
   "player.voice.unsupported": "Speech recognition is not supported in this browser.",
   "profile.founder_msg": "You are a Founder's Club member. Thank you for supporting Anotee!",
   "profile.language": "Interface Language",

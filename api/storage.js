@@ -203,7 +203,8 @@ if (req.method === 'GET') {
                     }
                 }
 
-                // T-93: per-provider upsert
+                // T-93/T-100: per-provider upsert — при недоступности таблицы fallback на legacy-запись (не 500)
+                try {
                 await sql`
                     INSERT INTO storage_configs (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
                     VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
@@ -217,6 +218,10 @@ if (req.method === 'GET') {
                         public_url = EXCLUDED.public_url,
                         updated_at = EXCLUDED.updated_at;
                 `;
+                } catch (ppErr) {
+                    // T-100: таблица недоступна — пишем только legacy-зеркало (старое поведение, без 500)
+                    console.warn('storage_configs upsert failed, legacy only:', ppErr && ppErr.message ? ppErr.message : ppErr);
+                }
 
                 // T-93: legacy-зеркало storage_config — только если этот провайдер активен или активного нет
                 let activeNow = null;
