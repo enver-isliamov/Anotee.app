@@ -45,6 +45,30 @@ export default async function handler(req, res) {
             return await getS3Client(targetUserId);
         };
 
+        // --- T-93: per-provider configs helpers ---
+        const ensurePerProviderConfigs = async () => {
+            try {
+                await sql`CREATE TABLE IF NOT EXISTS storage_configs (user_id TEXT, provider TEXT, bucket TEXT NOT NULL, endpoint TEXT NOT NULL, region TEXT, access_key_id TEXT NOT NULL, secret_access_key TEXT NOT NULL, public_url TEXT, updated_at BIGINT, PRIMARY KEY (user_id, provider));`;
+                const cnt = await sql`SELECT count(*)::int AS n FROM storage_configs WHERE user_id = ${user.id}`;
+                if (cnt[0] && cnt[0].n === 0) {
+                    const legacy = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
+                    if (legacy.length > 0) {
+                        const c = legacy[0];
+                        await sql`INSERT INTO storage_configs (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at) VALUES (${user.id}, ${c.provider}, ${c.bucket}, ${c.endpoint}, ${c.region}, ${c.access_key_id}, ${c.secret_access_key}, ${c.public_url || ''}, ${Date.now()}) ON CONFLICT (user_id, provider) DO NOTHING`;
+                    }
+                }
+            } catch (e) { console.warn('storage_configs ensure warning:', e && e.message ? e.message : e); }
+        };
+        // Mirror: legacy storage_config всегда отражает АКТИВНОГО провайдера (getS3Client читает storage_config)
+        const mirrorActiveToLegacy = async (provider) => {
+            try {
+                const rows = await sql`SELECT * FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider}`;
+                if (rows.length === 0) return;
+                const c = rows[0];
+                await sql`INSERT INTO storage_config (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at) VALUES (${user.id}, ${c.provider}, ${c.bucket}, ${c.endpoint}, ${c.region}, ${c.access_key_id}, ${c.secret_access_key}, ${c.public_url || ''}, ${Date.now()}) ON CONFLICT (user_id) DO UPDATE SET provider = EXCLUDED.provider, bucket = EXCLUDED.bucket, endpoint = EXCLUDED.endpoint, region = EXCLUDED.region, access_key_id = EXCLUDED.access_key_id, secret_access_key = EXCLUDED.secret_access_key, public_url = EXCLUDED.public_url, updated_at = EXCLUDED.updated_at`;
+            } catch (e) { console.warn('mirror warning:', e && e.message ? e.message : e); }
+        };
+
         // --- ACTION: CONFIG (GET/POST) ---
         // Config always relates to the CURRENT user's settings, not a project context.
             if (req.method === 'POST' && action === 'migrateStorage') {
@@ -91,13 +115,19 @@ export default async function handler(req, res) {
 
             
 if (req.method === 'GET') {
-                const { rows } = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
-                
-                if (rows.length === 0) {
-                    return res.status(200).json(null);
+                await ensurePerProviderConfigs();
+                // T-93: per-provider — конфиг активного провайдера; список настроенных для статусов карточек
+                let active = null;
+                try { const pr = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`; active = pr.length > 0 ? pr[0].active_provider : null; } catch (e) {}
+                const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${user.id} ORDER BY updated_at DESC NULLS LAST`;
+                let config = (active ? cfgRows.find(r => r.provider === active) : null) || cfgRows[0] || null;
+                if (!config) {
+                    const legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
+                    if (legacyRows.length === 0) return res.status(200).json(null);
+                    config = legacyRows[0];
                 }
-
-                const config = rows[0];
+                const configured = cfgRows.map(r => r.provider);
+                const legacyConfig = config;
                 return res.status(200).json({
                     provider: config.provider,
                     bucket: config.bucket,
@@ -108,7 +138,8 @@ if (req.method === 'GET') {
                     publicUrl: config.public_url,
             configOwner: user.email || user.id,
                 secretIsMask: (decrypt(config.secret_access_key) || '') === '********',
-                    isActive: true
+                    isActive: true,
+                    configured
                 });
             }
 
@@ -125,7 +156,8 @@ if (req.method === 'GET') {
                     // T-33b: частичное сохранение — пустые поля подтягиваются из существующего конфига пользователя,
                     // чтобы повторное сохранение не требовало ввода всего заново.
                     if (missing.length > 0) {
-                        const existingRows = await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_config WHERE user_id = ${user.id}`;
+                        const sameProviderRows = await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider || ''}`;
+                        const existingRows = sameProviderRows.length > 0 ? sameProviderRows : await sql`SELECT provider, bucket, endpoint, access_key_id FROM storage_config WHERE user_id = ${user.id}`;
                         const existingCfg = existingRows[0];
                         if (!existingCfg) return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
                         if (!provider) provider = existingCfg.provider;
@@ -148,12 +180,12 @@ if (req.method === 'GET') {
                     }
                 }
 
+                // T-93: per-provider upsert
                 await sql`
-                    INSERT INTO storage_config (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
+                    INSERT INTO storage_configs (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
                     VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
-                    ON CONFLICT (user_id) 
+                    ON CONFLICT (user_id, provider) 
                     DO UPDATE SET 
-                        provider = EXCLUDED.provider,
                         bucket = EXCLUDED.bucket,
                         endpoint = EXCLUDED.endpoint,
                         region = EXCLUDED.region,
@@ -163,8 +195,50 @@ if (req.method === 'GET') {
                         updated_at = EXCLUDED.updated_at;
                 `;
 
+                // T-93: legacy-зеркало storage_config — только если этот провайдер активен или активного нет
+                let activeNow = null;
+                try { const pr = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`; activeNow = pr.length > 0 ? pr[0].active_provider : null; } catch (e) {}
+                if (!activeNow) {
+                    try { await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]') ON CONFLICT (user_id) DO UPDATE SET active_provider = ${provider}`; await mirrorActiveToLegacy(provider); } catch (e) {}
+                } else if (activeNow === provider) {
+                    await mirrorActiveToLegacy(provider);
+                }
+
                 return res.status(200).json({ success: true });
             }
+        }
+
+        // --- ACTION: SWITCH PROVIDER (POST) — T-93 ---
+        if (action === 'switch_provider') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            const { provider } = req.body || {};
+            const ALLOWED = ['google', 'yandex', 'cloudflare', 'selectel', 'custom'];
+            if (!ALLOWED.includes(provider)) return res.status(400).json({ error: 'Unknown provider: ' + provider });
+            try { await sql`CREATE TABLE IF NOT EXISTS storage_prefs (user_id TEXT PRIMARY KEY, active_provider TEXT, disabled TEXT)`; } catch (e) {}
+            if (provider !== 'google') {
+                await ensurePerProviderConfigs();
+                const rows = await sql`SELECT provider FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider}`;
+                if (rows.length === 0) return res.status(400).json({ error: 'Провайдер не настроен — сначала сохраните его ключи' });
+            }
+            const existing = await sql`SELECT user_id FROM storage_prefs WHERE user_id = ${user.id}`;
+            if (existing.length > 0) {
+                await sql`UPDATE storage_prefs SET active_provider = ${provider} WHERE user_id = ${user.id}`;
+            } else {
+                await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]')`;
+            }
+            if (provider !== 'google') await mirrorActiveToLegacy(provider);
+            try { await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`; await sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, 'switch_provider', ${provider})`; } catch (e) {}
+            return res.status(200).json({ success: true, activeProvider: provider });
+        }
+
+        // --- ACTION: RESET CONFIG (POST) — T-93: раньше action не существовал, кнопка сброса получала Invalid action ---
+        if (action === 'reset_config') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            try { await sql`DELETE FROM storage_configs WHERE user_id = ${user.id}`; } catch (e) {}
+            try { await sql`DELETE FROM storage_prefs WHERE user_id = ${user.id}`; } catch (e) {}
+            try { await sql`DELETE FROM storage_config WHERE user_id = ${user.id}`; } catch (e) {}
+            try { await sql`CREATE TABLE IF NOT EXISTS storage_audit (id SERIAL, user_id TEXT, action TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`; await sql`INSERT INTO storage_audit (user_id, action, provider) VALUES (${user.id}, 'reset_config', NULL)`; } catch (e) {}
+            return res.status(200).json({ success: true });
         }
 
         // --- ACTION: STORAGE PREFS (GET/POST) ---
