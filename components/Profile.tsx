@@ -780,7 +780,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     ) : (
                                                         // EDITING STATE
                                                         <>
-                                                            <input 
+                                                            <input
+                                                            autoComplete="new-password" 
                                                                 type={showSecretKey ? "text" : "password"}
                                                                 value={s3Form.secretAccessKey} 
                                                                 onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
