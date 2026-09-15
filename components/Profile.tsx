@@ -784,7 +784,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                                 value={s3Form.secretAccessKey} 
                                                                 onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
                                                                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
-                                                                placeholder="Enter New Secret Key"
+                                                                placeholder="Новый Secret Access Key (при смене Access Key старый секрет не переиспользуется)"
                                                             />
                                                             <button onClick={() => setShowSecretKey(!showSecretKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
                                                                 {showSecretKey ? <EyeOff size={14} /> : <Eye size={14} />} 
