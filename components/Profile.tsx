@@ -370,7 +370,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   };
 
   const handleTestConnection = async () => {
-      await handleSaveAndActivate(); 
       try { await handleSaveAndActivate(); } catch { return; }
 
       setIsTestingS3(true);
