@@ -1022,8 +1022,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           <div><label className="text-xs font-bold text-zinc-500">Регион</label>
           <select value={s3Form.region} onChange={(e) => setS3Form(p => ({ ...p, region: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none"><option value="auto">Auto</option><option value="eu">EU</option><option value="us">US</option></select></div>
           </div>
+          {!(s3Form.bucket && s3Form.endpoint) && (<p className="text-xs text-amber-600 dark:text-amber-400">Заполните Endpoint URL и Бакет — без них сохранить нельзя.</p>)}
           <p className="text-xs text-zinc-500">Endpoint подставьте по формату: <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code> (EU — добавить <code>.eu</code>).</p>
-          <button onClick={() => setWizardStep(3)} disabled={!(s3Form.accessKeyId && s3Form.secretAccessKey && s3Form.secretAccessKey !== '********')} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-bold">Подключить и проверить →</button>
+          <button onClick={() => setWizardStep(3)} disabled={!(s3Form.accessKeyId && s3Form.secretAccessKey && s3Form.secretAccessKey !== '********' && s3Form.bucket && s3Form.endpoint)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-bold">Подключить и проверить →</button>
         </div>
         )}
         {wizardStep === 3 && (

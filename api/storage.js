@@ -146,8 +146,9 @@ if (req.method === 'GET') {
                 } catch (ppErr) {
                     // T-97 fallback: старое поведение на legacy-таблице
                     console.warn('per-provider GET failed, legacy fallback:', ppErr && ppErr.message ? ppErr.message : ppErr);
-                    const legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
-                    if (legacyRows.length === 0) return res.status(200).json(null);
+                    let legacyRows = [];
+                    try { legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`; } catch (le) { console.warn('legacy config read failed:', le && le.message ? le.message : le); }
+                    if (legacyRows.length === 0) return res.status(200).json(null); // T-104: last-resort — никогда не 500 на чтении конфига
                     const config = legacyRows[0];
                     return res.status(200).json({
                         provider: config.provider,
@@ -484,7 +485,10 @@ if (req.method === 'GET') {
         if (msg.includes("Forbidden") || msg.includes("Unauthorized")) msg = "Доступ запрещен (Проверьте права проекта)";
 
         // Return a generic error if it's an internal crash, otherwise pass the message
-        const status = msg.includes("Forbidden") ? 403 : 500;
+        // T-104: «не настроено» — это клиентская ситуация (400), а не сбой сервера
+        const status = msg.includes("Forbidden") ? 403
+            : (msg.includes("S3 Configuration not found") || msg.includes("не настроено") || msg.includes("UserId required")) ? 400
+            : 500;
         return res.status(status).json({ success: false, error: msg });
     }
 }

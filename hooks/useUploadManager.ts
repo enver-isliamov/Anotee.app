@@ -39,6 +39,26 @@ export const useUploadManager = (
         setUploadTasks(prev => prev.filter(t => t.id !== id));
     };
 
+    // T-107: watchdog — «залипшие» на 100% задачи закрываются автоматически
+    const stuckSinceRef = useRef<Record<string, number>>({});
+    useEffect(() => {
+        const iv = setInterval(() => {
+            setUploadTasks(prev => {
+                const now = Date.now();
+                let changed = false;
+                const next = prev.filter(t => {
+                    const stuck = (t.status === 'uploading' || t.status === 'processing') && (t.progress || 0) >= 100;
+                    if (!stuck) { delete stuckSinceRef.current[t.id]; return true; }
+                    if (!stuckSinceRef.current[t.id]) stuckSinceRef.current[t.id] = now;
+                    if (now - stuckSinceRef.current[t.id] > 25000) { delete stuckSinceRef.current[t.id]; changed = true; return false; }
+                    return true;
+                });
+                return changed ? next : prev;
+            });
+        }, 5000);
+        return () => clearInterval(iv);
+    }, []);
+
     const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
         const taskId = generateId();
         const tempAssetId = targetAssetId || generateId();
@@ -302,9 +322,14 @@ try {
   let syncOk = false;
   for (let attempt = 1; attempt <= 3 && !syncOk; attempt++) {
     try {
-      await forceSync([finalProjectToSync]);
+      // T-107: финальная синхронизация с таймаутом — иначе виджет «висит» на 100%
+      await Promise.race([
+        forceSync([finalProjectToSync]),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('sync-timeout')), 20000))
+      ]);
       syncOk = true;
     } catch (retryErr: any) {
+      if (retryErr && retryErr.message === 'sync-timeout') { syncOk = true; notify('Файл загружен; проект синхронизируется в фоне.', 'info'); break; }
       if (attempt < 3) { await new Promise(r => setTimeout(r, 600 * attempt)); } else { throw retryErr; }
     }
   }
