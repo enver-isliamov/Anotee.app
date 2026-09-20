@@ -24,6 +24,8 @@ export function saveTranscript(versionId: string, chunks: StoredChunk[]): void {
     touchIndex(versionId);
     pruneOld();
   } catch { /* переполнение квоты — не критично */ }
+  // T-119: параллельно пишем в IndexedDB (не блокирует UI)
+  void saveTranscriptToIdb(versionId, chunks);
 }
 
 export function clearTranscript(versionId: string): void {
@@ -32,6 +34,69 @@ export function clearTranscript(versionId: string): void {
     const idx = getIndex().filter((id) => id !== versionId);
     localStorage.setItem(INDEX_KEY, JSON.stringify(idx));
   } catch { /* ignore */ }
+}
+
+
+// T-119: IndexedDB-слой — word-level JSON больше лимита localStorage (~5MB).
+// localStorage остаётся быстрым синхронным кэшем; IDB — надёжным хранилищем.
+const DB_NAME = 'anotee_transcripts';
+const DB_STORE = 'transcripts';
+const DB_VER = 1;
+
+function openTranscriptDB(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    try {
+      if (typeof indexedDB === 'undefined') { resolve(null); return; }
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+
+/** T-119: сохранить транскрипт в IndexedDB (вызывается параллельно с localStorage). */
+export async function saveTranscriptToIdb(versionId: string, chunks: StoredChunk[]): Promise<void> {
+  const db = await openTranscriptDB();
+  if (!db) return;
+  try {
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put({ chunks, savedAt: Date.now() }, versionId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    });
+  } finally { try { db.close(); } catch { /* ignore */ } }
+}
+
+/** T-119: прочитать транскрипт из IndexedDB (если в localStorage его нет). */
+export async function loadTranscriptFromIdb(versionId: string): Promise<StoredChunk[] | null> {
+  const db = await openTranscriptDB();
+  if (!db) return null;
+  try {
+    return await new Promise<StoredChunk[] | null>((resolve) => {
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(versionId);
+      req.onsuccess = () => {
+        const val = req.result && req.result.chunks;
+        resolve(Array.isArray(val) && val.length > 0 ? val : null);
+      };
+      req.onerror = () => resolve(null);
+    });
+  } finally { try { db.close(); } catch { /* ignore */ } }
+}
+
+/** T-119: сначала localStorage (быстро), затем IndexedDB; при попадании в IDB прогреваем localStorage. */
+export async function loadTranscriptWithIdb(versionId: string): Promise<StoredChunk[] | null> {
+  const local = loadTranscript(versionId);
+  if (local) return local;
+  const idb = await loadTranscriptFromIdb(versionId);
+  if (idb) { saveTranscript(versionId, idb); return idb; }
+  return null;
 }
 
 function getIndex(): string[] {
