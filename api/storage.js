@@ -92,6 +92,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ success: true, fixed });
             }
         if (action === 'config') {
+          try {
             // Lazy DB Migration
             try {
             await sql`
@@ -236,6 +237,12 @@ if (req.method === 'GET') {
 
                 return res.status(200).json({ success: true });
             }
+          } catch (cfgFatal) {
+            // T-129: последняя линия обороны — config не должен отдавать 500 никогда
+            console.error('config fatal:', cfgFatal && cfgFatal.message ? cfgFatal.message : cfgFatal);
+            if (req.method === 'GET') return res.status(200).json(null);
+            return res.status(400).json({ error: 'Не удалось сохранить конфигурацию хранилища (временный сбой базы). Повторите через минуту.' });
+          }
         }
 
         // --- ACTION: SWITCH PROVIDER (POST) — T-93 ---
@@ -319,13 +326,28 @@ if (req.method === 'GET') {
                 //    валидируем вызовом /accounts/{id}/tokens/permission_groups (нужен Account ID)
                 let acc = null;
                 const tokenType = (typeof apiToken === 'string' && apiToken.startsWith('cfat_')) ? 'account' : 'user';
+                let preBuckets = null;
                 if (inputAccountId) {
-                    const pg = await cf('/accounts/' + inputAccountId + '/tokens/permission_groups');
-                    if (pg.status !== 200) {
+                    // T-129: не полагаемся на permission_groups (для account-токенов путь может быть недоступен) —
+                    // валидируем самим R2-запросом: 200 → токен валиден и есть права R2.
+                    const rb = await cf('/accounts/' + inputAccountId + '/r2/buckets');
+                    if (rb.status === 200) {
+                        preBuckets = ((rb.body && rb.body.result && rb.body.result.buckets) || []).map((x) => x.name);
+                    } else if (rb.status === 403) {
                         return res.status(400).json({
-                            error: 'Account API Token не принят для указанного Account ID (проверьте ID и права токена: Account: Read, R2: Read)',
-                            details: pg.body && pg.body.errors ? pg.body.errors : undefined,
-                            hint: 'Account API Token создаётся в Manage Account → Account API Tokens; User API Token — в Profile → API Tokens. Укажите Account ID из R2 → Account Details.'
+                            error: 'Токен принят, но у него нет права Workers R2 Storage: Read для этого аккаунта',
+                            hint: 'Добавьте право «Workers R2 Storage: Read» (и Write для загрузок) в настройках токена: https://dash.cloudflare.com/?to=/:account/account-api-tokens'
+                        });
+                    } else if (rb.status === 401) {
+                        return res.status(400).json({
+                            error: 'Токен не принят Cloudflare (недействителен или отозван)',
+                            hint: 'Проверьте, что скопировано именно значение токена (для Account API Token начинается с cfat_) и что он не отозван.'
+                        });
+                    } else {
+                        return res.status(400).json({
+                            error: 'Cloudflare не принял запрос к R2 (HTTP ' + rb.status + ')',
+                            details: rb.body && rb.body.errors ? rb.body.errors : undefined,
+                            hint: 'Проверьте Account ID (R2 → Account Details) и права токена.'
                         });
                     }
                     acc = { id: inputAccountId, name: null };
@@ -345,11 +367,13 @@ if (req.method === 'GET') {
                     }
                     acc = accList[0];
                 }
-                let buckets = [];
-                try {
-                    const b = await cf('/accounts/' + acc.id + '/r2/buckets');
-                    buckets = ((b.body && b.body.result && b.body.result.buckets) || []).map((x) => x.name);
-                } catch (e) { buckets = []; }
+                let buckets = preBuckets || [];
+                if (!preBuckets) {
+                    try {
+                        const b = await cf('/accounts/' + acc.id + '/r2/buckets');
+                        buckets = ((b.body && b.body.result && b.body.result.buckets) || []).map((x) => x.name);
+                    } catch (e) { buckets = []; }
+                }
                 return res.status(200).json({
                     success: true,
                     accountId: acc.id,
@@ -395,16 +419,28 @@ if (req.method === 'GET') {
             const { apiToken, accountId, bucketName } = req.body || {};
             if (!apiToken || !accountId) return res.status(400).json({ error: 'Нужны apiToken и accountId' });
             try {
-                const pgRes = await fetch('https://api.cloudflare.com/client/v4/accounts/' + accountId + '/tokens/permission_groups', {
-                    headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' }
-                });
-                const pgJson = await pgRes.json().catch(() => null);
-                const groups = (pgJson && pgJson.result) || [];
+                // T-129: permission_groups доступен по-разному для user/account токенов — пробуем оба пути
+                let groups = [];
+                for (const gp of ['/user/tokens/permission_groups', '/accounts/' + accountId + '/tokens/permission_groups']) {
+                    const pgRes = await fetch('https://api.cloudflare.com/client/v4' + gp, {
+                        headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' }
+                    });
+                    const pgJson = await pgRes.json().catch(() => null);
+                    if (pgRes.status === 200 && pgJson && Array.isArray(pgJson.result) && pgJson.result.length > 0) { groups = pgJson.result; break; }
+                }
                 const findGrp = (name) => (groups.find((g) => (g.name || '').toLowerCase() === name.toLowerCase()) || {}).id;
-                const readId = findGrp('Workers R2 Storage Bucket Item Read');
-                const writeId = findGrp('Workers R2 Storage Bucket Item Write');
+                // T-130: официальные ID из документации Cloudflare (используются, если список групп недоступен для account-токена)
+                // https://developers.cloudflare.com/r2/api/tokens/ и https://developers.cloudflare.com/r2-data-catalog/manage-catalogs/
+                const DOC_READ_ID = '6a018a9f2fc74eb6b293b0c548f38b39';  // Workers R2 Storage Bucket Item Read
+                const DOC_WRITE_ID = '2efd5506f9c8494dacb1fa10a3e7d5b6'; // Workers R2 Storage Bucket Item Write
+                const readId = findGrp('Workers R2 Storage Bucket Item Read') || DOC_READ_ID;
+                const writeId = findGrp('Workers R2 Storage Bucket Item Write') || DOC_WRITE_ID;
                 if (!readId || !writeId) {
-                    return res.status(400).json({ error: 'Не удалось определить права R2 (нужен токен с правом Account API Tokens: Edit)' });
+                    return res.status(400).json({
+                        error: 'Этот токен не может создавать R2-ключи',
+                        hint: 'Создайте ключ вручную (10 секунд): R2 → Manage API Tokens → Create API token → права Object Read & Write → скопируйте Access Key ID и Secret в поля ниже.',
+                        link: 'https://dash.cloudflare.com/?to=/:account/r2/api-tokens'
+                    });
                 }
                 const resources = bucketName
                     ? { ['com.cloudflare.edge.r2.bucket.' + accountId + '_default_' + bucketName]: '*' }
