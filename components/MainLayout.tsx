@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppHeader } from './AppHeader';
-import { LayoutGrid, CreditCard, Settings, Activity } from 'lucide-react';
+import { LayoutGrid, CreditCard, Settings, Sparkles } from 'lucide-react';
 import { User } from '../types';
 import { useLanguage } from '../services/i18n';
 
@@ -76,7 +76,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
                     { id: 'DASHBOARD', label: t('nav.projects') || 'Проекты', icon: LayoutGrid },
                     { id: 'PRICING', label: t('nav.pricing') || 'Тарифы', icon: CreditCard },
                     { id: 'PROFILE', label: t('nav.settings') || 'Настройки', icon: Settings },
-                    { id: 'TEST_RUNNER', label: 'Диагностика', icon: Activity }
+                    { id: 'AI_FEATURES', label: t('nav.features') || 'Возможности', icon: Sparkles }
                 ].map((item) => {
                     const ItemIcon = item.icon as any;
                     const active = currentView === item.id;

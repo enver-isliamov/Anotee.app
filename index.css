@@ -21,3 +21,22 @@
 .reading-column {
   max-width: 72ch;
 }
+
+/* T-125: мобильная устойчивость вёрстки (preset 03 Information Architects — плотно, но без съезжания) */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+/* длинные строки (ключи, endpoint, ID) не растягивают контейнер */
+code, pre, .font-mono {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* чтобы нижний таб-бар не перекрывал последний контент */
+@media (max-width: 767px) {
+  main, .page-content { padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }
+}
