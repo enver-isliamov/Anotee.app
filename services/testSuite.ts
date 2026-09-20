@@ -924,6 +924,56 @@ export const TEST_SUITE: TestGroup[] = [
         }
     },
     {
+        id: 'byos_api',
+        title: 'BYOS / Storage API',
+        icon: Server,
+        description: 'Живые проверки контуров API хранилища (без секретов): здоровье, защита конфигурации, отсутствие 500.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof fetch === 'undefined') {
+                res.push(skippedResult('BYOS API Health', 'GET /api/health отвечает 200 (сервер жив).'));
+                res.push(skippedResult('BYOS Config Guard', 'GET /api/storage?action=config не отдаёт 500 (ожидаемо 401 без токена).'));
+                res.push(skippedResult('BYOS Test Guard', 'POST /api/storage?action=test не отдаёт 500 (ожидаемо 401 без токена).'));
+                return res;
+            }
+            const probe = async (name: string, init: RequestInit & { url: string }, okStatuses: number[], description: string, diagnosis: string) => {
+                try {
+                    const r = await fetch(init.url, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } });
+                    const isOk = okStatuses.includes(r.status);
+                    res.push({
+                        name,
+                        description,
+                        passed: isOk,
+                        expected: 'статус ' + okStatuses.join('/'),
+                        received: 'HTTP ' + r.status,
+                        passCondition: 'API отвечает ожидаемым статусом (не 500).',
+                        failCondition: 'API вернул неожиданный статус (вероятен сбой сервера).',
+                        severity: 'warning',
+                        diagnosis: isOk ? undefined : diagnosis,
+                        task: isOk ? undefined : regressionTask(name, 'API хранилища вернул ' + r.status)
+                    });
+                } catch (e: any) {
+                    res.push({
+                        name,
+                        description,
+                        passed: false,
+                        expected: 'статус ' + okStatuses.join('/'),
+                        received: 'network error: ' + (e?.message || e),
+                        passCondition: 'API отвечает ожидаемым статусом (не 500).',
+                        failCondition: 'Запрос к API не выполнился (сеть/CORS/сервер недоступен).',
+                        severity: 'warning',
+                        diagnosis,
+                        task: regressionTask(name, 'запрос к API хранилища не выполнился')
+                    });
+                }
+            };
+            await probe('BYOS API Health', { url: '/api/health' }, [200], 'GET /api/health отвечает 200 (сервер жив).', 'API недоступен: проверьте деплой и статус /api/health.');
+            await probe('BYOS Config Guard', { url: '/api/storage?action=config' }, [200, 400, 401, 403], 'GET config без токена — 401/403/400, но не 500.', 'Конфигурация хранилища падает 500-м: сбой чтения конфига (см. ISSUES ISS-021/ISS-023).');
+            await probe('BYOS Test Guard', { url: '/api/storage?action=test', method: 'POST', body: '{}' }, [400, 401, 403], 'POST test без токена — 400/401/403, но не 500.', 'Проверка доступа к бакету падает 500-м: вероятно, конфиг не сохранён или сбой серверной части.');
+            return res;
+        }
+    },
+    {
         id: 'data_integrity',
         title: 'Data Integrity',
         icon: Database,
