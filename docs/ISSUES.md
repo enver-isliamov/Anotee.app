@@ -36,6 +36,21 @@
 - voice.spec: 1 падение из 2 — page.goto timeout 60с (dev-сервер cold start в песочнице), не код приложения; в повторном прогоне той же спеки 1 passed.
 - Полный прогон всех 24 тестов в песочнице >20 мин (voice/PTT требуют микрофон) — запуск локально/на CI.
 
+## Сессия 2026-09-20 (вторая): T-113…T-119 — полный автомат Cloudflare, PWA, IndexedDB, CI
+
+| # | Коммит | Суть |
+|---|--------|------|
+| T-113 | 41e43a2 | Встроенная BYOS-диагностика в /test: health, config-guard, test-guard (поиск 500-х без консоли) |
+| T-114 | 471e386 | cf_probe: по Cloudflare-токену определяем Account ID, Endpoint, список бакетов (токен не сохраняется) |
+| T-115 | 471e386 | Полный автомат: cf_create_bucket (создание бакета в один клик) + cf_create_r2_key (создание R2-ключа через API; Access Key = id, Secret = SHA-256 value) |
+| T-116 | 408692a | №2 PWA: нижний таб-бар (Проекты/Тарифы/Настройки/Диагностика) + safe-top в шапке |
+| T-117 | 408692a | ISS-024: Account API Token (cfat_) отклонялся, т.к. проверялся через /user/tokens/verify → добавлен account-scoped путь + поле Account ID |
+| T-118 | 97e2343 | №4 CI: workflow был НЕВАЛИДЕН (npx tsc вне run:) — переписан (syntax/tsc/lint/unit/audit/build/check:external + e2e с зеркалом Playwright) |
+| T-119 | 97e2343 | №3 IndexedDB-кэш транскриптов (localStorage как быстрый кэш + IDB как надёжное хранилище) |
+
+Инструкция по токенам Cloudflare: DELIVERY/anotee-cloudflare-token-guide.md.
+Проверки на 97e2343: tsc 0 · verify 0 (unit 61/61, инварианты 5/5) · e2e dashboard/player/parity/wizard passed.
+
 ## Сессия 2026-09-16…20: T-104…T-112 — устойчивость хранилища, плеер, мобильная шапка
 
 | # | Коммит | Суть |
