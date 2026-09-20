@@ -670,7 +670,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300"><Database size={20} /></div>
                             <div>
                                 <h3 className="text-lg font-bold text-white">Провайдер Хранилища</h3>
-                                <p className="text-xs text-zinc-500">Выберите, куда загружать исходники видео.</p>
+                                <p className="text-xs text-zinc-500">Одно место для всех загрузок: выберите хранилище и подключите его. Сейчас активно: <b className="text-zinc-300">{activeProvider === 'google' ? 'Google Drive' : (S3_PRESETS[activeProvider]?.provider || activeProvider)}</b>.</p>
                             </div>
                         </div>
 
@@ -862,8 +862,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             {/* Action Buttons */}
                                             <div className="col-span-2 pt-4 border-t border-zinc-800 flex justify-between gap-3 flex-wrap items-center">
                                                 <div className="flex gap-3">
-                                                    <button onClick={() => setShowCorsHelp(true)} className="text-[10px] text-zinc-500 hover:text-zinc-300 underline">CORS Config</button>
-        <button onClick={handleAutoCors} disabled={isConfiguringCors} className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"><Wand2 size={10}/> Auto-Fix CORS</button>
+                                                    
+        
                                                 </div>
 
                                                 <div className="flex gap-2">
@@ -895,6 +895,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                         <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none">Сервисные действия</summary>
                                         <div className="mt-3 flex flex-col gap-2">
                                             <button onClick={handleMigrateStorage} className="py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold hover:bg-amber-500/20 transition-colors">🛠 Починить источники видео (Drive) — исправить тип storage у старых версий</button>
+                                            <button onClick={() => setShowCorsHelp(true)} className="py-2 rounded-xl bg-zinc-800/50 text-zinc-400 border border-zinc-700 text-xs font-bold hover:bg-zinc-800 transition-colors">🛡 Настроить CORS для бакета (если загрузки блокируются браузером)</button>
                                             <button onClick={handleResetConfig} data-testid="reset-config" className="py-2 rounded-xl bg-zinc-800/50 text-zinc-400 border border-zinc-700 text-xs font-bold hover:bg-zinc-800 transition-colors">♻️ Сбросить конфигурацию хранилища (если ключи «застряли»)</button>
                                         </div>
                                     </details>
@@ -1146,6 +1147,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         <button onClick={() => setShowCfProbe(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
                         <h2 data-testid="cf-token-modal" className="text-lg font-bold text-zinc-900 dark:text-white mb-1">Заполнить по Cloudflare-токену</h2>
                         <p className="text-xs text-zinc-500 mb-4">Вставьте <b>Token value</b> (Cloudflare API-токен с правами Account: Read и R2: Read). Приложение само определит Account ID, Endpoint и список бакетов. Токен не сохраняется.</p>
+                        <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 space-y-2 text-xs">
+                            <div className="font-bold text-zinc-900 dark:text-white">Два шага в Cloudflare</div>
+                            <a href="https://dash.cloudflare.com/?to=/:account/account-api-tokens" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 px-3 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-800">
+                                <span>1. Создать Account API Token<span className="block text-[10px] text-zinc-500">права: Account: Read, Workers R2 Storage: Read (+ Edit, чтобы ключи создавались автоматически)</span></span>
+                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
+                            </a>
+                            <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 px-3 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-800">
+                                <span>2. Скопировать Account ID<span className="block text-[10px] text-zinc-500">R2 → Account Details → Account ID</span></span>
+                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
+                            </a>
+                        </div>
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Cloudflare API-токен (Token value)</label>
                         <input autoComplete="off" value={cfToken} onChange={(e) => setCfToken(e.target.value)} placeholder="Вставьте токен" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Account ID (только для Account API Token)</label>
