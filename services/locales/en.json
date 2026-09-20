@@ -372,6 +372,8 @@
   "why.feat3.title": "Direct Access",
   "why.title": "Why Anotee?",
   "player.more.title": "More",
+  "player.more.viewmode.single": "Single view",
+  "player.more.viewmode.compare": "Compare versions",
   "player.more.localfile": "Local file",
   "player.synced": "Synced",
   "common.close": "Close",
