@@ -372,6 +372,8 @@
   "why.feat3.title": "Прямой доступ",
   "why.title": "Почему Anotee?",
   "player.more.title": "Ещё",
+  "player.more.viewmode.single": "Одиночный вид",
+  "player.more.viewmode.compare": "Сравнить версии",
   "player.more.localfile": "Локальный файл",
   "player.synced": "Синхронизировано",
   "common.close": "Закрыть",

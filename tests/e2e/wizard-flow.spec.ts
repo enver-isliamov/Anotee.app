@@ -36,7 +36,9 @@ test('wizard: open -> step1 -> step2 -> step3 checklist renders', async ({ page 
   const skInput = overlay.locator('input[type="password"]');
   await akInput.fill('test-access-key-1234567890');
   await skInput.fill('test-secret-key-abcdefghijklmnopqrstuvwxyz0987654321');
-  await overlay.locator('input').nth(2).fill('anotee');
+  // T-101/T-105: порядок полей мастера — Access Key(0), Secret(1), Endpoint(2), Бакет(3), Регион(select)
+  await overlay.locator('input[placeholder="https://<AccountID>.r2.cloudflarestorage.com"]').fill('https://acc.r2.cloudflarestorage.com');
+  await overlay.locator('input').nth(3).fill('anotee');
   await expect(goBtn).toBeEnabled();
 
   await goBtn.click();

@@ -183,9 +183,9 @@ test.describe('T-18: закрываемость меню и модалок', () 
   });
 
   test('меню single/compare закрывается тапом по backdrop', async ({ page }) => {
-    // View-switcher (иконка Monitor) в header — паттерн из mobile.spec.ts
-    const viewSwitcher = page.locator('header button:has(svg.lucide-monitor)').first();
-    await viewSwitcher.click();
+    // T-108: на мобиле переключатель вида перенесён в меню «⋯» (шапка без лишних иконок)
+    await page.getByTestId('mobile-more').click();
+    await page.getByTestId('mobile-more-viewmode').click();
     await expect(page.getByText('Split (Compare)')).toBeVisible();
 
     // Тап по backdrop (вне меню и вне FloatingControls) закрывает
