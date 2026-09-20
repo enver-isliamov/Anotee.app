@@ -77,7 +77,7 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
         steps: [
             '1. Зайдите в R2 Overview. Справа "Account Details" -> Скопируйте "Account ID".',
             '2. Ваш Endpoint должен выглядеть так: https://<AccountID>.r2.cloudflarestorage.com (БЕЗ имени бакета!).',
-            '3. Справа нажмите "Manage R2 API Tokens" -> "Create API token".',
+            '3. Быстрый путь: вернитесь в приложение и нажмите «🔑 Заполнить по Cloudflare-токену» — Account ID, Endpoint и бакеты определятся автоматически. Для ручного пути: Manage API Tokens -> Create API token -> права Object Read & Write.',
             '4. Permissions: выберите "Admin Read & Write".',
             '5. Нажмите "Create". Скопируйте "Access Key ID" и "Secret Access Key".'
         ],
@@ -1057,7 +1057,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         <div className="p-6">
         {wizardStep === 1 && (
         <div className="space-y-4">
-          <p className="text-sm text-zinc-700 dark:text-zinc-300">Откроется раздел <b>R2</b> вашего аккаунта. Слева выберите <b>Manage API Tokens</b> (или «API Tokens») → <b>Create API token</b> → права <b>Object Read & Write</b>. <b>Не</b> используйте общий Account API Token и «Write all resources» — не нужен. На финальном экране скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (показывается один раз).</p>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">Вариант B (выбран): Cloudflare → <b>Manage Account → Account API Tokens → Create Token</b>. Права: <b>Account: Read</b>, <b>Workers R2 Storage: Read</b>, и <b>Account API Tokens: Edit</b> — если хотите, чтобы ключи создались автоматически. Скопируйте значение токена и Account ID (R2 → Account Details), затем нажмите «Ключи готовы». (Вариант A — My Profile → API Tokens, тогда Account ID не нужен.)</p>
           <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="block w-full text-center py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-900 text-sm font-bold">☁️ Открыть Cloudflare → создать токен</a>
           <button onClick={() => setWizardStep(2)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">Ключи готовы →</button>
           <p className="text-xs text-zinc-500">Уже подключали ранее? Нажмите «Ключи готовы» и просто повторно вставьте значения.</p>
@@ -1108,10 +1108,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           <summary className="text-xs font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer px-3 py-2">Cloudflare R2 — инструкция по получению ключей доступа</summary>
           <div className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1.5">
             <p>1. Cloudflare Dashboard → раздел <b>R2</b> → «Manage R2 API Tokens» → «Create API token» → права <b>Object Read & Write</b> → выбрать бакет (или все). Это R2-токен; общие Account/User API Tokens не подходят.</p>
-            <p>2. Скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> (Secret показывается один раз). «Token value» не нужен — он для Cloudflare API.</p>
-            <p>3. <b>Endpoint</b>: юрисдикция Default → <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code>; EU → добавить <code>.eu</code>; US → <code>.us</code>. Region — <code>auto</code>.</p>
-            <p>4. Bucket — имя бакета (например <code>anotee</code>). Затем нажмите «Test» — проверит доступ и настроит CORS.</p>
-            <p>5. Если Test просит ключ заново — очистите поле секрета и введите его повторно (при смене Access Key старый Secret не переиспользуется).</p>
+            <p>2. Скопируйте <b>значение токена</b> (Token value). Account API Token начинается с <code>cfat_</code> — для него дополнительно укажите <b>Account ID</b> (R2 → Account Details). User API Token — Account ID не нужен.</p>
+            <p>3. <b>Endpoint</b> подставляется автоматически: Default → <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code>; EU → <code>.eu</code>; US → <code>.us</code>. Region — <code>auto</code>. Вручную менять не нужно.</p>
+            <p>4. Бакет выбирается из списка (или создаётся кнопкой «＋ Создать бакет … в один клик»). Затем «Проверить» — проверит доступ и настроит CORS.</p>
+            <p>5. Если прав на создание токенов у Cloudflare-токена нет — создайте R2-ключ вручную: R2 → Manage API Tokens → Create API token → <b>Object Read &amp; Write</b> → скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> в поля ниже.</p>
           </div>
         </details>
                         {currentProviderGuide.warning && (
@@ -1144,12 +1144,15 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
                         <button onClick={() => setShowCfProbe(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
-                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">Заполнить по Cloudflare-токену</h2>
+                        <h2 data-testid="cf-token-modal" className="text-lg font-bold text-zinc-900 dark:text-white mb-1">Заполнить по Cloudflare-токену</h2>
                         <p className="text-xs text-zinc-500 mb-4">Вставьте <b>Token value</b> (Cloudflare API-токен с правами Account: Read и R2: Read). Приложение само определит Account ID, Endpoint и список бакетов. Токен не сохраняется.</p>
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Cloudflare API-токен (Token value)</label>
                         <input autoComplete="off" value={cfToken} onChange={(e) => setCfToken(e.target.value)} placeholder="Вставьте токен" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Account ID (только для Account API Token)</label>
-                        <input autoComplete="off" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} placeholder="напр. 39bb41ab2b9b8e6f8f667f4817dbce58" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
+                        <input autoComplete="off" data-testid="cf-account-id" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} placeholder="напр. 39bb41ab2b9b8e6f8f667f4817dbce58" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
+                        {cfToken.trim().startsWith('cfat_') && !cfAccountId.trim() && (
+                            <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-2">Это Account API Token (cfat_…) — обязательно укажите Account ID ниже.</p>
+                        )}
                         <p className="text-[10px] text-zinc-500 mb-3">User API Token (Profile → API Tokens) — Account ID не нужен. Account API Token (Manage Account → Account API Tokens, начинается с cfat_) — /user/tokens/verify его не принимает, поэтому укажите Account ID из R2 → Account Details.</p>
                         <button onClick={handleCfProbe} disabled={cfBusy} className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-bold">{cfBusy ? 'Проверяем…' : 'Проверить и заполнить'}</button>
                         {cfData && (

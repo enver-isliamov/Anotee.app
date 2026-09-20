@@ -1517,4 +1517,247 @@ export const TEST_SUITE: TestGroup[] = [
       return res;
     }
   }
+,
+    {
+        id: 'network_ext',
+        title: 'Сеть и доступность',
+        icon: Wifi,
+        description: 'Связь с бэкендом, задержка ответа и доступность внешних ресурсов из вашей сети.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof fetch === 'undefined') {
+                res.push(skippedResult('Online Status', 'navigator.onLine — есть ли сеть.'));
+                res.push(skippedResult('API Latency', 'Время ответа /api/health (мс).'));
+                res.push(skippedResult('Third-party Reachability', 'Доступность внешних скриптов (Cloudflare Insights, Yandex Metrika).'));
+                return res;
+            }
+            res.push({
+                name: 'Online Status',
+                description: 'Браузер сообщает о наличии сети (navigator.onLine).',
+                passed: navigator.onLine !== false,
+                expected: 'true',
+                received: String(navigator.onLine),
+                passCondition: 'Устройство онлайн.',
+                failCondition: 'Устройство офлайн — запросы не уйдут.',
+                severity: 'warning',
+                diagnosis: 'Нет сети у клиента: данные не синхронизируются.',
+                task: regressionTask('Online Status', 'клиент офлайн')
+            });
+            try {
+                const t0 = Date.now();
+                const r = await fetch('/api/health');
+                const ms = Date.now() - t0;
+                res.push({
+                    name: 'API Latency',
+                    description: 'Время ответа /api/health.',
+                    passed: r.status === 200 && ms < 2000,
+                    expected: '200 и < 2000 мс',
+                    received: 'HTTP ' + r.status + ' за ' + ms + ' мс',
+                    passCondition: 'Бэкенд отвечает быстро.',
+                    failCondition: 'Медленный или недоступный API.',
+                    severity: ms > 2000 ? 'warning' : 'info',
+                    diagnosis: 'Задержка API: возможны проблемы с сетью/регионом или холодный старт функций.',
+                    task: ms > 2000 ? regressionTask('API Latency', 'медленный ответ /api/health') : undefined
+                });
+            } catch (e: any) {
+                res.push({ name: 'API Latency', description: 'Время ответа /api/health.', passed: false, expected: '200', received: 'network error', passCondition: 'Бэкенд отвечает.', failCondition: 'API недоступен.', severity: 'warning', diagnosis: 'Запрос не выполнился: сеть/CORS/деплой.', task: regressionTask('API Latency', 'API недоступен') });
+            }
+            const probes = [
+                { name: 'Cloudflare Insights', url: 'https://static.cloudflareinsights.com/beacon.min.js' },
+                { name: 'Yandex Metrika', url: 'https://mc.yandex.ru/metrika/tag.js' }
+            ];
+            for (const pr of probes) {
+                try {
+                    const r = await fetch(pr.url, { method: 'GET' });
+                    res.push({ name: 'Reachable: ' + pr.name, description: 'Внешний ресурс доступен из вашей сети.', passed: r.status < 500, expected: 'HTTP < 500', received: 'HTTP ' + r.status, passCondition: 'Ресурс доступен.', failCondition: 'Ресурс заблокирован (регион/провайдер/расширения).', severity: 'info', diagnosis: 'Часть внешних скриптов блокируется — не влияет на работу приложения.', task: undefined });
+                } catch (e: any) {
+                    res.push({ name: 'Reachable: ' + pr.name, description: 'Внешний ресурс доступен из вашей сети.', passed: true, expected: 'предупреждение допустимо', received: 'blocked: ' + (e?.message || 'network error'), passCondition: 'Блокировка внешнего скрипта допустима (не критично).', failCondition: '—', severity: 'info', diagnosis: 'Внешний ресурс недоступен; приложение работает без него.', task: undefined });
+                }
+            }
+            return res;
+        }
+    },
+    {
+        id: 'pwa',
+        title: 'PWA и мобильная оболочка',
+        icon: Globe,
+        description: 'Manifest, standalone-режим, поддержка безопасных зон экрана и IndexedDB.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime()) {
+                res.push(skippedResult('PWA Manifest', 'Доступность /manifest.json.'));
+                res.push(skippedResult('Safe Area Support', 'Поддержка env(safe-area-inset-*) — вырезы экрана.'));
+                res.push(skippedResult('IndexedDB Available', 'Доступность IndexedDB.'));
+                return res;
+            }
+            try {
+                const r = await fetch('/manifest.json');
+                res.push({ name: 'PWA Manifest', description: 'GET /manifest.json отвечает 200 и валидный JSON.', passed: r.status === 200, expected: '200', received: 'HTTP ' + r.status, passCondition: 'Манифест доступен.', failCondition: '404/невалидный манифест — установка PWA сломана.', severity: 'warning', diagnosis: 'Манифест отсутствует в сборке (public/manifest.json).', task: r.status !== 200 ? regressionTask('PWA Manifest', 'manifest.json недоступен') : undefined });
+            } catch (e: any) {
+                res.push({ name: 'PWA Manifest', description: 'GET /manifest.json отвечает 200.', passed: false, expected: '200', received: 'error', passCondition: 'Манифест доступен.', failCondition: 'Сеть/деплой.', severity: 'warning', diagnosis: 'Не удалось проверить манифест.', task: regressionTask('PWA Manifest', 'ошибка запроса манифеста') });
+            }
+            const safeArea = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' ? CSS.supports('padding-top: env(safe-area-inset-top)') : false;
+            res.push({ name: 'Safe Area Support', description: 'Браузер понимает env(safe-area-inset-*).', passed: safeArea, expected: 'true', received: String(safeArea), passCondition: 'Отступы под вырезы поддерживаются.', failCondition: 'Нет поддержки safe-area — шапка может заезжать под «остров».', severity: 'info', diagnosis: 'Устаревший браузер без safe-area; на iOS ≥ 11 поддержка есть.', task: undefined });
+            const idbOk = typeof indexedDB !== 'undefined';
+            res.push({ name: 'IndexedDB Available', description: 'indexedDB доступен (кэш транскриптов).', passed: idbOk, expected: 'true', received: String(idbOk), passCondition: 'IndexedDB доступен.', failCondition: 'IndexedDB запрещён (приватный режим) — кэш транскриптов работать не будет.', severity: 'warning', diagnosis: 'Приватный режим/запрет хранилища.', task: idbOk ? undefined : regressionTask('IndexedDB Available', 'indexedDB недоступен') });
+            return res;
+        }
+    },
+    {
+        id: 'storage_idb',
+        title: 'IndexedDB и квоты',
+        icon: Database,
+        description: 'Реальные операции записи/чтения в IndexedDB и оценка доступного места.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof indexedDB === 'undefined') {
+                res.push(skippedResult('IndexedDB Round-trip', 'Запись → чтение → удаление тестовой записи.'));
+                res.push(skippedResult('Storage Estimate', 'Оценка доступного места (navigator.storage.estimate).'));
+                return res;
+            }
+            const dbName = 'anotee_diag';
+            const roundtrip = await new Promise<{ ok: boolean; detail: string }>((resolve) => {
+                try {
+                    const req = indexedDB.open(dbName, 1);
+                    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains('t')) db.createObjectStore('t'); };
+                    req.onerror = () => resolve({ ok: false, detail: 'open error' });
+                    req.onsuccess = () => {
+                        const db = req.result;
+                        try {
+                            const tx = db.transaction('t', 'readwrite');
+                            tx.objectStore('t').put('ping', 'k');
+                            tx.oncomplete = () => {
+                                const tx2 = db.transaction('t', 'readonly');
+                                const g = tx2.objectStore('t').get('k');
+                                g.onsuccess = () => { resolve({ ok: g.result === 'ping', detail: g.result === 'ping' ? 'write+read ok' : 'read mismatch' }); };
+                                g.onerror = () => resolve({ ok: false, detail: 'read error' });
+                            };
+                            tx.onerror = () => resolve({ ok: false, detail: 'write error' });
+                        } catch (e: any) { resolve({ ok: false, detail: 'tx error: ' + (e?.message || e) }); }
+                    };
+                } catch (e: any) { resolve({ ok: false, detail: 'exception: ' + (e?.message || e) }); }
+            });
+            res.push({ name: 'IndexedDB Round-trip', description: 'Запись/чтение тестовой записи в IndexedDB.', passed: roundtrip.ok, expected: 'write+read ok', received: roundtrip.detail, passCondition: 'IndexedDB работает.', failCondition: 'Операции с IndexedDB падают.', severity: 'warning', diagnosis: 'Браузер запрещает IndexedDB или хранилище повреждено.', task: roundtrip.ok ? undefined : regressionTask('IndexedDB Round-trip', 'сбой операций IndexedDB') });
+            try {
+                const est: any = (navigator as any).storage && (navigator as any).storage.estimate ? await (navigator as any).storage.estimate() : null;
+                if (est && est.quota) {
+                    const usedPct = Math.round(((est.usage || 0) / est.quota) * 100);
+                    res.push({ name: 'Storage Estimate', description: 'Оценка использования квоты браузера.', passed: usedPct < 90, expected: '< 90%', received: usedPct + '% (' + Math.round((est.usage || 0) / 1048576) + ' МБ из ' + Math.round(est.quota / 1048576) + ' МБ)', passCondition: 'Есть свободное место.', failCondition: 'Хранилище почти заполнено.', severity: 'info', diagnosis: 'Мало места: возможны сбои записи кэша.', task: usedPct >= 90 ? regressionTask('Storage Estimate', 'квота браузера почти исчерпана') : undefined });
+                } else {
+                    res.push({ name: 'Storage Estimate', description: 'Оценка использования квоты браузера.', passed: true, expected: 'API доступен', received: 'skipped: API недоступен в этом браузере', passCondition: '—', failCondition: '—', severity: 'info', diagnosis: 'Браузер не поддерживает navigator.storage.estimate.', task: undefined });
+                }
+            } catch (e: any) {
+                res.push({ name: 'Storage Estimate', description: 'Оценка использования квоты браузера.', passed: true, expected: 'API доступен', received: 'skipped: ' + (e?.message || e), passCondition: '—', failCondition: '—', severity: 'info', diagnosis: 'Оценка квоты недоступна.', task: undefined });
+            }
+            return res;
+        }
+    },
+    {
+        id: 'media_caps',
+        title: 'Медиа и кодеки',
+        icon: Film,
+        description: 'Поддержка видео-кодеков, записи, распознавания речи и аудио-контекста на этом устройстве.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof document === 'undefined') {
+                res.push(skippedResult('Video Codecs', 'canPlayType для mp4/h264 и webm/vp9.'));
+                res.push(skippedResult('MediaRecorder', 'Доступность MediaRecorder.'));
+                res.push(skippedResult('SpeechRecognition', 'Доступность распознавания речи.'));
+                res.push(skippedResult('AudioContext', 'Доступность Web Audio API.'));
+                return res;
+            }
+            const v = document.createElement('video');
+            const mp4 = v.canPlayType('video/mp4; codecs="avc1.42E01E"') || '';
+            const webm = v.canPlayType('video/webm; codecs="vp9"') || '';
+            res.push({ name: 'Video Codecs', description: 'Поддержка H.264 (mp4) и VP9 (webm).', passed: !!mp4, expected: 'mp4: probably/maybe', received: 'mp4=' + (mp4 || 'no') + ', webm=' + (webm || 'no'), passCondition: 'Устройство воспроизводит mp4.', failCondition: 'Нет H.264 — часть видео не откроется.', severity: 'warning', diagnosis: 'Браузер/ОС без H.264 (редко, обычно старые сборки Linux).', task: mp4 ? undefined : regressionTask('Video Codecs', 'нет поддержки H.264') });
+            const mr = typeof (window as any).MediaRecorder !== 'undefined';
+            res.push({ name: 'MediaRecorder', description: 'Запись аудио/видео доступна.', passed: mr, expected: 'true', received: String(mr), passCondition: 'MediaRecorder доступен.', failCondition: 'Запись недоступна в этом браузере.', severity: 'info', diagnosis: 'Нет MediaRecorder (iOS Safari < 14.3).', task: undefined });
+            const sr = !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+            res.push({ name: 'SpeechRecognition', description: 'Распознавание речи доступно (диктовка).', passed: sr, expected: 'true', received: String(sr), passCondition: 'Диктовка доступна.', failCondition: 'Диктовка недоступна — используется ручной ввод.', severity: 'info', diagnosis: 'Браузер без SpeechRecognition (Firefox/Safari-ограничения).', task: undefined });
+            const ac = !!((window as any).AudioContext || (window as any).webkitAudioContext);
+            res.push({ name: 'AudioContext', description: 'Web Audio API доступен.', passed: ac, expected: 'true', received: String(ac), passCondition: 'Аудио-анализ доступен.', failCondition: 'Аудио-API недоступен.', severity: 'info', diagnosis: 'Нет Web Audio (редко).', task: undefined });
+            return res;
+        }
+    },
+    {
+        id: 'security_client',
+        title: 'Безопасность',
+        icon: ShieldAlert,
+        description: 'Защищённый контекст, HTTPS и отсутствие секретов в локальном хранилище.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime()) {
+                res.push(skippedResult('Secure Context', 'HTTPS/secure context.'));
+                res.push(skippedResult('No Secrets in localStorage', 'Секреты не лежат в localStorage в открытом виде.'));
+                return res;
+            }
+            const secure = (window as any).isSecureContext === true;
+            res.push({ name: 'Secure Context', description: 'Приложение открыто по HTTPS (secure context).', passed: secure, expected: 'true', received: String(secure), passCondition: 'HTTPS активен.', failCondition: 'Не HTTPS — микрофон/буфер обмена будут ограничены.', severity: 'critical', diagnosis: 'Открыто по http:// — браузеры блокируют микрофон и часть API.', task: secure ? undefined : regressionTask('Secure Context', 'приложение открыто без HTTPS') });
+            let leaks = 0;
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i) || '';
+                    const val = localStorage.getItem(k) || '';
+                    const looksJson = val.trimStart().startsWith('{') || val.trimStart().startsWith('[');
+                    if (/secret|accesskey|apikey|token/i.test(k) && val.length > 20 && !looksJson) leaks++;
+                }
+            } catch { /* ignore */ }
+            res.push({ name: 'No Secrets in localStorage', description: 'В localStorage нет похожих на секреты значений.', passed: leaks === 0, expected: '0 подозрительных ключей', received: leaks + ' подозрительных', passCondition: 'Секреты не хранятся локально.', failCondition: 'Похоже на хранение секретов в localStorage.', severity: 'critical', diagnosis: 'Ключи доступа могут попадать в localStorage — риск утечки.', task: leaks ? regressionTask('No Secrets in localStorage', 'секреты найдены в localStorage') : undefined });
+            return res;
+        }
+    },
+    {
+        id: 'a11y',
+        title: 'Доступность интерфейса',
+        icon: ShieldCheck,
+        description: 'Базовые проверки доступности текущей страницы: alt, aria-label, язык, заголовок.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof document === 'undefined') {
+                res.push(skippedResult('Images alt', 'У изображений есть alt.'));
+                res.push(skippedResult('Icon Buttons', 'Иконочные кнопки имеют aria-label/title.'));
+                res.push(skippedResult('Document Language', 'У <html> задан lang.'));
+                return res;
+            }
+            const imgs = Array.from(document.querySelectorAll('img'));
+            const noAlt = imgs.filter((i) => !i.getAttribute('alt')).length;
+            res.push({ name: 'Images alt', description: 'Изображения без alt (для скринридеров).', passed: noAlt === 0, expected: '0 без alt', received: noAlt + ' из ' + imgs.length, passCondition: 'Все изображения подписаны.', failCondition: 'Часть изображений без alt.', severity: 'info', diagnosis: 'Добавьте alt/aria-hidden для декоративных картинок.', task: noAlt ? regressionTask('Images alt', 'изображения без alt') : undefined });
+            const btns = Array.from(document.querySelectorAll('button'));
+            const iconOnly = btns.filter((b) => !b.textContent?.trim() && !b.getAttribute('aria-label') && !b.getAttribute('title')).length;
+            res.push({ name: 'Icon Buttons', description: 'Кнопки без текста должны иметь aria-label/title.', passed: iconOnly === 0, expected: '0 без описания', received: iconOnly + ' из ' + btns.length, passCondition: 'Иконочные кнопки описаны.', failCondition: 'Часть кнопок нечитаема для скринридера и не имеет подсказки.', severity: 'info', diagnosis: 'Добавьте aria-label или title иконочным кнопкам.', task: iconOnly ? regressionTask('Icon Buttons', 'кнопки без доступного имени') : undefined });
+            const lang = document.documentElement.getAttribute('lang') || '';
+            res.push({ name: 'Document Language', description: 'У <html> задан атрибут lang.', passed: !!lang, expected: 'например ru/en', received: lang || 'нет', passCondition: 'Язык документа указан.', failCondition: 'Скринридеры неверно читают текст.', severity: 'info', diagnosis: 'Добавьте lang в index.html.', task: lang ? undefined : regressionTask('Document Language', 'нет lang у html') });
+            return res;
+        }
+    },
+    {
+        id: 'perf_client',
+        title: 'Производительность',
+        icon: Zap,
+        description: 'Загрузка страницы, память вкладки и заполненность localStorage.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof performance === 'undefined') {
+                res.push(skippedResult('Page Load Time', 'Время полной загрузки страницы.'));
+                res.push(skippedResult('JS Heap Usage', 'Использование памяти вкладки.'));
+                return res;
+            }
+            try {
+                const nav: any = performance.getEntriesByType('navigation')[0] || null;
+                const loadMs = nav ? Math.round(nav.loadEventEnd - nav.startTime) : Math.round(performance.now());
+                res.push({ name: 'Page Load Time', description: 'Полная загрузка страницы (loadEventEnd).', passed: loadMs < 5000, expected: '< 5000 мс', received: loadMs + ' мс', passCondition: 'Страница грузится быстро.', failCondition: 'Долгая загрузка — проверьте размер бандла и сеть.', severity: 'info', diagnosis: 'Крупный бандл или медленная сеть.', task: loadMs >= 5000 ? regressionTask('Page Load Time', 'медленная загрузка страницы') : undefined });
+            } catch (e: any) {
+                res.push({ name: 'Page Load Time', description: 'Полная загрузка страницы.', passed: true, expected: '—', received: 'skipped: ' + (e?.message || e), passCondition: '—', failCondition: '—', severity: 'info', diagnosis: '—', task: undefined });
+            }
+            const mem: any = (performance as any).memory;
+            if (mem && mem.usedJSHeapSize) {
+                const mb = Math.round(mem.usedJSHeapSize / 1048576);
+                res.push({ name: 'JS Heap Usage', description: 'Использование JS-памяти вкладки.', passed: mb < 300, expected: '< 300 МБ', received: mb + ' МБ', passCondition: 'Память в норме.', failCondition: 'Высокое потребление памяти.', severity: 'info', diagnosis: 'Возможна утечка или тяжёлый транскрипт в памяти.', task: mb >= 300 ? regressionTask('JS Heap Usage', 'высокое потребление памяти') : undefined });
+            } else {
+                res.push({ name: 'JS Heap Usage', description: 'Использование JS-памяти вкладки.', passed: true, expected: 'API доступен', received: 'skipped: performance.memory недоступен (не Chromium)', passCondition: '—', failCondition: '—', severity: 'info', diagnosis: 'Метрика доступна только в Chromium-браузерах.', task: undefined });
+            }
+            return res;
+        }
+    }
+
 ];
