@@ -7,7 +7,7 @@ import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
 import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
-import { loadTranscript, saveTranscript, clearTranscript } from '../services/transcriptStore';
+import { loadTranscript, loadTranscriptWithIdb, saveTranscript, clearTranscript } from '../services/transcriptStore';
 import { transcribeWithEngine, isEngineAvailable, type TranscribeEngineId } from '../services/transcriptionEngines';
 import { subscribeTranscription, startTranscription, isTranscriptionRunning } from '../services/transcriptionRunner';
 import { FeatureErrorBoundary } from './FeatureErrorBoundary';
@@ -673,7 +673,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   useEffect(() => {
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
-    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(loadTranscript(version?.id || "") || null); cancelPTT(); setS3ErrorDetail(null);
+    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); const cached = loadTranscript(version?.id || ''); setTranscript(cached); if (!cached && version?.id) { void loadTranscriptWithIdb(version.id).then((fromIdb) => { if (fromIdb) setTranscript(fromIdb); }); }
 
     const checkRemoteStatus = async () => {
         if (!isMockMode) {

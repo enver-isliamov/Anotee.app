@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main, 'chore/**']
 
 jobs:
-  build-test:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +19,21 @@ jobs:
 
       - run: npm ci
 
+      - name: Syntax check API (Node functions)
+        run: |
+          for f in api/*.js; do node --check "$f"; done
+
       - name: Type check
-        run: for f in api/*.js; do node --check "$f"; done
-      npx tsc --noEmit
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
 
       - name: Unit tests
         run: npm run test
+
+      - name: Audit invariants
+        run: npm run audit
 
       - name: Build
         run: npm run build
@@ -34,7 +43,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    needs: build-test
+    needs: verify
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +55,8 @@ jobs:
       - run: npm ci
 
       - name: Install Playwright Chromium
+        env:
+          PLAYWRIGHT_DOWNLOAD_HOST: https://cdn.npmmirror.com/binaries/playwright
         run: npx playwright install --with-deps chromium
 
       - name: E2E tests (mock mode)
