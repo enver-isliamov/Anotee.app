@@ -45,7 +45,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <>
-        <header className={`h-16 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-50 transition-all ${className || ''}`}>
+        <header className={`safe-top h-auto md:h-16 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-50 transition-all ${className || ''}`}>
             <div className="flex items-center gap-6 overflow-hidden flex-1">
                 
                 {/* LOGO AREA */}

@@ -157,6 +157,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
     const [cfToken, setCfToken] = useState('');
     const [cfBusy, setCfBusy] = useState(false);
     const [cfData, setCfData] = useState<{ accountId: string; accountName?: string | null; buckets: string[]; endpoints: { default: string; eu: string; us: string } } | null>(null);
+    const [cfAccountId, setCfAccountId] = useState(''); // T-117: для Account API Token (cfat_…)
+
   const saveStoragePrefs = async (activeProvider: string, disabled: string[], auditAction: string) => {
     try {
       const token = await getToken();
@@ -363,7 +365,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         setCfBusy(true);
         try {
             const token = await getToken();
-            const res = await fetch('/api/storage?action=cf_probe', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ apiToken: cfToken.trim() }) });
+            const res = await fetch('/api/storage?action=cf_probe', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ apiToken: cfToken.trim(), accountId: cfAccountId.trim() || undefined }) });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
                 setCfData({ accountId: data.accountId, accountName: data.accountName, buckets: data.buckets || [], endpoints: data.endpoints });
@@ -1146,6 +1148,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         <p className="text-xs text-zinc-500 mb-4">Вставьте <b>Token value</b> (Cloudflare API-токен с правами Account: Read и R2: Read). Приложение само определит Account ID, Endpoint и список бакетов. Токен не сохраняется.</p>
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Cloudflare API-токен (Token value)</label>
                         <input autoComplete="off" value={cfToken} onChange={(e) => setCfToken(e.target.value)} placeholder="Вставьте токен" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Account ID (только для Account API Token)</label>
+                        <input autoComplete="off" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} placeholder="напр. 39bb41ab2b9b8e6f8f667f4817dbce58" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
+                        <p className="text-[10px] text-zinc-500 mb-3">User API Token (Profile → API Tokens) — Account ID не нужен. Account API Token (Manage Account → Account API Tokens, начинается с cfat_) — /user/tokens/verify его не принимает, поэтому укажите Account ID из R2 → Account Details.</p>
                         <button onClick={handleCfProbe} disabled={cfBusy} className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-bold">{cfBusy ? 'Проверяем…' : 'Проверить и заполнить'}</button>
                         {cfData && (
                             <div className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs text-zinc-700 dark:text-zinc-200 space-y-2">

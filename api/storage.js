@@ -300,7 +300,7 @@ if (req.method === 'GET') {
         // --- ACTION: CF PROBE (POST) — T-114: по Cloudflare API-токену узнаём Account ID и бакеты (токен НЕ сохраняется) ---
         if (action === 'cf_probe') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
-            const { apiToken } = req.body || {};
+            const { apiToken, accountId: inputAccountId } = req.body || {};
             if (!apiToken || typeof apiToken !== 'string' || apiToken.length < 20) {
                 return res.status(400).json({ error: 'Вставьте Cloudflare API-токен (Token value)' });
             }
@@ -313,16 +313,38 @@ if (req.method === 'GET') {
                 return { status: r.status, body: j };
             };
             try {
-                const verify = await cf('/user/tokens/verify');
-                if (verify.status !== 200 || !verify.body || verify.body.success !== true) {
-                    return res.status(400).json({ error: 'Токен недействителен или отозван', details: verify.body && verify.body.errors ? verify.body.errors : undefined });
+                // T-117: два типа токенов Cloudflare.
+                //  - User API Token (Profile → API Tokens): проверяется через /user/tokens/verify
+                //  - Account API Token (Manage Account → Account API Tokens, префикс cfat_): /user/tokens/verify его НЕ принимает;
+                //    валидируем вызовом /accounts/{id}/tokens/permission_groups (нужен Account ID)
+                let acc = null;
+                const tokenType = (typeof apiToken === 'string' && apiToken.startsWith('cfat_')) ? 'account' : 'user';
+                if (inputAccountId) {
+                    const pg = await cf('/accounts/' + inputAccountId + '/tokens/permission_groups');
+                    if (pg.status !== 200) {
+                        return res.status(400).json({
+                            error: 'Account API Token не принят для указанного Account ID (проверьте ID и права токена: Account: Read, R2: Read)',
+                            details: pg.body && pg.body.errors ? pg.body.errors : undefined,
+                            hint: 'Account API Token создаётся в Manage Account → Account API Tokens; User API Token — в Profile → API Tokens. Укажите Account ID из R2 → Account Details.'
+                        });
+                    }
+                    acc = { id: inputAccountId, name: null };
+                } else {
+                    const verify = await cf('/user/tokens/verify');
+                    if (verify.status !== 200 || !verify.body || verify.body.success !== true) {
+                        return res.status(400).json({
+                            error: 'Токен не принят как User API Token',
+                            details: verify.body && verify.body.errors ? verify.body.errors : undefined,
+                            hint: 'Если это Account API Token (Manage Account → Account API Tokens, cfat_…), укажите Account ID — тогда проверка пойдёт через account-scoped endpoint.'
+                        });
+                    }
+                    const accounts = await cf('/accounts');
+                    const accList = (accounts.body && accounts.body.result) || [];
+                    if (accList.length === 0) {
+                        return res.status(400).json({ error: 'У токена нет доступа ни к одному аккаунту Cloudflare (нужно право Account: Read)' });
+                    }
+                    acc = accList[0];
                 }
-                const accounts = await cf('/accounts');
-                const accList = (accounts.body && accounts.body.result) || [];
-                if (accList.length === 0) {
-                    return res.status(400).json({ error: 'У токена нет доступа ни к одному аккаунту Cloudflare (нужно право Account: Read)' });
-                }
-                const acc = accList[0];
                 let buckets = [];
                 try {
                     const b = await cf('/accounts/' + acc.id + '/r2/buckets');
@@ -332,7 +354,8 @@ if (req.method === 'GET') {
                     success: true,
                     accountId: acc.id,
                     accountName: acc.name || null,
-                    accounts: accList.map((a) => ({ id: a.id, name: a.name })),
+                    tokenType,
+                    accounts: [{ id: acc.id, name: acc.name || null }],
                     buckets,
                     endpoints: {
                         default: 'https://' + acc.id + '.r2.cloudflarestorage.com',
