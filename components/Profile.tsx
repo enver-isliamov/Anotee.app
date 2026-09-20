@@ -677,6 +677,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         {/* T-93: мастер подключения — всегда доступен (Codex-урок: триггер в всегда-рендерящихся блоках) */}
                         <div className="mb-4">
                             <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2">🧙 Подключить хранилище за 3 шага (мастер)</button>
+                            <button onClick={() => setShowCfProbe(true)} data-testid="cf-token-open" className="w-full mt-2 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold">🔑 Заполнить по Cloudflare-токену (Account API Token)</button>
                         </div>
 
                         {isS3Loading ? (
@@ -740,8 +741,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
                                                 <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
-                                                    <button onClick={() => setShowCfProbe(true)} className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1">🔑 Заполнить по Cloudflare-токену</button>
-                                                    <HelpCircle size={10} /> Инструкция по получению ключей
+                                                        <HelpCircle size={10} /> Инструкция по получению ключей
                                                 </button>
                                             </div>
 
