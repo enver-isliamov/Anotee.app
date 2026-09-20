@@ -1,5 +1,6 @@
 ﻿
 import { sql } from '@vercel/postgres';
+import { createHash } from 'crypto';
 import { verifyUser } from './_auth.js';
 import { encrypt, decrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
@@ -296,6 +297,113 @@ if (req.method === 'GET') {
                 const rows = await sql`SELECT action, provider, created_at FROM storage_audit WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 20`;
                 return res.status(200).json({ success: true, audit: rows });
             }
+        // --- ACTION: CF PROBE (POST) — T-114: по Cloudflare API-токену узнаём Account ID и бакеты (токен НЕ сохраняется) ---
+        if (action === 'cf_probe') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            const { apiToken } = req.body || {};
+            if (!apiToken || typeof apiToken !== 'string' || apiToken.length < 20) {
+                return res.status(400).json({ error: 'Вставьте Cloudflare API-токен (Token value)' });
+            }
+            const cf = async (path) => {
+                const r = await fetch('https://api.cloudflare.com/client/v4' + path, {
+                    headers: { 'Authorization': 'Bearer ' + apiToken, 'Content-Type': 'application/json' }
+                });
+                let j = null;
+                try { j = await r.json(); } catch (e) { j = null; }
+                return { status: r.status, body: j };
+            };
+            try {
+                const verify = await cf('/user/tokens/verify');
+                if (verify.status !== 200 || !verify.body || verify.body.success !== true) {
+                    return res.status(400).json({ error: 'Токен недействителен или отозван', details: verify.body && verify.body.errors ? verify.body.errors : undefined });
+                }
+                const accounts = await cf('/accounts');
+                const accList = (accounts.body && accounts.body.result) || [];
+                if (accList.length === 0) {
+                    return res.status(400).json({ error: 'У токена нет доступа ни к одному аккаунту Cloudflare (нужно право Account: Read)' });
+                }
+                const acc = accList[0];
+                let buckets = [];
+                try {
+                    const b = await cf('/accounts/' + acc.id + '/r2/buckets');
+                    buckets = ((b.body && b.body.result && b.body.result.buckets) || []).map((x) => x.name);
+                } catch (e) { buckets = []; }
+                return res.status(200).json({
+                    success: true,
+                    accountId: acc.id,
+                    accountName: acc.name || null,
+                    accounts: accList.map((a) => ({ id: a.id, name: a.name })),
+                    buckets,
+                    endpoints: {
+                        default: 'https://' + acc.id + '.r2.cloudflarestorage.com',
+                        eu: 'https://' + acc.id + '.eu.r2.cloudflarestorage.com',
+                        us: 'https://' + acc.id + '.us.r2.cloudflarestorage.com'
+                    },
+                    note: buckets.length === 0 ? 'Список бакетов пуст или у токена нет права R2: Read — введите имя бакета вручную.' : undefined
+                });
+            } catch (e) {
+                return res.status(502).json({ error: 'Не удалось связаться с Cloudflare API', details: e && e.message ? e.message : String(e) });
+            }
+        }
+
+        // --- T-115: полный автомат — создание бакета и R2-ключа (Cloudflare API) ---
+        if (action === 'cf_create_bucket') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            const { apiToken, accountId, bucketName } = req.body || {};
+            if (!apiToken || !accountId || !bucketName) return res.status(400).json({ error: 'Нужны apiToken, accountId и bucketName' });
+            try {
+                const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + accountId + '/r2/buckets', {
+                    method: 'POST',
+                    headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: bucketName })
+                });
+                const j = await r.json().catch(() => null);
+                if (r.status === 200 || r.status === 201 || (j && j.success)) return res.status(200).json({ success: true, created: true, bucket: bucketName });
+                const msg = (j && j.errors && j.errors[0] && j.errors[0].message) || ('HTTP ' + r.status);
+                if (/already exists|already owned/i.test(msg)) return res.status(200).json({ success: true, created: false, bucket: bucketName, note: 'Бакет уже существовал' });
+                return res.status(400).json({ error: 'Не удалось создать бакет: ' + msg });
+            } catch (e) {
+                return res.status(502).json({ error: 'Сбой связи с Cloudflare API', details: e && e.message ? e.message : String(e) });
+            }
+        }
+
+        if (action === 'cf_create_r2_key') {
+            if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
+            const { apiToken, accountId, bucketName } = req.body || {};
+            if (!apiToken || !accountId) return res.status(400).json({ error: 'Нужны apiToken и accountId' });
+            try {
+                const pgRes = await fetch('https://api.cloudflare.com/client/v4/accounts/' + accountId + '/tokens/permission_groups', {
+                    headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' }
+                });
+                const pgJson = await pgRes.json().catch(() => null);
+                const groups = (pgJson && pgJson.result) || [];
+                const findGrp = (name) => (groups.find((g) => (g.name || '').toLowerCase() === name.toLowerCase()) || {}).id;
+                const readId = findGrp('Workers R2 Storage Bucket Item Read');
+                const writeId = findGrp('Workers R2 Storage Bucket Item Write');
+                if (!readId || !writeId) {
+                    return res.status(400).json({ error: 'Не удалось определить права R2 (нужен токен с правом Account API Tokens: Edit)' });
+                }
+                const resources = bucketName
+                    ? { ['com.cloudflare.edge.r2.bucket.' + accountId + '_default_' + bucketName]: '*' }
+                    : { ['com.cloudflare.api.account.' + accountId]: { 'com.cloudflare.edge.r2.bucket.*': '*' } };
+                const tokenName = 'anotee-' + (bucketName || 'all') + '-' + Date.now().toString(36);
+                const createRes = await fetch('https://api.cloudflare.com/client/v4/accounts/' + accountId + '/tokens', {
+                    method: 'POST',
+                    headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: tokenName, policies: [{ effect: 'allow', resources, permission_groups: [{ id: readId }, { id: writeId }] }] })
+                });
+                const cj = await createRes.json().catch(() => null);
+                if (!cj || !cj.success || !cj.result) {
+                    const msg = (cj && cj.errors && cj.errors[0] && cj.errors[0].message) || ('HTTP ' + createRes.status);
+                    return res.status(400).json({ error: 'Не удалось создать R2-ключ: ' + msg });
+                }
+                const secret = createHash('sha256').update(String(cj.result.value)).digest('hex');
+                return res.status(200).json({ success: true, accessKeyId: cj.result.id, secretAccessKey: secret, bucketScoped: !!bucketName, tokenName });
+            } catch (e) {
+                return res.status(502).json({ error: 'Сбой связи с Cloudflare API', details: e && e.message ? e.message : String(e) });
+            }
+        }
+
 // --- ACTION: TEST CONNECTION (POST) ---
         if (action === 'test') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
