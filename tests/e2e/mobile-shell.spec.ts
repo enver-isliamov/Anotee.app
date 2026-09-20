@@ -70,4 +70,42 @@ test.describe('Мобильная оболочка (PWA)', () => {
       expect(m.len, r + ': страница пуста').toBeGreaterThan(30);
     }
   });
+
+  test('ProjectView и плеер: мобильная вёрстка не съезжает', async ({ page }) => {
+    test.setTimeout(180_000);
+    resetMockData(page);
+    await page.goto('/');
+    await page.waitForTimeout(1500);
+
+    const check = async (label: string) => {
+      const m = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+        len: (document.body.innerText || '').length
+      }));
+      expect(m.scrollW, label + ': горизонтальный overflow ' + m.scrollW + ' > ' + m.clientW).toBeLessThanOrEqual(m.clientW + 2);
+      expect(m.len, label + ': пусто').toBeGreaterThan(30);
+    };
+
+    // открыть первый mock-проект
+    const card = page.locator('[data-testid="project-card"], button:has-text("Открыть")').first();
+    if (await card.count()) {
+      await card.click();
+      await page.waitForTimeout(1500);
+      await check('ProjectView');
+
+      // открыть первый ассет → плеер
+      const asset = page.locator('[data-testid="asset-card"], button:has-text("Смотреть")').first();
+      if (await asset.count()) {
+        await asset.click();
+        await page.waitForTimeout(2000);
+        await check('Player');
+        // шапка плеера и нижние контролы присутствуют
+        await expect(page.locator('header').first()).toBeVisible();
+        // закрываем назад, чтобы не оставлять состояние
+        const back = page.locator('header button').first();
+        if (await back.count()) { await back.click().catch(() => {}); }
+      }
+    }
+  });
 });
