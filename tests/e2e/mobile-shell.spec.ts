@@ -135,4 +135,27 @@ test.describe('Мобильная оболочка (PWA)', () => {
       expect(y, 'десктоп: профиль не скроллится').toBeGreaterThan(0);
     }
   });
+
+  test('скролл на всех маршрутах: длинные страницы прокручиваются', async ({ page }) => {
+    test.setTimeout(240_000);
+    resetMockData(page);
+    const routes = ['/', '/profile', '/pricing', '/ai-features', '/workflow', '/about', '/terms', '/privacy'];
+    const results: string[] = [];
+    for (const r of routes) {
+      await page.goto(r);
+      await page.waitForTimeout(900);
+      const m = await page.evaluate(() => ({
+        scrollH: document.documentElement.scrollHeight,
+        clientH: document.documentElement.clientHeight
+      }));
+      if (m.scrollH > m.clientH + 40) {
+        const y = await page.evaluate(() => { window.scrollTo(0, 300); return window.scrollY; });
+        results.push(r + ':' + (y > 0 ? 'ok' : 'BLOCKED'));
+        expect(y, r + ': вертикальный скролл заблокирован').toBeGreaterThan(0);
+      } else {
+        results.push(r + ':short');
+      }
+    }
+    console.log('SCROLL-CHECK ' + results.join(' '));
+  });
 });
