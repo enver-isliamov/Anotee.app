@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id: string) {
             if (!id.includes('node_modules')) return undefined;
-            if (id.includes('react-dom') || id.includes('scheduler') || /node_modules[\/\\]react[\/\\]/.test(id)) return 'vendor-react';
+            if (id.includes('react-dom') || id.includes('scheduler') || id.includes('node_modules/react/') || id.includes('node_modules\\react\\')) return 'vendor-react';
             if (id.includes('lucide-react')) return 'vendor-icons';
             if (id.includes('@clerk')) return 'vendor-clerk';
             if (id.includes('@aws-sdk')) return 'vendor-aws';
