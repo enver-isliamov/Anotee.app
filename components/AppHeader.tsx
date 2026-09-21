@@ -190,25 +190,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         {/* Mobile Menu Dropdown (Fullscreen on small screens) */}
         {isMobileMenuOpen && !hideNav && (
             <div className="md:hidden fixed top-16 left-0 right-0 bottom-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 z-40 p-4 flex flex-col gap-2 animate-in slide-in-from-top-2 overflow-y-auto">
-                {/* Navigation Links */}
-                {navItems.map(page => {
-                    const pageKey = page === 'ai' ? 'AI_FEATURES' : page.toUpperCase();
-                    const isActive = currentView === pageKey;
-                    return (
-                        <button 
-                            key={page}
-                            onClick={() => {
-                                setIsMobileMenuOpen(false);
-                                onNavigate(pageKey);
-                            }}
-                            className={`w-full text-left px-4 py-3 rounded-xl text-base font-bold transition-colors
-                                ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}
-                            `}
-                        >
-                            {t(`nav.${page}`)}
-                        </button>
-                    );
-                })}
+                {/* T-142: навигация перенесена в нижний таб-бар — в шапке только сервисные действия */}
+
                 
                 {/* Mobile Tour Button */}
                 {currentUser && onStartTour && (
