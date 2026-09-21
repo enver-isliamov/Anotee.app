@@ -22,21 +22,23 @@
   max-width: 72ch;
 }
 
-/* T-125: мобильная устойчивость вёрстки (preset 03 Information Architects — плотно, но без съезжания) */
-html, body {
-  overflow-x: hidden;
+/* T-125/T-136: мобильная устойчивость вёрстки.
+   ВАЖНО: не ставим overflow-x:hidden на html и не меняем height у video/svg —
+   это ломает вертикальный скролл и раскладку плеера (T-136).*/
+img, svg {
   max-width: 100%;
 }
-img, video, canvas, svg {
+video, canvas {
   max-width: 100%;
-  height: auto;
 }
 /* длинные строки (ключи, endpoint, ID) не растягивают контейнер */
 code, pre, .font-mono {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-/* чтобы нижний таб-бар не перекрывал последний контент */
 @media (max-width: 767px) {
+  /* предотвращаем горизонтальный сдвиг только на мобильных и только для body */
+  body { overflow-x: hidden; }
+  /* чтобы нижний таб-бар не перекрывал последний контент */
   main, .page-content { padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }
 }

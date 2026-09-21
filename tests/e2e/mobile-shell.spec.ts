@@ -108,4 +108,54 @@ test.describe('Мобильная оболочка (PWA)', () => {
       }
     }
   });
+
+  test('вертикальный скролл работает на длинных страницах', async ({ page }) => {
+    test.setTimeout(180_000);
+    resetMockData(page);
+    for (const r of ['/profile', '/pricing']) {
+      await page.goto(r);
+      await page.waitForTimeout(1200);
+      const before = await page.evaluate(() => ({ scrollH: document.documentElement.scrollHeight, clientH: document.documentElement.clientHeight }));
+      if (before.scrollH > before.clientH + 20) {
+        const after = await page.evaluate(() => { window.scrollTo(0, 400); return window.scrollY; });
+        expect(after, r + ': страница не скроллится (scrollY=0)').toBeGreaterThan(0);
+      }
+    }
+  });
+
+  test('десктоп: скролл работает на профиле', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1440, height: 800 });
+    resetMockData(page);
+    await page.goto('/profile');
+    await page.waitForTimeout(1200);
+    const m = await page.evaluate(() => ({ scrollH: document.documentElement.scrollHeight, clientH: document.documentElement.clientHeight }));
+    if (m.scrollH > m.clientH + 20) {
+      const y = await page.evaluate(() => { window.scrollTo(0, 500); return window.scrollY; });
+      expect(y, 'десктоп: профиль не скроллится').toBeGreaterThan(0);
+    }
+  });
+
+  test('скролл на всех маршрутах: длинные страницы прокручиваются', async ({ page }) => {
+    test.setTimeout(240_000);
+    resetMockData(page);
+    const routes = ['/', '/profile', '/pricing', '/ai-features', '/workflow', '/about', '/terms', '/privacy'];
+    const results: string[] = [];
+    for (const r of routes) {
+      await page.goto(r);
+      await page.waitForTimeout(900);
+      const m = await page.evaluate(() => ({
+        scrollH: document.documentElement.scrollHeight,
+        clientH: document.documentElement.clientHeight
+      }));
+      if (m.scrollH > m.clientH + 40) {
+        const y = await page.evaluate(() => { window.scrollTo(0, 300); return window.scrollY; });
+        results.push(r + ':' + (y > 0 ? 'ok' : 'BLOCKED'));
+        expect(y, r + ': вертикальный скролл заблокирован').toBeGreaterThan(0);
+      } else {
+        results.push(r + ':short');
+      }
+    }
+    console.log('SCROLL-CHECK ' + results.join(' '));
+  });
 });

@@ -62,39 +62,41 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     yandex: {
         title: 'Yandex Object Storage',
         steps: [
-            'Создайте Бакет в консоли Object Storage.',
-            'Перейдите в раздел "Сервисные аккауты" (в меню слева).',
-            'Создайте новый аккаунт и ВАЖНО: добавьте ему роль "storage.editor" (Редактор хранилища).',
-            'Нажмите на созданный аккаунт -> "Создать новый ключ" -> "Создать статический ключ доступа".',
-            'Скопируйте "Идентификатор ключа" (Access Key) и "Секретный ключ" (Secret Key).'
+            'В консоли Yandex Cloud откройте каталог → сервис Object Storage → создайте бакет.',
+            'Слева выберите «Сервисные аккаунты» → «Создать сервисный аккаунт».',
+            'Обязательно выдайте роль storage.editor — без неё загрузка не заработает.',
+            'Откройте сервисный аккаунт → «Создать новый ключ» → «Создать статический ключ доступа».',
+            'Скопируйте «Идентификатор ключа» и «Секретный ключ» в поля ниже; Endpoint и регион уже подставлены.',
+            'Документация: yandex.cloud/ru/docs/storage'
         ],
-        link: 'https://console.cloud.yandex.ru/',
+        link: 'https://console.yandex.cloud/',
         linkText: 'Открыть консоль Yandex',
         warning: 'Если не выдать роль storage.editor, загрузка работать не будет!'
     },
     cloudflare: {
         title: 'Cloudflare R2',
         steps: [
-            '1. Зайдите в R2 Overview. Справа "Account Details" -> Скопируйте "Account ID".',
-            '2. Ваш Endpoint должен выглядеть так: https://<AccountID>.r2.cloudflarestorage.com (БЕЗ имени бакета!).',
+            '1. Скопируйте Account ID: R2 → Account Details (ссылка на R2 ниже).',
+            '2. Создайте Account API Token с правами: Account: Read, Workers R2 Storage: Read (+ Edit — чтобы ключи создавались автоматически).',
             '3. Быстрый путь: вернитесь в приложение и нажмите «🔑 Заполнить по Cloudflare-токену» — Account ID, Endpoint и бакеты определятся автоматически. Для ручного пути: Manage API Tokens -> Create API token -> права Object Read & Write.',
             '4. Permissions: выберите "Admin Read & Write".',
             '5. Нажмите "Create". Скопируйте "Access Key ID" и "Secret Access Key".'
         ],
-        link: 'https://dash.cloudflare.com/?to=/:account/r2',
+        link: 'https://dash.cloudflare.com/?to=/:account/r2/api-tokens',
         linkText: 'Открыть Cloudflare R2',
         warning: 'В поле Endpoint вставляйте URL аккаунта, а не бакета. Бакет указывается отдельно.'
     },
     selectel: {
         title: 'Selectel Storage',
         steps: [
-            'Создайте контейнер (бакет) в разделе "Облачное хранилище".',
-            'Перейдите в раздел "Управление доступом" -> "Пользователи".',
-            'Создайте пользователя с ролью "Администратор облачного хранилища".',
-            'Имя пользователя — это Access Key. Пароль пользователя — это Secret Key.',
-            'Endpoint всегда: https://s3.storage.selcloud.ru'
+            'В панели Selectel откройте «Объектное хранилище» → создайте контейнер (или используйте существующий).',
+            'Перейдите в «Пользователи» (управление доступом к хранилищу).',
+            'Создайте пользователя с ролью «Администратор объектного хранилища».',
+            'Имя пользователя = Access Key ID, пароль = Secret Access Key.',
+            'Endpoint уже подставлен: https://s3.storage.selcloud.ru (регион ru-1).',
+            'Документация: docs.selectel.ru/cloud/object-storage/'
         ],
-        link: 'https://my.selectel.ru/storage',
+        link: 'https://my.selectel.ru/',
         linkText: 'Открыть Selectel'
     },
     aws: {
@@ -149,8 +151,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
     try { const token = await getToken(); await fetch('/api/storage?action=reset_config', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); setNoConfigFound(true); setSecretBroken(false); setS3Form((pr: any) => ({ ...pr, secretAccessKey: '', accessKeyId: '' })); setTestResult({ success: false, message: 'Конфиг сброшен — введите ключи заново и нажмите Test.' }); toast('Конфигурация хранилища сброшена', 'success'); } catch (e: any) { toast(e?.message || 'Не удалось сбросить', 'error'); }
   };
   const [configOwner, setConfigOwner] = useState('');
-  const [wizardStep, setWizardStep] = useState(0);
-  const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
+    const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
     const [configuredProviders, setConfiguredProviders] = useState<string[]>([]); // T-93: настроенные S3-провайдеры (с сервера)
     // T-114: автозаполнение по Cloudflare API-токену (Token value)
     const [showCfProbe, setShowCfProbe] = useState(false);
@@ -165,8 +166,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       await fetch('/api/storage?action=storage_prefs', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ activeProvider, disabled, auditAction }) });
     } catch { /* prefs не критичны */ }
   }; // 0=off 1=cf 2=keys 3=auto
-  const [wizChecks, setWizChecks] = useState([false, false, false, false, false]); // T-36
-  
+    
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
@@ -548,6 +548,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       const isSelected = selectedTab === id;
       return (
           <button
+              data-testid={'provider-card-' + id}
               onClick={() => handleTabSwitch(id)}
               className={`relative p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group w-full h-[90px] justify-center
                   ${isSelected ? `border-indigo-500 bg-zinc-800 shadow-lg scale-[1.02] z-10` : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 opacity-80 hover:opacity-100'}
@@ -676,7 +677,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                         {/* T-93: мастер подключения — всегда доступен (Codex-урок: триггер в всегда-рендерящихся блоках) */}
                         <div className="mb-4">
-                            <button onClick={() => setWizardStep(1)} data-testid="wizard-open" className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2">🧙 Подключить хранилище за 3 шага (мастер)</button>
                             <button onClick={() => setShowCfProbe(true)} data-testid="cf-token-open" className="w-full mt-2 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold">🔑 Заполнить по Cloudflare-токену (Account API Token)</button>
                         </div>
 
@@ -740,6 +740,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
+                                                <a data-testid="provider-external-link" href={PROVIDER_GUIDES[selectedTab]?.link || 'https://developers.cloudflare.com/r2/'} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1 mr-3">{PROVIDER_GUIDES[selectedTab]?.linkText || 'Открыть раздел провайдера'} <ExternalLink size={10} /></a>
                                                 <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
                                                         <HelpCircle size={10} /> Инструкция по получению ключей
                                                 </button>
@@ -1044,77 +1045,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 </div>
             )}
 
-                  {wizardStep > 0 && (
-      <div data-testid="wizard-overlay" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-        <div className="px-6 pt-5 pb-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-sm text-zinc-900">CF</div>
-            <div><div className="font-bold text-zinc-900 dark:text-white">Подключить Cloudflare R2</div>
-            <div className="text-xs text-zinc-500">Шаг {wizardStep} из 3</div></div>
-          </div>
-          <button onClick={() => setWizardStep(0)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">×</button>
-        </div>
-        <div className="p-6">
-        {wizardStep === 1 && (
-        <div className="space-y-4">
-          <p className="text-sm text-zinc-700 dark:text-zinc-300">Вариант B (выбран): Cloudflare → <b>Manage Account → Account API Tokens → Create Token</b>. Права: <b>Account: Read</b>, <b>Workers R2 Storage: Read</b>, и <b>Account API Tokens: Edit</b> — если хотите, чтобы ключи создались автоматически. Скопируйте значение токена и Account ID (R2 → Account Details), затем нажмите «Ключи готовы». (Вариант A — My Profile → API Tokens, тогда Account ID не нужен.)</p>
-          <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="block w-full text-center py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-900 text-sm font-bold">☁️ Открыть Cloudflare → создать токен</a>
-          <button onClick={() => setWizardStep(2)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">Ключи готовы →</button>
-          <p className="text-xs text-zinc-500">Уже подключали ранее? Нажмите «Ключи готовы» и просто повторно вставьте значения.</p>
-        </div>
-        )}
-        {wizardStep === 2 && (
-        <div className="space-y-3">
-          <div><label className="text-xs font-bold text-zinc-500">Access Key ID</label>
-          <input value={s3Form.accessKeyId} onChange={(e) => setS3Form(p => ({ ...p, accessKeyId: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500" placeholder="вставьте из Cloudflare" /></div>
-          <div><label className="text-xs font-bold text-zinc-500">Secret Access Key</label>
-          <input autoComplete="new-password" type="password" value={(s3Form.secretAccessKey || '') === '********' ? '' : s3Form.secretAccessKey} onChange={(e) => setS3Form(p => ({ ...p, secretAccessKey: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500" placeholder="показывался один раз — вставьте заново" /></div>
-          <div><label className="text-xs font-bold text-zinc-500">Endpoint URL (обязательно; Default/EU/US — см. подсказку ниже)</label>
-          <input value={s3Form.endpoint} onChange={(e) => setS3Form(p => ({ ...p, endpoint: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 font-mono" placeholder="https://<AccountID>.r2.cloudflarestorage.com" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs font-bold text-zinc-500">Бакет</label>
-          <input value={s3Form.bucket} onChange={(e) => setS3Form(p => ({ ...p, bucket: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none focus:border-indigo-500" placeholder="anotee" /></div>
-          <div><label className="text-xs font-bold text-zinc-500">Регион</label>
-          <select value={s3Form.region} onChange={(e) => setS3Form(p => ({ ...p, region: e.target.value }))} className="w-full mt-1 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white outline-none"><option value="auto">Auto</option><option value="eu">EU</option><option value="us">US</option></select></div>
-          </div>
-          {!(s3Form.bucket && s3Form.endpoint) && (<p className="text-xs text-amber-600 dark:text-amber-400">Заполните Endpoint URL и Бакет — без них сохранить нельзя.</p>)}
-          <p className="text-xs text-zinc-500">Endpoint подставьте по формату: <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code> (EU — добавить <code>.eu</code>).</p>
-          <button onClick={() => setWizardStep(3)} disabled={!(s3Form.accessKeyId && s3Form.secretAccessKey && s3Form.secretAccessKey !== '********' && s3Form.bucket && s3Form.endpoint)} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-bold">Подключить и проверить →</button>
-        </div>
-        )}
-        {wizardStep === 3 && (
-        <div className="space-y-2">
-        {['Проверка ключей', 'Бакет найден', 'CORS настроен', 'Тестовая загрузка', 'Сохранение конфига'].map((label, idx) => (
-          <div key={idx} className="flex items-center gap-3 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm">
-          <span className={'w-2.5 h-2.5 rounded-full ' + (wizChecks[idx] ? 'bg-green-500' : 'bg-yellow-400 animate-pulse')} />
-          <span className={wizChecks[idx] ? 'text-zinc-700 dark:text-zinc-200' : 'text-zinc-500'}>{label}</span>
-          </div>
-        ))}
-        <button onClick={async () => { setWizChecks([true, false, false, false, false]); try { await handleSaveAndActivate(); } catch { return; } setWizChecks([true, true, false, false, false]); try { await handleTestConnection(); setWizChecks([true, true, true, true, true]); let corsOk = false; try { corsOk = await handleAutoCors(); } catch { corsOk = false; } if (corsOk) { toast('Хранилище подключено и проверено', 'success'); } else { toast('Хранилище сохранено, но CORS не настроен: у токена нет права на CORS. Настройте вручную в Cloudflare (R2 -> Settings -> CORS Policy) или создайте токен с правами Admin Read & Write.', 'warning'); } setTimeout(() => setWizardStep(0), 1200); } catch { setWizChecks([true, true, true, false, false]); } }} className="w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold">🚀 Запустить автонастройку</button>
-        <p className="text-xs text-zinc-500">Если какой-то шаг не пройдёт — увидите точную причину. Кнопку можно нажать повторно.</p>
-        </div>
-        )}
-        </div>
-      </div></div>
-)}
 {/* HELP MODALS (Unchanged logic, just ensure render) */}
             {showProviderHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
                         <button onClick={() => setShowProviderHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
                         <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">{currentProviderGuide.title}</h2>
-                        <details className="mb-4 border border-zinc-200 dark:border-zinc-800 rounded-lg">
-          <summary className="text-xs font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer px-3 py-2">Cloudflare R2 — инструкция по получению ключей доступа</summary>
-          <div className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1.5">
-            <p>1. Cloudflare Dashboard → раздел <b>R2</b> → «Manage R2 API Tokens» → «Create API token» → права <b>Object Read & Write</b> → выбрать бакет (или все). Это R2-токен; общие Account/User API Tokens не подходят.</p>
-            <p>2. Скопируйте <b>значение токена</b> (Token value). Account API Token начинается с <code>cfat_</code> — для него дополнительно укажите <b>Account ID</b> (R2 → Account Details). User API Token — Account ID не нужен.</p>
-            <p>3. <b>Endpoint</b> подставляется автоматически: Default → <code>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</code>; EU → <code>.eu</code>; US → <code>.us</code>. Region — <code>auto</code>. Вручную менять не нужно.</p>
-            <p>4. Бакет выбирается из списка (или создаётся кнопкой «＋ Создать бакет … в один клик»). Затем «Проверить» — проверит доступ и настроит CORS.</p>
-            <p>5. Если прав на создание токенов у Cloudflare-токена нет — создайте R2-ключ вручную: R2 → Manage API Tokens → Create API token → <b>Object Read &amp; Write</b> → скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b> в поля ниже.</p>
-          </div>
-        </details>
+                        <div className="mb-4 flex flex-col gap-2">
+                            <a href={PROVIDER_GUIDES[selectedTab]?.link || 'https://developers.cloudflare.com/r2/'} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 px-3 py-2 text-xs hover:bg-zinc-200 dark:hover:bg-zinc-800">
+                                <span>{PROVIDER_GUIDES[selectedTab]?.linkText || 'Открыть раздел провайдера'}<span className="block text-[10px] text-zinc-500">Откроется нужная страница в новой вкладке</span></span>
+                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
+                            </a>
+                        </div>
                         {currentProviderGuide.warning && (
                             <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
                                 <AlertTriangle size={16} className="shrink-0 mt-0.5" />
