@@ -102,49 +102,52 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right Side */}
             <div className="flex items-center gap-3 md:gap-5">
                 
-                {/* Unified User Controls (Desktop Only) */}
+                {/* Unified User Controls (Desktop Only) — T-209: один компактный блок вместо двух аватаров */}
                 {currentUser && (
-                    <div className="hidden md:flex items-center gap-2 pl-2">
-                        {/* Settings Link */}
-                        <a 
-                            id="tour-profile-btn"
-                            href="/profile"
-                            onClick={(e) => { e.preventDefault(); onNavigate('PROFILE'); }}
-                            className={`p-2 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                            title="Subscription & Settings"
-                        >
-                            <Settings size={20} />
-                        </a>
+                    <div className="hidden md:flex items-center">
+                        <div className="flex items-center gap-0.5 bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-1 pr-1 py-1 transition-colors">
 
-                        {/* Combined Identity Block */}
-                        <div className="flex items-center bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-full pl-1 pr-1 py-1 transition-all">
-                            {!hideNav && (
-                                <div className="hidden md:block scale-90 origin-right mr-2">
-                                    <OrganizationSwitcher 
-                                        hidePersonal={false}
-                                        afterCreateOrganizationUrl="#"
-                                        appearance={{
-                                            elements: {
-                                                rootBox: "flex items-center",
-                                                organizationSwitcherTrigger: "flex items-center gap-2 px-2 py-1 rounded-lg hover:text-white transition-colors text-xs font-medium text-zinc-300 bg-transparent focus:shadow-none",
-                                                organizationPreviewTextContainer: "hidden lg:block max-w-[100px] truncate",
-                                                organizationPreviewAvatarContainer: "shrink-0",
-                                                userPreviewMainIdentifier: "text-white",
-                                                userPreviewSecondaryIdentifier: "text-zinc-400"
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            )}
-                            <UserButton 
-                                afterSignOutUrl="/"
-                                userProfileMode="modal"
-                                appearance={{
-                                    elements: {
-                                        avatarBox: "w-8 h-8 rounded-full border-2 border-zinc-900 hover:border-indigo-500 transition-colors"
-                                    }
-                                }}
-                            />
+                            {/* Settings (подписка и настройки) */}
+                            <a
+                                id="tour-profile-btn"
+                                href="/profile"
+                                onClick={(e) => { e.preventDefault(); onNavigate('PROFILE'); }}
+                                className={`p-1.5 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'}`}
+                                title="Subscription & Settings"
+                            >
+                                <Settings size={18} />
+                            </a>
+
+                            {/* Аккаунт: организация (текст, без второго аватара) + меню пользователя */}
+                            <div className="flex items-center">
+                                {!hideNav && (
+                                    <div className="hidden md:block">
+                                        <OrganizationSwitcher
+                                            hidePersonal={false}
+                                            afterCreateOrganizationUrl="#"
+                                            appearance={{
+                                                elements: {
+                                                    rootBox: "flex items-center",
+                                                    organizationSwitcherTrigger: "flex items-center px-1.5 py-1 rounded-lg hover:text-white transition-colors text-[11px] font-medium text-zinc-300 bg-transparent focus:shadow-none",
+                                                    organizationPreviewAvatarContainer: "hidden",
+                                                    organizationPreviewTextContainer: "block max-w-[90px] truncate",
+                                                    userPreviewMainIdentifier: "text-white",
+                                                    userPreviewSecondaryIdentifier: "text-zinc-400"
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                                <UserButton
+                                    afterSignOutUrl="/"
+                                    userProfileMode="modal"
+                                    appearance={{
+                                        elements: {
+                                            avatarBox: "w-7 h-7 rounded-full border border-zinc-900 hover:border-indigo-500 transition-colors"
+                                        }
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
