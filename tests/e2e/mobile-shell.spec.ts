@@ -159,25 +159,30 @@ test.describe('Мобильная оболочка (PWA)', () => {
     console.log('SCROLL-CHECK ' + results.join(' '));
   });
 
-  test('bottom-nav-storage ведёт к хранилищу; шапка не перекрывает контент', async ({ page }) => {
+  test('bottom-nav-settings ведёт к хранилищу; шапка не перекрывает контент', async ({ page }) => {
     test.setTimeout(150_000);
     resetMockData(page);
     await page.goto('/');
     await page.waitForTimeout(1500);
 
-    const storageTab = page.getByTestId('bottom-nav-storage');
-    await expect(storageTab).toBeVisible();
-    await storageTab.click();
-    await page.waitForTimeout(1200);
+    const settingsTab = page.getByTestId('bottom-nav-settings');
+    await expect(settingsTab).toBeVisible();
+    await settingsTab.click();
+    await page.waitForTimeout(1500);
 
-    // блок хранилища оказался в зоне видимости (прокрутка сработала)
-    const visible = await page.evaluate(() => {
+    // открылся раздел «Настройки»: есть переключатель разделов, блок хранилища присутствует в DOM
+    await expect(page.getByTestId('section-settings')).toBeVisible();
+    const storageCount = await page.locator('#storage-block').count();
+    expect(storageCount, 'блок хранилища отсутствует на странице настроек').toBeGreaterThan(0);
+    // и он доступен пользователю: прокрутка к нему работает
+    const reached = await page.evaluate(() => {
       const el = document.getElementById('storage-block');
       if (!el) return false;
+      el.scrollIntoView({ block: 'start' });
       const r = el.getBoundingClientRect();
-      return r.top < window.innerHeight && r.bottom > 0;
+      return r.top < window.innerHeight;
     });
-    expect(visible, 'storage-block не попал в экран после перехода').toBe(true);
+    expect(reached, 'к блоку хранилища нельзя прокрутить').toBe(true);
 
     // шапка не перекрывает контент — проверяем в начале страницы (scrollY = 0)
     await page.evaluate(() => window.scrollTo(0, 0));

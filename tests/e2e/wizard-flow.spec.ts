@@ -25,6 +25,36 @@ test('хранилище: без мастера, есть подключение
   await expect(page.getByText(/Скопировать Account ID/i)).toBeVisible();
 });
 
+test('разделы «Профиль» и «Настройки» переключаются на странице настроек', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetMockData(page);
+  await page.goto('/profile');
+  await page.waitForTimeout(1200);
+  const settingsTab = page.getByTestId('section-settings');
+  await expect(settingsTab).toBeVisible();
+  await settingsTab.click();
+  await page.waitForTimeout(600);
+  // раздел «Настройки» прокручивает к блоку хранилища
+  const storageVisible = await page.evaluate(() => {
+    const el = document.getElementById('storage-block');
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.top < window.innerHeight && r.bottom > 0;
+  });
+  expect(storageVisible, 'storage-block не виден после переключения на «Настройки»').toBe(true);
+
+  // «Профиль» прокручивает к карточке аккаунта
+  await page.getByTestId('section-profile').click();
+  await page.waitForTimeout(600);
+  const profileVisible = await page.evaluate(() => {
+    const el = document.getElementById('profile-block');
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.top < window.innerHeight && r.bottom > 0;
+  });
+  expect(profileVisible, 'profile-block не виден после переключения на «Профиль»').toBe(true);
+});
+
 test('хранилище: у провайдеров есть свои ссылки-инструкции', async ({ page }) => {
   test.setTimeout(120_000);
   resetMockData(page);

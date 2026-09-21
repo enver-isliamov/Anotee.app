@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppHeader } from './AppHeader';
-import { LayoutGrid, CreditCard, Settings, HardDrive } from 'lucide-react';
+import { LayoutGrid, CreditCard, Settings } from 'lucide-react';
 import { User } from '../types';
 import { useLanguage } from '../services/i18n';
 
@@ -77,12 +77,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
                     { id: 'DASHBOARD', label: t('nav.projects') || 'Проекты', icon: LayoutGrid },
                     { id: 'PRICING', label: t('nav.pricing') || 'Тарифы', icon: CreditCard },
                     { id: 'PROFILE', label: t('nav.settings') || 'Настройки', icon: Settings },
-                    { id: 'STORAGE', label: t('nav.storage') || 'Хранилище', icon: HardDrive }
+                    { id: 'SETTINGS', label: t('nav.settings') || 'Настройки', icon: Settings }
                 ].map((item) => {
                     const ItemIcon = item.icon as any;
                     const active = currentView === item.id;
                     return (
-                        <button key={item.id} onClick={() => { if (item.id === 'STORAGE') { onNavigate('PROFILE'); setTimeout(() => document.getElementById('storage-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350); } else { onNavigate(item.id); } }} data-testid={'bottom-nav-' + item.id.toLowerCase()} className={'flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] font-bold transition-colors ' + (active ? 'text-indigo-500' : 'text-zinc-500 hover:text-zinc-300')}>
+                        <button key={item.id} onClick={() => { onNavigate(item.id); }} data-testid={'bottom-nav-' + item.id.toLowerCase()} className={'flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] font-bold transition-colors ' + (active ? 'text-indigo-500' : 'text-zinc-500 hover:text-zinc-300')}>
                             <ItemIcon size={18} />
                             {item.label}
                         </button>
