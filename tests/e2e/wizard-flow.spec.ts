@@ -12,8 +12,8 @@ test('хранилище: без мастера, есть подключение
   await page.waitForTimeout(1000);
 
   // T-169: хранилище живёт в разделе «Настройки»
-  await page.getByTestId('section-settings').click().catch(() => {});
-  await page.waitForTimeout(600);
+  await page.goto('/settings');
+  await page.waitForTimeout(1200);
 
   // мастера больше нет
   await expect(page.getByTestId('wizard-open')).toHaveCount(0);
@@ -29,27 +29,33 @@ test('хранилище: без мастера, есть подключение
   await expect(page.getByText(/Скопировать Account ID/i)).toBeVisible();
 });
 
-test('разделы «Профиль» и «Настройки» переключаются на странице настроек', async ({ page }) => {
+test('«Профиль» и «Настройки» — разные страницы, а не вкладки', async ({ page }) => {
   test.setTimeout(120_000);
   resetMockData(page);
+
+  // страница профиля: аккаунт и подписка, хранилища нет; переключателя вкладок нет
   await page.goto('/profile');
   await page.waitForTimeout(1200);
-  const settingsTab = page.getByTestId('section-settings');
-  await expect(settingsTab).toBeVisible();
-  await settingsTab.click();
-  await page.waitForTimeout(600);
-  // раздел «Настройки»: хранилище видимо, профиль скрыт
-  await expect(page.locator('#storage-block')).toBeVisible();
-  await expect(page.locator('#profile-block')).toBeHidden();
-  await expect(page.getByTestId('subscription-block')).toBeHidden(); // подписка — часть профиля
-
-  // «Профиль» прокручивает к карточке аккаунта
-  await page.getByTestId('section-profile').click();
-  await page.waitForTimeout(600);
-  // раздел «Профиль»: аккаунт виден, хранилище скрыто
+  expect(await page.evaluate(() => location.pathname)).toBe('/profile');
   await expect(page.locator('#profile-block')).toBeVisible();
   await expect(page.getByTestId('subscription-block')).toBeVisible();
   await expect(page.locator('#storage-block')).toBeHidden();
+  await expect(page.getByTestId('section-settings')).toHaveCount(0);
+  await expect(page.getByTestId('section-profile')).toHaveCount(0);
+
+  // кросс-ссылка ведёт на отдельную страницу настроек
+  await page.getByTestId('profile-cross-nav').click();
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => location.pathname), 'кросс-ссылка не привела на /settings').toBe('/settings');
+  await expect(page.locator('#storage-block')).toBeVisible();
+  await expect(page.locator('#profile-block')).toBeHidden();
+  await expect(page.getByTestId('subscription-block')).toBeHidden();
+
+  // и обратно — на страницу профиля
+  await page.getByTestId('profile-cross-nav').click();
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => location.pathname)).toBe('/profile');
+  await expect(page.locator('#profile-block')).toBeVisible();
 });
 
 test('хранилище: у провайдеров есть свои ссылки-инструкции', async ({ page }) => {
@@ -58,8 +64,8 @@ test('хранилище: у провайдеров есть свои ссылк
   await page.goto('/profile');
   await page.waitForTimeout(1200);
   // T-169: ссылки-инструкции живут в разделе «Настройки»
-  await page.getByTestId('section-settings').click().catch(() => {});
-  await page.waitForTimeout(600);
+  await page.goto('/settings');
+  await page.waitForTimeout(1200);
 
   for (const pid of ['yandex', 'cloudflare', 'selectel']) {
     const card = page.getByTestId('provider-card-' + pid);

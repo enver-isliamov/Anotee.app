@@ -116,13 +116,8 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
 
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout, initialSection = 'profile' }) => {
   const { t } = useLanguage();
-  // T-164: разделы страницы — «Профиль» (аккаунт, организация, план) и «Настройки» (хранилище, сервис)
-  const [section, setSection] = useState<'profile' | 'settings'>(initialSection);
-  const goSection = (next: 'profile' | 'settings') => {
-    setSection(next);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  useEffect(() => { goSection(initialSection); /* точка входа из навигации */ }, [initialSection]);
+  // T-212: «Профиль» и «Настройки» — РАЗНЫЕ страницы (/profile и /settings), а не вкладки.
+  const section: 'profile' | 'settings' = initialSection;
   const { getToken } = useAuth();
   const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
   const { user } = useUser();
@@ -165,7 +160,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
     const [showCfProbe, setShowCfProbe] = useState(false);
     const [cfToken, setCfToken] = useState('');
     const [cfBusy, setCfBusy] = useState(false);
-    const [cfData, setCfData] = useState<{ accountId: string; accountName?: string | null; buckets: string[]; endpoints: { default: string; eu: string; us: string } } | null>(null);
+    // T-179: ошибка автосоздания ключа (с подсказкой и ссылкой на ручной путь)
+  const [cfKeyError, setCfKeyError] = useState<null | { error: string; hint?: string; manualUrl?: string; cfCode?: number | null }>(null);
+  const [cfData, setCfData] = useState<{ canCreateKeys?: boolean; accountId: string; accountName?: string | null; buckets: string[]; endpoints: { default: string; eu: string; us: string } } | null>(null);
     const [cfAccountId, setCfAccountId] = useState(''); // T-117: для Account API Token (cfat_…)
 
   const saveStoragePrefs = async (activeProvider: string, disabled: string[], auditAction: string) => {
@@ -363,7 +360,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             if (res.ok && data.success) {
                 setS3Form((pr: any) => ({ ...pr, accessKeyId: data.accessKeyId, secretAccessKey: data.secretAccessKey, provider: 'cloudflare', region: 'auto' }));
                 toast('Ключи доступа созданы и подставлены. Нажмите «Сохранить и активировать»', 'success');
-            } else { toast(data.error || 'Не удалось создать ключи', 'error'); }
+            } else {
+                setCfKeyError({ error: data.error || 'Не удалось создать ключи', hint: data.hint, manualUrl: data.manualUrl, cfCode: data.cfCode ?? null });
+                toast(data.error || 'Не удалось создать ключи', 'error');
+            }
         } catch (e: any) { toast(e?.message || 'Сбой сети'); } finally { setCfBusy(false); }
     };
 
@@ -376,9 +376,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             const res = await fetch('/api/storage?action=cf_probe', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ apiToken: cfToken.trim(), accountId: cfAccountId.trim() || undefined }) });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
-                setCfData({ accountId: data.accountId, accountName: data.accountName, buckets: data.buckets || [], endpoints: data.endpoints });
+                setCfData({ accountId: data.accountId, accountName: data.accountName, buckets: data.buckets || [], endpoints: data.endpoints, canCreateKeys: data.canCreateKeys !== false });
+                setCfKeyError(null);
                 setS3Form((pr: any) => ({ ...pr, provider: 'cloudflare', endpoint: data.endpoints.default, region: 'auto', bucket: (data.buckets && data.buckets[0]) || pr.bucket }));
-                toast('Account ID и Endpoint подставлены. ' + (data.buckets && data.buckets.length ? 'Выберите бакет из списка.' : 'Введите имя бакета вручную.'));
+                toast('Account ID и Endpoint подставлены. ' + (data.buckets && data.buckets.length ? 'Выберите бакет из списка.' : 'Введите имя бакета вручную.') + (data.canCreateKeys === false ? ' Автосоздание ключа недоступно — создайте R2-ключ вручную.' : ''));
             } else {
                 toast(data.error || 'Не удалось проверить токен', 'error');
             }
@@ -402,6 +403,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           return;
       }
 
+      // T-179: не отправляем конфиг без Access Key ID — иначе сервер отвечает 400 «Missing required fields: accessKeyId»
+      if (selectedTab === 'cloudflare' && !String(s3Form.accessKeyId || '').trim()) {
+          toast('Сначала создайте R2-ключ (кнопка «Создать R2-ключ» или вручную) — поле Access Key ID пустое', 'error');
+          return;
+      }
       setIsSavingS3(true);
       try {
           const token = await getToken();
@@ -630,10 +636,15 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
-            {/* T-164: разделы страницы — «Профиль» (аккаунт) и «Настройки» (хранилище, сервис) */}
-            <div className="flex items-center gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800 w-full max-w-sm">
-                <button data-testid="section-profile" onClick={() => goSection('profile')} className={'flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-colors ' + (section === 'profile' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200')}>Профиль</button>
-                <button data-testid="section-settings" onClick={() => goSection('settings')} className={'flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-colors ' + (section === 'settings' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200')}>Настройки</button>
+            {/* T-212: «Профиль» и «Настройки» — разные страницы (/profile и /settings), переключателя вкладок нет */}
+            <div className="flex justify-end">
+                <button
+                    onClick={() => onNavigate && onNavigate(section === 'profile' ? 'SETTINGS' : 'PROFILE')}
+                    data-testid="profile-cross-nav"
+                    className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                    {section === 'profile' ? 'Настройки хранилища →' : '← Профиль'}
+                </button>
             </div>
 
             {/* T-164: карточка аккаунта (личные данные, организация, план) */}
@@ -1169,6 +1180,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     )}
                                     <button onClick={handleCfCreateKey} disabled={cfBusy} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50">🔑 Создать ключи доступа автоматически</button>
                                 </div>
+                                {cfData.canCreateKeys === false && (
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-[11px] text-amber-700 dark:text-amber-200" data-testid="cf-no-createkeys">
+                                        У токена нет права «Account API Tokens: Edit» — автосоздание ключа недоступно. Создайте R2 API-токен вручную: R2 → Manage API Tokens → Create API token (права Object Read & Write) и вставьте Access Key ID и Secret ниже.
+                                    </div>
+                                )}
+                                {cfKeyError && (
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-[11px] text-red-700 dark:text-red-200 space-y-1" data-testid="cf-key-error">
+                                        <div>{cfKeyError.error}{cfKeyError.cfCode ? ' (код Cloudflare: ' + cfKeyError.cfCode + ')' : ''}</div>
+                                        {cfKeyError.hint && <div className="text-zinc-500 dark:text-zinc-400">{cfKeyError.hint}</div>}
+                                        {cfKeyError.manualUrl && <a href={cfKeyError.manualUrl} target="_blank" rel="noreferrer" className="underline">Открыть R2 → Manage API Tokens</a>}
+                                    </div>
+                                )}
                                 <div className="text-[10px] text-zinc-500">Если у токена есть право «R2 Admin», можно создать R2-ключ на dash.cloudflare.com → R2 → Manage API Tokens и вставить Access/Secret ниже.</div>
                             </div>
                         )}

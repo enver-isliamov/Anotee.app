@@ -188,8 +188,9 @@ test.describe('T-18: закрываемость меню и модалок', () 
     await page.getByTestId('mobile-more-viewmode').click();
     await expect(page.getByText('Split (Compare)')).toBeVisible();
 
-    // Тап по backdrop (вне меню и вне FloatingControls) закрывает
-    await page.getByTestId('mobile-view-menu-backdrop').click();
+    // Тап по backdrop (вне меню и вне FloatingControls) закрывает.
+    // T-204: кликаем в верхней зоне — поле комментария теперь под таймлайном (T-190) и лежит по центру.
+    await page.getByTestId('mobile-view-menu-backdrop').click({ position: { x: 370, y: 700 } });
     await expect(page.getByText('Split (Compare)')).toBeHidden();
   });
 

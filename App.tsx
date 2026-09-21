@@ -331,6 +331,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             setView({ type: 'WORKFLOW' });
         } else if (path === '/ai') {
             setView({ type: 'AI_FEATURES' });
+        } else if (path === '/settings') {
+            setView({ type: 'SETTINGS' });
         } else if (path === '/profile') {
             setView({ type: 'PROFILE' });
         } else if (path === '/demo') {

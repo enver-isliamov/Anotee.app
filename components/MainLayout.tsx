@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppHeader } from './AppHeader';
-import { LayoutGrid, CreditCard, Settings, Sparkles, Workflow, Info, UserRound } from 'lucide-react';
+import { LayoutGrid, CreditCard, Settings, Sparkles, Workflow, Info, UserRound, PlayCircle } from 'lucide-react';
 import { User } from '../types';
 import { useLanguage } from '../services/i18n';
 
@@ -34,13 +34,35 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
             </div>
             
             <footer className="mt-16 py-8 border-t border-zinc-200 dark:border-zinc-800">
-                <div className="grid md:grid-cols-3 gap-8 text-center md:text-left">
+                <div className="grid md:grid-cols-4 gap-8 text-center md:text-left">
                     {/* Brand */}
                     <div className="flex flex-col gap-2">
                         <div className="font-bold text-zinc-900 dark:text-white">Anotee</div>
                         <div className="text-xs text-zinc-500 dark:text-zinc-600">
                             &copy; {new Date().getFullYear()} {t('footer.rights')}
                         </div>
+                    </div>
+
+                    {/* T-197: разделы — гостю и авторизованному доступны все публичные страницы */}
+                    <div className="flex flex-col gap-2 text-xs">
+                        <div className="font-bold text-zinc-700 dark:text-zinc-400">Разделы</div>
+                        {[
+                            { id: 'AI_FEATURES', label: t('nav.features') },
+                            { id: 'WORKFLOW', label: t('nav.how') },
+                            { id: 'LIVE_DEMO', label: t('nav.demo') },
+                            { id: 'PRICING', label: t('nav.pricing') },
+                            { id: 'ABOUT', label: t('nav.about') },
+                            { id: 'ROADMAP', label: t('nav.roadmap') }
+                        ].map((item) => (
+                            <button
+                                key={item.id}
+                                data-testid={'footer-nav-' + item.id.toLowerCase()}
+                                onClick={() => onNavigate(item.id)}
+                                className="text-zinc-600 dark:text-zinc-400 hover:text-indigo-500 transition-colors text-left md:text-left"
+                            >
+                                {item.label}
+                            </button>
+                        ))}
                     </div>
 
                     {/* Links */}
@@ -75,15 +97,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
             <nav data-testid="bottom-nav" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border-t border-zinc-200 dark:border-zinc-800 flex items-stretch justify-around safe-bottom">
                 {(currentUser
                     ? [
+                        // T-194: рабочее меню ревью-сервиса — без «Цен» (тариф живёт в «Профиле»)
                         { id: 'DASHBOARD', label: t('nav.projects') || 'Проекты', icon: LayoutGrid },
-                        { id: 'PRICING', label: t('nav.pricing') || 'Тарифы', icon: CreditCard },
+                        { id: 'AI_FEATURES', label: t('nav.assistant') || 'Возможности', icon: Sparkles },
                         { id: 'SETTINGS', label: t('nav.settings') || 'Настройки', icon: Settings },
                         { id: 'PROFILE', label: t('nav.profile') || 'Профиль', icon: UserRound }
                       ]
                     : [
-                        // T-170: гостям — все доступные публичные страницы
+                        // T-194: гостю — все разделы, которые открыты без входа
                         { id: 'AI_FEATURES', label: t('nav.features') || 'Возможности', icon: Sparkles },
                         { id: 'WORKFLOW', label: t('nav.how') || 'Как это работает', icon: Workflow },
+                        { id: 'LIVE_DEMO', label: t('nav.demo') || 'Демо', icon: PlayCircle },
                         { id: 'PRICING', label: t('nav.pricing') || 'Цены', icon: CreditCard },
                         { id: 'ABOUT', label: t('nav.about') || 'О нас', icon: Info }
                       ]

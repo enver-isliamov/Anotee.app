@@ -6,9 +6,8 @@ test.describe('Граничные случаи', () => {
   test('пустая форма хранилища: сохранение не роняет страницу и сообщает о проблеме', async ({ page }) => {
     test.setTimeout(120_000);
     resetMockData(page);
-    await page.goto('/profile');
-    await page.getByTestId('section-settings').click().catch(() => {});
-    await page.waitForTimeout(600);
+    await page.goto('/settings');
+    await page.waitForTimeout(1200);
 
     await page.waitForTimeout(1500);
 
@@ -26,9 +25,8 @@ test.describe('Граничные случаи', () => {
   test('Cloudflare-модалка: короткий токен отклоняется понятным сообщением', async ({ page }) => {
     test.setTimeout(120_000);
     resetMockData(page);
-    await page.goto('/profile');
-    await page.getByTestId('section-settings').click().catch(() => {});
-    await page.waitForTimeout(600);
+    await page.goto('/settings');
+    await page.waitForTimeout(1200);
 
     await page.waitForTimeout(1200);
 
@@ -49,9 +47,8 @@ test.describe('Граничные случаи', () => {
   test('Cloudflare-модалка: закрывается и не оставляет состояния', async ({ page }) => {
     test.setTimeout(120_000);
     resetMockData(page);
-    await page.goto('/profile');
-    await page.getByTestId('section-settings').click().catch(() => {});
-    await page.waitForTimeout(600);
+    await page.goto('/settings');
+    await page.waitForTimeout(1200);
 
     await page.waitForTimeout(1200);
 

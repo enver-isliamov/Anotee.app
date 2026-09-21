@@ -282,13 +282,16 @@ const FloatingControls = React.memo(({
     // Clamp initial position to be safe
     const getSafePos = (p: {x: number, y: number}) => {
         const padding = 16;
+        // T-207: панель не должна перекрывать шапку плеера (safe-area + строка управления) —
+        // иначе она закрывает кнопки шапки и мешает тапам.
+        const header = 72;
         const width = 300; // Approx width
         const height = 60; // Approx height
         const maxX = window.innerWidth - width - padding;
         const maxY = window.innerHeight - height - padding;
         return {
             x: Math.min(Math.max(padding, p.x), maxX), // Clamp X (left to right)
-            y: Math.min(Math.max(padding, p.y), maxY)  // Clamp Y (top to bottom)
+            y: Math.min(Math.max(header, p.y), maxY)   // Clamp Y (под шапкой, до низа)
         };
     };
 
@@ -1442,9 +1445,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       {/* Body */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
-        <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
+        <div ref={playerContainerRef} className={`flex-1 min-h-0 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           {/* ... Video container ... */}
-          <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
+          <div className="flex-1 min-h-0 relative w-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
 {isTranscribing && (<div data-testid="transcribe-pill" className="absolute top-2 left-2 z-40 flex items-center gap-1.5 bg-indigo-600/80 backdrop-blur-sm rounded-full px-2.5 py-1 pointer-events-none"><Wand2 size={12} className="text-white animate-pulse" /><span className="text-[10px] font-bold text-white whitespace-nowrap">{t('player.transcribe.pill')} {transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span></div>)}
              
       {selRange !== null && sheetOpen && transcript && transcript[selRange.start] && (
@@ -1708,6 +1711,28 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: (c as any).editKind === 'delete' ? '#ef4444' : (c.status === 'resolved' ? '#22c55e' : cl) }} />); })}
              </div>
           </div>
+        {!isFullscreen && sidebarTab === 'comments' && (
+            <div className="w-full shrink-0 lg:fixed lg:bottom-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] transition-[bottom] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]" style={{ bottom: kbLift ? `${kbLift}px` : undefined }}>
+                {(markerInPoint !== null || markerOutPoint !== null) ? (
+                    <div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>
+                ) : (
+                    <div className="flex items-center gap-2 mb-2 px-1" data-testid="comment-context">
+                        <div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20">
+                            <MapPin size={9} />
+                            <span>{t('player.comment.context')} {formatTimecode(currentTime, videoFps)}</span>
+                        </div>
+                    </div>
+                )}
+                <div className="flex gap-2 items-start" id="tour-comment-input">
+                    <div className="relative flex-1">
+                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => handleCommentTextChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
+                        <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>
+                    </div>
+                    <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-3 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={16} /></button>
+                </div>
+            </div>
+        )}
+
         </div>
 
         {!isFullscreen && (
@@ -1729,27 +1754,6 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             </FeatureErrorBoundary>
         )}
 
-        {!isFullscreen && sidebarTab === 'comments' && (
-            <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] transition-[bottom] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]" style={{ bottom: kbLift ? `${kbLift}px` : undefined }}>
-                {(markerInPoint !== null || markerOutPoint !== null) ? (
-                    <div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>
-                ) : (
-                    <div className="flex items-center gap-2 mb-2 px-1" data-testid="comment-context">
-                        <div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20">
-                            <MapPin size={9} />
-                            <span>{t('player.comment.context')} {formatTimecode(currentTime, videoFps)}</span>
-                        </div>
-                    </div>
-                )}
-                <div className="flex gap-2 items-start" id="tour-comment-input">
-                    <div className="relative flex-1">
-                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => handleCommentTextChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
-                        <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>
-                    </div>
-                    <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-3 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={16} /></button>
-                </div>
-            </div>
-        )}
       </div>
 
       <FloatingControls 

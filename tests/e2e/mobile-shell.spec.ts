@@ -17,7 +17,7 @@ test.describe('Мобильная оболочка (PWA)', () => {
     // «Диагностика» в пользовательской навигации быть не должно
     await expect(nav.getByText('Диагностика')).toHaveCount(0);
 
-    const tabs = ['bottom-nav-dashboard', 'bottom-nav-pricing', 'bottom-nav-profile'];
+    const tabs = ['bottom-nav-dashboard', 'bottom-nav-ai_features', 'bottom-nav-profile'];
     for (const t of tabs) {
       const btn = page.getByTestId(t);
       if (await btn.count()) {
@@ -44,8 +44,8 @@ test.describe('Мобильная оболочка (PWA)', () => {
     if (await profileBtn.count()) { await profileBtn.first().click(); } else { await page.goto('/profile'); }
     await page.waitForTimeout(1000);
 
-    await page.getByTestId('section-settings').click().catch(() => {});
-    await page.waitForTimeout(600);
+    await page.goto('/settings');
+    await page.waitForTimeout(1200);
 
     const openBtn = page.getByTestId('cf-token-open');
     await expect(openBtn).toBeVisible();
@@ -174,7 +174,9 @@ test.describe('Мобильная оболочка (PWA)', () => {
     await page.waitForTimeout(1500);
 
     // открылся раздел «Настройки»: блок хранилища ВИДИМ, профильные блоки скрыты
-    await expect(page.getByTestId('section-settings')).toBeVisible();
+    // T-212: «Настройки» — отдельная страница, вкладок больше нет
+    await expect(page.getByTestId('section-settings')).toHaveCount(0);
+    expect(await page.evaluate(() => location.pathname), 'не открылась страница /settings').toBe('/settings');
     await expect(page.locator('#storage-block')).toBeVisible();
     await expect(page.locator('#profile-block')).toBeHidden();
     // и он доступен пользователю: прокрутка к нему работает
