@@ -16,6 +16,7 @@ interface ProfileProps {
   currentUser: User;
   onLogout: () => void;
   onNavigate?: (page: string) => void;
+  initialSection?: 'profile' | 'settings';
 }
 
 // Added 'google' to generic type for UI handling
@@ -113,8 +114,16 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     }
 };
 
-export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout }) => {
+export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout, initialSection = 'profile' }) => {
   const { t } = useLanguage();
+  // T-164: разделы страницы — «Профиль» (аккаунт, организация, план) и «Настройки» (хранилище, сервис)
+  const [section, setSection] = useState<'profile' | 'settings'>(initialSection);
+  const goSection = (next: 'profile' | 'settings') => {
+    setSection(next);
+    const id = next === 'settings' ? 'storage-block' : 'profile-block';
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
+  useEffect(() => { goSection(initialSection); /* точка входа из навигации */ }, [initialSection]);
   const { getToken } = useAuth();
   const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
   const { user } = useUser();
@@ -622,6 +631,37 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
+            {/* T-164: разделы страницы — «Профиль» (аккаунт) и «Настройки» (хранилище, сервис) */}
+            <div className="flex items-center gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800 w-full max-w-sm">
+                <button data-testid="section-profile" onClick={() => goSection('profile')} className={'flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-colors ' + (section === 'profile' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200')}>Профиль</button>
+                <button data-testid="section-settings" onClick={() => goSection('settings')} className={'flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-colors ' + (section === 'settings' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200')}>Настройки</button>
+            </div>
+
+            {/* T-164: карточка аккаунта (личные данные, организация, план) */}
+            <div id="profile-block" className="scroll-mt-24 bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center text-xl font-bold text-zinc-300">{(user?.firstName || user?.username || currentUser?.name || 'A').slice(0, 1).toUpperCase()}</div>
+                    <div className="min-w-0">
+                        <div className="text-base font-bold text-white truncate">{user?.fullName || user?.username || currentUser?.name || 'Пользователь'}</div>
+                        <div className="text-xs text-zinc-500 truncate">{user?.primaryEmailAddress?.emailAddress || (currentUser as any)?.email || '—'}</div>
+                    </div>
+                </div>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-2xl bg-zinc-950 border border-zinc-800 px-3 py-2">
+                        <div className="text-zinc-500 mb-0.5">Тариф</div>
+                        <div className="font-bold text-zinc-200">{isLifetime ? 'Навсегда' : isPro ? 'Pro' : 'Бесплатный'}{expiresAt ? ' · до ' + new Date(expiresAt).toLocaleDateString() : ''}</div>
+                    </div>
+                    <div className="rounded-2xl bg-zinc-950 border border-zinc-800 px-3 py-2">
+                        <div className="text-zinc-500 mb-0.5">Организация</div>
+                        <div className="font-bold text-zinc-200 truncate">{user?.primaryEmailAddress?.emailAddress?.split('@')[1] || 'Личный аккаунт'}</div>
+                    </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    <button onClick={() => onNavigate && onNavigate('PRICING')} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-3 py-2 text-xs font-bold text-white">Управлять подпиской</button>
+                    <button onClick={onLogout} className="rounded-xl border border-zinc-700 hover:border-zinc-500 px-3 py-2 text-xs font-bold text-zinc-300">Выйти</button>
+                </div>
+            </div>
+
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                  <div>

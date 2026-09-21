@@ -45,6 +45,7 @@ type ViewState =
   | { type: 'PROJECT_VIEW', projectId: string, restrictedAssetId?: string }
   | { type: 'PLAYER', assetId: string, projectId: string, restrictedAssetId?: string }
   | { type: 'PROFILE' }
+  | { type: 'SETTINGS' }
   | { type: 'ADMIN' }
   | { type: 'ROADMAP' }
   | { type: 'WORKFLOW' }
@@ -513,6 +514,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'ABOUT': path = '/about'; break;
           case 'PRICING': path = '/pricing'; break;
           case 'PROFILE': path = '/profile'; break;
+          case 'SETTINGS': path = '/settings'; break;
           case 'ADMIN': path = '/admin'; break; 
           case 'AI_FEATURES': path = '/ai'; break;
           case 'LIVE_DEMO': path = '/demo'; break;
@@ -530,6 +532,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'ABOUT': setView({ type: 'ABOUT' }); break;
           case 'PRICING': setView({ type: 'PRICING' }); break;
           case 'PROFILE': setView({ type: 'PROFILE' }); break;
+          case 'SETTINGS': setView({ type: 'SETTINGS' }); break;
           case 'ADMIN': setView({ type: 'ADMIN' }); break; 
           case 'AI_FEATURES': setView({ type: 'AI_FEATURES' }); break;
           case 'LIVE_DEMO': setView({ type: 'LIVE_DEMO' }); break;
@@ -685,7 +688,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
   if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><Suspense fallback={<LazyFallback />}><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></Suspense></div>;
 
-  const isPlatformView = ['DASHBOARD', 'PROFILE', 'ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
+  const isPlatformView = ['DASHBOARD', 'PROFILE', 'SETTINGS', 'ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
@@ -713,7 +716,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     setCreateModalOpen={setCreateModalOpen}
                 />
                 )}
-                {view.type === 'PROFILE' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} />}
+                {view.type === 'PROFILE' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} initialSection="profile" />}
+        {view.type === 'SETTINGS' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} initialSection="settings" />}
                 {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => {}} />}
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
                 {view.type === 'ABOUT' && <AboutPage />}
@@ -757,7 +761,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 setIsPlayerActive={setIsPlayerActive} // Pass Smart Polling Control
           uploadTasks={uploadTasks}
           cancelUpload={cancelUpload}
-                onOpenStorageSettings={() => handleNavigate('PROFILE')}
+                onOpenStorageSettings={() => handleNavigate('SETTINGS')}
             />
           </ErrorBoundary>
         )}
