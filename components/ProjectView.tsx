@@ -519,8 +519,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 relative">
-      <header className="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
+    <div className="flex flex-col h-[100dvh] bg-zinc-950 relative overflow-hidden">
+      <header className="safe-top sticky top-0 h-auto md:h-14 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-hidden flex-1">
           <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-white shrink-0 p-1 mr-1">
               <img src={logo} alt="Back" className="w-8 h-8 shrink-0 hover:opacity-80 transition-opacity" />
@@ -640,7 +640,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 )}
             </div>
 
-            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4 items-stretch">
                 {/* NEW INLINE UPLOAD TILE - Always First */}
                 <UploadZoneTile />
 
@@ -654,13 +654,13 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <div 
                         key={asset.id}
                         onClick={() => onSelectAsset(asset)}
-                        className={`group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 transition-all shadow-sm relative hover:border-indigo-500/50`}
+                        className={`group cursor-pointer bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 transition-all shadow-sm relative flex flex-col h-full hover:border-zinc-700`}
                     >
-                        <div className="aspect-video bg-zinc-950 relative overflow-hidden">
+                        <div className="aspect-video w-full bg-zinc-950 relative overflow-hidden shrink-0">
                         <img 
                             src={asset.thumbnail} 
                             alt={asset.title} 
-                            className={`w-full h-full object-cover transition-transform duration-500 opacity-80 ${isLocal ? '' : 'group-hover:scale-105 group-hover:opacity-100'}`}
+                            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 ${isLocal ? 'opacity-80' : 'opacity-90 group-hover:scale-[1.03] group-hover:opacity-100'}`}
                             onError={(e) => { (e.target as HTMLImageElement).src = '/img/thumbnail-fallback.jpg'; }}
                         />
                         {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
