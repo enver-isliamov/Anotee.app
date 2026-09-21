@@ -29,11 +29,11 @@ test('хранилище: без мастера, есть подключение
   await expect(page.getByText(/Скопировать Account ID/i)).toBeVisible();
 });
 
-test('«Профиль» и «Настройки» — разные страницы, а не вкладки', async ({ page }) => {
+test('«Профиль» и «Настройки» — разные страницы, навигация из шапки', async ({ page }) => {
   test.setTimeout(120_000);
   resetMockData(page);
 
-  // страница профиля: аккаунт и подписка, хранилища нет; переключателя вкладок нет
+  // страница профиля: аккаунт и подписка; хранилища нет; переключателя вкладок нет
   await page.goto('/profile');
   await page.waitForTimeout(1200);
   expect(await page.evaluate(() => location.pathname)).toBe('/profile');
@@ -43,18 +43,17 @@ test('«Профиль» и «Настройки» — разные страни
   await expect(page.getByTestId('section-settings')).toHaveCount(0);
   await expect(page.getByTestId('section-profile')).toHaveCount(0);
 
-  // кросс-ссылка ведёт на отдельную страницу настроек
-  await page.getByTestId('profile-cross-nav').click();
+  // шестерёнка в шапке открывает отдельную страницу настроек
+  await page.getByTestId('header-settings').click();
   await page.waitForTimeout(900);
-  expect(await page.evaluate(() => location.pathname), 'кросс-ссылка не привела на /settings').toBe('/settings');
+  expect(await page.evaluate(() => location.pathname), 'шестерёнка не привела на /settings').toBe('/settings');
   await expect(page.locator('#storage-block')).toBeVisible();
   await expect(page.locator('#profile-block')).toBeHidden();
-  await expect(page.getByTestId('subscription-block')).toBeHidden();
 
-  // и обратно — на страницу профиля
-  await page.getByTestId('profile-cross-nav').click();
+  // аватар в шапке возвращает в профиль
+  await page.getByTestId('header-profile-avatar').click();
   await page.waitForTimeout(900);
-  expect(await page.evaluate(() => location.pathname)).toBe('/profile');
+  expect(await page.evaluate(() => location.pathname), 'аватар не привёл на /profile').toBe('/profile');
   await expect(page.locator('#profile-block')).toBeVisible();
 });
 

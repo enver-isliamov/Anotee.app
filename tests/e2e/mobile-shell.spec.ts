@@ -38,14 +38,9 @@ test.describe('Мобильная оболочка (PWA)', () => {
   test('Cloudflare-токен: кнопка доступна вне вкладок и открывает модалку с Account ID', async ({ page }) => {
     test.setTimeout(120_000);
     resetMockData(page);
-    await page.goto('/');
-    await page.waitForTimeout(1200);
-    const profileBtn = page.locator('[data-testid="tour-profile-btn"], [title*="рофил"], [title*="Profile"]');
-    if (await profileBtn.count()) { await profileBtn.first().click(); } else { await page.goto('/profile'); }
-    await page.waitForTimeout(1000);
-
+    // T-227: хранилище живёт на отдельной странице /settings (кнопки шапки на мобильном скрыты)
     await page.goto('/settings');
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(1400);
 
     const openBtn = page.getByTestId('cf-token-open');
     await expect(openBtn).toBeVisible();

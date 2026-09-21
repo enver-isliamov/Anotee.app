@@ -636,16 +636,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
-            {/* T-212: «Профиль» и «Настройки» — разные страницы (/profile и /settings), переключателя вкладок нет */}
-            <div className="flex justify-end">
-                <button
-                    onClick={() => onNavigate && onNavigate(section === 'profile' ? 'SETTINGS' : 'PROFILE')}
-                    data-testid="profile-cross-nav"
-                    className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
-                    {section === 'profile' ? 'Настройки хранилища →' : '← Профиль'}
-                </button>
-            </div>
+            {/* T-222: навигация между «Профилем» и «Настройками» — иконки в шапке (аватар / шестерёнка) */}
 
             {/* T-164: карточка аккаунта (личные данные, организация, план) */}
             <div id="profile-block" className={'scroll-mt-24 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 '+ ((section === 'profile') ? '' : ' hidden')}>
