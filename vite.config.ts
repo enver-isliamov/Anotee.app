@@ -18,8 +18,26 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     build: {
-    sourcemap: true, // T-70: расшифровка юзер-стеков крашей
+      sourcemap: true, // T-70: расшифровка юзер-стеков крашей
       outDir: 'dist',
+      // T-151: разделяем вендоров — основной чанк перестаёт быть «монолитом» >500 kB,
+      // а react/icons кэшируются браузером между релизами приложения.
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('react-dom') || id.includes('scheduler') || /node_modules[\/\\]react[\/\\]/.test(id)) return 'vendor-react';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('@clerk')) return 'vendor-clerk';
+            if (id.includes('@aws-sdk')) return 'vendor-aws';
+            if (id.includes('@huggingface')) return 'vendor-hf';
+            if (id.includes('@google/genai')) return 'vendor-genai';
+            if (id.includes('i18next')) return 'vendor-i18n';
+            if (id.includes('@vercel')) return 'vendor-vercel';
+            return 'vendor';
+          },
+        },
+      },
     },
     resolve: hasRealClerkKey
       ? undefined
