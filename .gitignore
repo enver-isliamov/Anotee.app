@@ -39,3 +39,7 @@ _repro321.spec.ts
 _debug.spec.ts
 
 audit-report.json
+
+# служебные файлы агента (вне продукта)
+.openclaw/
+

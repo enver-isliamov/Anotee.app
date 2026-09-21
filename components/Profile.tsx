@@ -120,8 +120,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [section, setSection] = useState<'profile' | 'settings'>(initialSection);
   const goSection = (next: 'profile' | 'settings') => {
     setSection(next);
-    const id = next === 'settings' ? 'storage-block' : 'profile-block';
-    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   useEffect(() => { goSection(initialSection); /* точка входа из навигации */ }, [initialSection]);
   const { getToken } = useAuth();
@@ -638,7 +637,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             </div>
 
             {/* T-164: карточка аккаунта (личные данные, организация, план) */}
-            <div id="profile-block" className="scroll-mt-24 bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+            <div id="profile-block" className={'scroll-mt-24 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 '+ ((section === 'profile') ? '' : ' hidden')}>
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center text-xl font-bold text-zinc-300">{(user?.firstName || user?.username || currentUser?.name || 'A').slice(0, 1).toUpperCase()}</div>
                     <div className="min-w-0">
@@ -666,9 +665,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                  <div>
                      <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
-                        {t('profile.title')}
+                        {section === 'settings' ? 'Настройки' : t('profile.title')}
                      </h2>
-                     <p className="text-zinc-400 text-sm mt-1">Управление подпиской и хранилищем.</p>
+                     <p className="text-zinc-400 text-sm mt-1">{section === 'settings' ? 'Хранилище, подключения и сервисные действия.' : 'Ваш аккаунт: данные, тариф и организация.'}</p>
                  </div>
                  <div className="flex items-center gap-2">
                      {isAdmin && onNavigate && (
@@ -706,7 +705,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                     </div>
 
                     {/* STORAGE CONFIGURATION */}
-                    <div id="storage-block" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative scroll-mt-24">
+                    <div id="storage-block" className={'bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative scroll-mt-24 '+ ((section === 'settings') ? '' : ' hidden')}>
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300"><Database size={20} /></div>
                             <div>
@@ -947,7 +946,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                     {/* WHITE LABEL / CDN BLOCK */}
                     {selectedTab !== 'google' && canUseWhiteLabel && (
-                        <div className="relative group overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/50 via-fuchsia-500/50 to-indigo-500/50 shadow-2xl">
+                        <div className={'relative group overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/50 via-fuchsia-500/50 to-indigo-500/50 shadow-2xl '+ ((section === 'settings') ? '' : ' hidden')}>
                             <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 opacity-10 blur-xl group-hover:opacity-20 transition-opacity duration-500"></div>
                             
                             <div className="relative bg-zinc-950 rounded-[23px] p-6 h-full overflow-hidden">
@@ -1026,7 +1025,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 {/* COLUMN 2: EXTRAS */}
                 <div className="space-y-6">
                     {/* Support Block */}
-                    <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-pink-500/20 rounded-3xl p-6 relative overflow-hidden">
+                    <div className={'bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-pink-500/20 rounded-3xl p-6 relative overflow-hidden '+ ((section === 'profile') ? '' : ' hidden')}>
                         <div className="flex items-center gap-3 mb-4">
                             <div className="p-2 bg-pink-500/20 rounded-lg text-pink-400">
                                 <Heart size={20} fill="currentColor" />
@@ -1048,7 +1047,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                     {/* Migration Tool */}
                     {!hasMigrated && (
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                        <div className={'bg-zinc-900 border border-zinc-800 rounded-3xl p-6 '+ ((section === 'settings') ? '' : ' hidden')}>
                             <div className="flex items-center gap-3 mb-3">
                                 <Database size={18} className="text-indigo-400" />
                                 <h3 className="font-bold text-zinc-300 text-sm">Восстановление данных</h3>

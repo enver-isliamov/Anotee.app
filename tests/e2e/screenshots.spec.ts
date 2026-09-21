@@ -27,6 +27,10 @@ test.describe('Screenshots', () => {
     await page.waitForTimeout(1500);
     await shoot(page, 'desktop-02-profile');
 
+    await page.getByTestId('section-settings').click().catch(() => {});
+    await page.waitForTimeout(700);
+    await shoot(page, 'desktop-02b-settings');
+
     const cf = page.getByTestId('cf-token-open');
     if (await cf.count()) {
       await cf.first().click();
@@ -61,6 +65,9 @@ test.describe('Screenshots', () => {
     await page.goto('/profile');
     await page.waitForTimeout(1500);
     await shoot(page, 'mobile-02-profile');
+    await page.getByTestId('section-settings').click().catch(() => {});
+    await page.waitForTimeout(700);
+    await shoot(page, 'mobile-02b-settings');
     const cf = page.getByTestId('cf-token-open');
     if (await cf.count()) {
       await cf.first().click();
