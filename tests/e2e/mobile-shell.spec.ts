@@ -158,4 +158,40 @@ test.describe('Мобильная оболочка (PWA)', () => {
     }
     console.log('SCROLL-CHECK ' + results.join(' '));
   });
+
+  test('bottom-nav-storage ведёт к хранилищу; шапка не перекрывает контент', async ({ page }) => {
+    test.setTimeout(150_000);
+    resetMockData(page);
+    await page.goto('/');
+    await page.waitForTimeout(1500);
+
+    const storageTab = page.getByTestId('bottom-nav-storage');
+    await expect(storageTab).toBeVisible();
+    await storageTab.click();
+    await page.waitForTimeout(1200);
+
+    // блок хранилища оказался в зоне видимости (прокрутка сработала)
+    const visible = await page.evaluate(() => {
+      const el = document.getElementById('storage-block');
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      return r.top < window.innerHeight && r.bottom > 0;
+    });
+    expect(visible, 'storage-block не попал в экран после перехода').toBe(true);
+
+    // шапка не перекрывает контент — проверяем в начале страницы (scrollY = 0)
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(400);
+    const overlap = await page.evaluate(() => {
+      const header = document.querySelector('header');
+      if (!header) return 0;
+      const h = header.getBoundingClientRect();
+      // ближайший следующий блок в потоке — контент страницы
+      const next = header.nextElementSibling;
+      if (!next) return 0;
+      const b = next.getBoundingClientRect();
+      return b.top < h.bottom - 2 ? h.bottom - b.top : 0;
+    });
+    expect(overlap, 'шапка перекрывает контент на ' + overlap + 'px').toBeLessThanOrEqual(2);
+  });
 });

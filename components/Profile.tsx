@@ -666,7 +666,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                     </div>
 
                     {/* STORAGE CONFIGURATION */}
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative">
+                    <div id="storage-block" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative scroll-mt-24">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300"><Database size={20} /></div>
                             <div>
