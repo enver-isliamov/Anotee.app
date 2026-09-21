@@ -69,12 +69,13 @@ test.describe('T-08: мобильные регрессии (исправлены
     await expect(addVersionButton).toHaveCSS('opacity', '1');
   });
 
-  test('T-08: переключатель вида single/compare доступен на мобиле (Player.tsx:861)', async ({ page }) => {
+  test('T-08/T-108: переключатель вида доступен на мобиле через меню «⋯»', async ({ page }) => {
     await openPlayer(page);
 
-    // Кнопка view-switcher (иконка Monitor) в header — раньше display:none на <768px
-    const viewSwitcher = page.locator('header button:has(svg.lucide-monitor)').first();
-    await expect(viewSwitcher).toBeVisible();
-    await expect(viewSwitcher).toBeInViewport();
+    // T-108: шапка мобильного плеера разгружена — переключатель вида живёт в меню «⋯»
+    await page.getByTestId('mobile-more').click();
+    const item = page.getByTestId('mobile-more-viewmode');
+    await expect(item).toBeVisible();
+    await expect(item).toBeInViewport();
   });
 });
