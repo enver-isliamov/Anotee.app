@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppHeader } from './AppHeader';
-import { LayoutGrid, CreditCard, Settings, Sparkles } from 'lucide-react';
+import { LayoutGrid, CreditCard, Settings, HardDrive } from 'lucide-react';
 import { User } from '../types';
 import { useLanguage } from '../services/i18n';
 
@@ -26,7 +26,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
         onBack={onBack}
         onStartTour={onStartTour}
       />
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      {/* T-140: без overflow-y-auto — скроллит окно, sticky-шапка снова работает корректно */}
+      <div className="flex-1 p-4 md:p-8">
          <div className="max-w-[1600px] mx-auto pb-16 md:pb-0 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col min-h-full">
             <div className="flex-1">
                 {children}
@@ -76,12 +77,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
                     { id: 'DASHBOARD', label: t('nav.projects') || 'Проекты', icon: LayoutGrid },
                     { id: 'PRICING', label: t('nav.pricing') || 'Тарифы', icon: CreditCard },
                     { id: 'PROFILE', label: t('nav.settings') || 'Настройки', icon: Settings },
-                    { id: 'AI_FEATURES', label: t('nav.features') || 'Возможности', icon: Sparkles }
+                    { id: 'STORAGE', label: t('nav.storage') || 'Хранилище', icon: HardDrive }
                 ].map((item) => {
                     const ItemIcon = item.icon as any;
                     const active = currentView === item.id;
                     return (
-                        <button key={item.id} onClick={() => onNavigate(item.id)} data-testid={'bottom-nav-' + item.id.toLowerCase()} className={'flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] font-bold transition-colors ' + (active ? 'text-indigo-500' : 'text-zinc-500 hover:text-zinc-300')}>
+                        <button key={item.id} onClick={() => { if (item.id === 'STORAGE') { onNavigate('PROFILE'); setTimeout(() => document.getElementById('storage-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350); } else { onNavigate(item.id); } }} data-testid={'bottom-nav-' + item.id.toLowerCase()} className={'flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] font-bold transition-colors ' + (active ? 'text-indigo-500' : 'text-zinc-500 hover:text-zinc-300')}>
                             <ItemIcon size={18} />
                             {item.label}
                         </button>
