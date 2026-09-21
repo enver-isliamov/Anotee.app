@@ -11,6 +11,10 @@ test('хранилище: без мастера, есть подключение
   if (await profileBtn.count()) { await profileBtn.first().click(); } else { await page.goto('/profile'); }
   await page.waitForTimeout(1000);
 
+  // T-169: хранилище живёт в разделе «Настройки»
+  await page.getByTestId('section-settings').click().catch(() => {});
+  await page.waitForTimeout(600);
+
   // мастера больше нет
   await expect(page.getByTestId('wizard-open')).toHaveCount(0);
   await expect(page.getByTestId('wizard-overlay')).toHaveCount(0);
@@ -34,25 +38,16 @@ test('разделы «Профиль» и «Настройки» переклю
   await expect(settingsTab).toBeVisible();
   await settingsTab.click();
   await page.waitForTimeout(600);
-  // раздел «Настройки» прокручивает к блоку хранилища
-  const storageVisible = await page.evaluate(() => {
-    const el = document.getElementById('storage-block');
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.top < window.innerHeight && r.bottom > 0;
-  });
-  expect(storageVisible, 'storage-block не виден после переключения на «Настройки»').toBe(true);
+  // раздел «Настройки»: хранилище видимо, профиль скрыт
+  await expect(page.locator('#storage-block')).toBeVisible();
+  await expect(page.locator('#profile-block')).toBeHidden();
 
   // «Профиль» прокручивает к карточке аккаунта
   await page.getByTestId('section-profile').click();
   await page.waitForTimeout(600);
-  const profileVisible = await page.evaluate(() => {
-    const el = document.getElementById('profile-block');
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.top < window.innerHeight && r.bottom > 0;
-  });
-  expect(profileVisible, 'profile-block не виден после переключения на «Профиль»').toBe(true);
+  // раздел «Профиль»: аккаунт виден, хранилище скрыто
+  await expect(page.locator('#profile-block')).toBeVisible();
+  await expect(page.locator('#storage-block')).toBeHidden();
 });
 
 test('хранилище: у провайдеров есть свои ссылки-инструкции', async ({ page }) => {
@@ -60,6 +55,10 @@ test('хранилище: у провайдеров есть свои ссылк
   resetMockData(page);
   await page.goto('/profile');
   await page.waitForTimeout(1200);
+  // T-169: ссылки-инструкции живут в разделе «Настройки»
+  await page.getByTestId('section-settings').click().catch(() => {});
+  await page.waitForTimeout(600);
+
   for (const pid of ['yandex', 'cloudflare', 'selectel']) {
     const card = page.getByTestId('provider-card-' + pid);
     if (await card.count()) {

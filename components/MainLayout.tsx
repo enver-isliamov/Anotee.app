@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppHeader } from './AppHeader';
-import { LayoutGrid, CreditCard, Settings } from 'lucide-react';
+import { LayoutGrid, CreditCard, Settings, Sparkles, Workflow, Info, UserRound } from 'lucide-react';
 import { User } from '../types';
 import { useLanguage } from '../services/i18n';
 
@@ -73,12 +73,21 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, c
          </div>
             {/* T-116: нижняя навигация (мобильные/PWA) — шапка разгружена */}
             <nav data-testid="bottom-nav" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border-t border-zinc-200 dark:border-zinc-800 flex items-stretch justify-around safe-bottom">
-                {[
-                    { id: 'DASHBOARD', label: t('nav.projects') || 'Проекты', icon: LayoutGrid },
-                    { id: 'PRICING', label: t('nav.pricing') || 'Тарифы', icon: CreditCard },
-                    { id: 'PROFILE', label: t('nav.settings') || 'Настройки', icon: Settings },
-                    { id: 'SETTINGS', label: t('nav.settings') || 'Настройки', icon: Settings }
-                ].map((item) => {
+                {(currentUser
+                    ? [
+                        { id: 'DASHBOARD', label: t('nav.projects') || 'Проекты', icon: LayoutGrid },
+                        { id: 'PRICING', label: t('nav.pricing') || 'Тарифы', icon: CreditCard },
+                        { id: 'SETTINGS', label: t('nav.settings') || 'Настройки', icon: Settings },
+                        { id: 'PROFILE', label: t('nav.profile') || 'Профиль', icon: UserRound }
+                      ]
+                    : [
+                        // T-170: гостям — все доступные публичные страницы
+                        { id: 'AI_FEATURES', label: t('nav.features') || 'Возможности', icon: Sparkles },
+                        { id: 'WORKFLOW', label: t('nav.how') || 'Как это работает', icon: Workflow },
+                        { id: 'PRICING', label: t('nav.pricing') || 'Цены', icon: CreditCard },
+                        { id: 'ABOUT', label: t('nav.about') || 'О нас', icon: Info }
+                      ]
+                ).map((item) => {
                     const ItemIcon = item.icon as any;
                     const active = currentView === item.id;
                     return (

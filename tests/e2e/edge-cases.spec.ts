@@ -7,6 +7,9 @@ test.describe('Граничные случаи', () => {
     test.setTimeout(120_000);
     resetMockData(page);
     await page.goto('/profile');
+    await page.getByTestId('section-settings').click().catch(() => {});
+    await page.waitForTimeout(600);
+
     await page.waitForTimeout(1500);
 
     const save = page.getByText(/Сохранить и активировать/i).first();
@@ -24,6 +27,9 @@ test.describe('Граничные случаи', () => {
     test.setTimeout(120_000);
     resetMockData(page);
     await page.goto('/profile');
+    await page.getByTestId('section-settings').click().catch(() => {});
+    await page.waitForTimeout(600);
+
     await page.waitForTimeout(1200);
 
     await page.getByTestId('cf-token-open').click();
@@ -44,6 +50,9 @@ test.describe('Граничные случаи', () => {
     test.setTimeout(120_000);
     resetMockData(page);
     await page.goto('/profile');
+    await page.getByTestId('section-settings').click().catch(() => {});
+    await page.waitForTimeout(600);
+
     await page.waitForTimeout(1200);
 
     await page.getByTestId('cf-token-open').click();

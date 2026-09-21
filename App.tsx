@@ -819,7 +819,10 @@ const App: React.FC = () => {
         clerkPubKey.length < 20;
 
     if (isMockMode) {
-        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'u1', fullName: 'Andrey (Creator)', imageUrl: '/img/avatar-mock.svg', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
+        // T-173: e2e может смоделировать неавторизованного пользователя в mock-режиме
+        // (в проде эта ветка не выполняется: она требует отсутствия VITE_CLERK_PUBLISHABLE_KEY).
+        const e2eGuest = typeof window !== 'undefined' && !!window.localStorage.getItem('anotee_e2e_guest');
+        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'u1', fullName: 'Andrey (Creator)', imageUrl: '/img/avatar-mock.svg', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={!e2eGuest} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
     }
     return <ErrorBoundary><ClerkProvider publishableKey={clerkPubKey}><LanguageProvider><ThemeProvider><LanguageCloudSync /><ThemeCloudSync /><DriveProvider isMockMode={false}><AuthWrapper /></DriveProvider></ThemeProvider></LanguageProvider></ClerkProvider></ErrorBoundary>;
 };

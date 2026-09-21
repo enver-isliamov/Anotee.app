@@ -34,15 +34,20 @@ export const UserButton = () => null;
 export const OrganizationSwitcher = () => null;
 export const OrganizationProfile = () => null;
 
+// T-172: e2e может смоделировать неавторизованного пользователя (ветка !currentUser).
+// Шим подключается ТОЛЬКО в mock-режиме (нет Clerk-ключа), в проде этот код не участвует.
+const isGuest = () =>
+  typeof window !== 'undefined' && !!window.localStorage.getItem('anotee_e2e_guest');
+
 export const useUser = () => ({
   isLoaded: true,
-  isSignedIn: true,
-  user: mockUser,
+  isSignedIn: !isGuest(),
+  user: isGuest() ? null : mockUser,
 });
 
 export const useAuth = () => ({
   isLoaded: true,
-  isSignedIn: true,
+  isSignedIn: !isGuest(),
   getToken: async () => 'mock-token',
   signOut: async () => {},
 });

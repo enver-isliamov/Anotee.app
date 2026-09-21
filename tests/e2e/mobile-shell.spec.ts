@@ -44,6 +44,9 @@ test.describe('Мобильная оболочка (PWA)', () => {
     if (await profileBtn.count()) { await profileBtn.first().click(); } else { await page.goto('/profile'); }
     await page.waitForTimeout(1000);
 
+    await page.getByTestId('section-settings').click().catch(() => {});
+    await page.waitForTimeout(600);
+
     const openBtn = page.getByTestId('cf-token-open');
     await expect(openBtn).toBeVisible();
     await openBtn.click();
@@ -170,10 +173,10 @@ test.describe('Мобильная оболочка (PWA)', () => {
     await settingsTab.click();
     await page.waitForTimeout(1500);
 
-    // открылся раздел «Настройки»: есть переключатель разделов, блок хранилища присутствует в DOM
+    // открылся раздел «Настройки»: блок хранилища ВИДИМ, профильные блоки скрыты
     await expect(page.getByTestId('section-settings')).toBeVisible();
-    const storageCount = await page.locator('#storage-block').count();
-    expect(storageCount, 'блок хранилища отсутствует на странице настроек').toBeGreaterThan(0);
+    await expect(page.locator('#storage-block')).toBeVisible();
+    await expect(page.locator('#profile-block')).toBeHidden();
     // и он доступен пользователю: прокрутка к нему работает
     const reached = await page.evaluate(() => {
       const el = document.getElementById('storage-block');
