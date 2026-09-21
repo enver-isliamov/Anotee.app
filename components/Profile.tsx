@@ -686,7 +686,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 {/* COLUMN 1: SETTINGS */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* Subscription */}
-                    <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro || isLifetime ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
+                    <div data-testid="subscription-block" className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro || isLifetime ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'} ${(section === 'profile') ? '' : ' hidden'}`}>
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div></div>
                         <div>
                             <div className="flex justify-between items-center mb-2 relative z-10">
