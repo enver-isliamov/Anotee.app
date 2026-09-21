@@ -1,17 +1,20 @@
 ﻿
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ProjectView } from './components/ProjectView';
 import { Player } from './components/Player';
 import { Login } from './components/Login';
 import { Profile } from './components/Profile';
-import { AdminPanel } from './components/AdminPanel';
-import { TestRunner } from './components/TestRunner'; // Import the new component
-import { PublicViewer } from './components/PublicViewer';
-import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
-import { RoadmapPage } from './components/Roadmap/RoadmapPage';
-import { LegalPage } from './components/LegalPages';
-import { LiveDemo } from './components/LiveDemo';
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const TestRunner = lazy(() => import('./components/TestRunner').then(m => ({ default: m.TestRunner })));
+const PublicViewer = lazy(() => import('./components/PublicViewer').then(m => ({ default: m.PublicViewer })));
+const WorkflowPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.WorkflowPage })));
+const AboutPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.AboutPage })));
+const PricingPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.PricingPage })));
+const AiFeaturesPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.AiFeaturesPage })));
+const RoadmapPage = lazy(() => import('./components/Roadmap/RoadmapPage').then(m => ({ default: m.RoadmapPage })));
+const LegalPage = lazy(() => import('./components/LegalPages').then(m => ({ default: m.LegalPage })));
+const LiveDemo = lazy(() => import('./components/LiveDemo').then(m => ({ default: m.LiveDemo })));
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId } from './services/utils';
@@ -30,6 +33,10 @@ import { setToastHandler } from './services/toastBus';
 import { DriveProvider, useDrive } from './services/driveContext';
 import { OnboardingWidget } from './components/OnboardingWidget';
 import useSWR, { mutate } from 'swr';
+
+const LazyFallback = () => (
+  <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500" size={28} /></div>
+);
 
 type ViewState = 
   | { type: 'DASHBOARD' }
@@ -629,8 +636,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         </div>
   );
 
-  if (view.type === 'LIVE_DEMO') return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
-  if (view.type === 'TEST_RUNNER' && window.location.hostname !== 'anotee.com') return <TestRunner onBack={() => handleNavigate('DASHBOARD')} />; // T-46: скрыт на проде
+  if (view.type === 'LIVE_DEMO') return <Suspense fallback={<LazyFallback />}><LiveDemo onBack={() => handleNavigate('DASHBOARD')} /></Suspense>;
+  if (view.type === 'TEST_RUNNER' && window.location.hostname !== 'anotee.com') return <Suspense fallback={<LazyFallback />}><TestRunner onBack={() => handleNavigate('DASHBOARD')} /></Suspense>;
 
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
@@ -638,7 +645,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       if (['ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type)) {
           return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
-                <MainLayout currentUser={null} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}>
+                <MainLayout currentUser={null} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}><Suspense fallback={<LazyFallback />}>
                     {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => {}} />}
                     {view.type === 'WORKFLOW' && <WorkflowPage />}
                     {view.type === 'ABOUT' && <AboutPage />}
@@ -646,7 +653,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
                     {view.type === 'TERMS' && <LegalPage type="TERMS" />}
                     {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
-                </MainLayout>
+                </Suspense></MainLayout>
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
             </div>
           );
@@ -654,7 +661,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return <><Login onLogin={() => {}} onNavigate={handleNavigate} />{isMockMode && <div className="fixed bottom-0 w-full bg-yellow-500 text-black text-center text-xs font-bold">PREVIEW MODE</div>}</>;
   }
 
-  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></div>;
+  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><Suspense fallback={<LazyFallback />}><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></Suspense></div>;
 
   const isPlatformView = ['DASHBOARD', 'PROFILE', 'ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
@@ -668,7 +675,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 onNavigate={handleNavigate} 
                 onBack={handleBackToDashboard}
                 onStartTour={handleStartTour}
-            >
+            ><Suspense fallback={<LazyFallback />}>
                 {view.type === 'DASHBOARD' && (
                 <Dashboard 
                     projects={projects} 
@@ -692,7 +699,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
                 {view.type === 'TERMS' && <LegalPage type="TERMS" />}
                 {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
-            </MainLayout>
+            </Suspense></MainLayout>
         )}
 
         {view.type === 'PROJECT_VIEW' && currentProject && (
@@ -774,7 +781,7 @@ const App: React.FC = () => {
         const guestEnv = (import.meta as any).env || {};
         const guestKey = guestEnv.VITE_CLERK_PUBLISHABLE_KEY;
         const guestMock = !guestKey || guestKey.includes('placeholder') || guestKey.includes('YOUR_') || guestKey.length < 20;
-        return <ErrorBoundary>{guestMock ? <LanguageProvider><PublicViewer token={publicToken} isMockMode /></LanguageProvider> : <ClerkProvider publishableKey={guestKey}><LanguageProvider><PublicViewer token={publicToken} /></LanguageProvider></ClerkProvider>}</ErrorBoundary>;
+        return <ErrorBoundary><Suspense fallback={<LazyFallback />}>{guestMock ? <LanguageProvider><PublicViewer token={publicToken} isMockMode /></LanguageProvider> : <ClerkProvider publishableKey={guestKey}><LanguageProvider><PublicViewer token={publicToken} /></LanguageProvider></ClerkProvider>}</Suspense></ErrorBoundary>;
     }
     const env = (import.meta as any).env || {};
     const clerkPubKey = env.VITE_CLERK_PUBLISHABLE_KEY;
