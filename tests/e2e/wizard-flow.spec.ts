@@ -41,12 +41,14 @@ test('разделы «Профиль» и «Настройки» переклю
   // раздел «Настройки»: хранилище видимо, профиль скрыт
   await expect(page.locator('#storage-block')).toBeVisible();
   await expect(page.locator('#profile-block')).toBeHidden();
+  await expect(page.getByTestId('subscription-block')).toBeHidden(); // подписка — часть профиля
 
   // «Профиль» прокручивает к карточке аккаунта
   await page.getByTestId('section-profile').click();
   await page.waitForTimeout(600);
   // раздел «Профиль»: аккаунт виден, хранилище скрыто
   await expect(page.locator('#profile-block')).toBeVisible();
+  await expect(page.getByTestId('subscription-block')).toBeVisible();
   await expect(page.locator('#storage-block')).toBeHidden();
 });
 
