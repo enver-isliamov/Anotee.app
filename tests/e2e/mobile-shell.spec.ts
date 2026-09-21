@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resetMockData } from './support';
+import { MOCK_PROJECT_1, resetMockData } from './support';
 
 // T-125/T-124: мобильная оболочка — нижняя навигация пользователя, отсутствие «съезжания», вход в Cloudflare-модалку
 test.describe('Мобильная оболочка (PWA)', () => {
@@ -193,5 +193,49 @@ test.describe('Мобильная оболочка (PWA)', () => {
       return b.top < h.bottom - 2 ? h.bottom - b.top : 0;
     });
     expect(overlap, 'шапка перекрывает контент на ' + overlap + 'px').toBeLessThanOrEqual(2);
+  });
+
+  test('ProjectView: превью плиток в пропорции 16:9, без искажений и перекрытий', async ({ page }) => {
+    test.setTimeout(180_000);
+    resetMockData(page);
+    await page.goto('/');
+    await page.waitForTimeout(1500);
+
+    await expect(page.getByText(MOCK_PROJECT_1).first()).toBeVisible({ timeout: 15_000 });
+    await page.getByText(MOCK_PROJECT_1).first().click();
+    await expect(page.locator('#tour-assets-grid')).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(600);
+
+    // превью (первая картинка в плитке) — соотношение 16:9 ± допуск
+    const ratio = await page.evaluate(() => {
+      const img = document.querySelector('#tour-assets-grid img') as HTMLImageElement | null;
+      if (!img) return -1;
+      const r = img.getBoundingClientRect();
+      if (!r.width || !r.height) return -1;
+      return r.width / r.height;
+    });
+    expect(ratio, 'превью не найдено').toBeGreaterThan(0);
+    expect(Math.abs(ratio - 16 / 9), 'пропорции превью искажены: ' + ratio.toFixed(3)).toBeLessThanOrEqual(0.06);
+
+    // иконки-бейджи внутри превью не залезают на текст под превью
+    const collide = await page.evaluate(() => {
+      const grid = document.querySelector('#tour-assets-grid');
+      if (!grid) return 0;
+      const tile = grid.firstElementChild;
+      if (!tile) return 0;
+      const badge = tile.querySelector('div.absolute.top-2.left-2') as HTMLElement | null;
+      const titleEl = tile.querySelector('h3, .font-bold, .text-sm') as HTMLElement | null;
+      if (!badge || !titleEl) return 0;
+      const b = badge.getBoundingClientRect();
+      const t = titleEl.getBoundingClientRect();
+      const overlap = Math.max(0, Math.min(b.bottom, t.bottom) - Math.max(b.top, t.top)) *
+                      Math.max(0, Math.min(b.right, t.right) - Math.max(b.left, t.left));
+      return overlap;
+    });
+    expect(collide, 'иконка перекрывает текст карточки').toBeLessThanOrEqual(1);
+
+    // нет горизонтального сдвига на странице проекта
+    const m = await page.evaluate(() => ({ scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth }));
+    expect(m.scrollW).toBeLessThanOrEqual(m.clientW + 2);
   });
 });

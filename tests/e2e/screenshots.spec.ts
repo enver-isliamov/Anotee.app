@@ -41,6 +41,13 @@ test.describe('Screenshots', () => {
     await page.goto('/ai-features');
     await page.waitForTimeout(1200);
     await shoot(page, 'desktop-05-ai-features');
+
+    // ProjectView: плитки и превью
+    await page.goto('/');
+    await page.waitForTimeout(1200);
+    await page.getByText('Anotee – Commercial Spot X').first().click().catch(() => {});
+    await page.waitForTimeout(1500);
+    await shoot(page, 'desktop-06-projectview');
   });
 
   test('mobile: dashboard, profile, pricing, ai-features, bottom nav', async ({ page }) => {
@@ -68,6 +75,13 @@ test.describe('Screenshots', () => {
     await page.goto('/ai-features');
     await page.waitForTimeout(1200);
     await shoot(page, 'mobile-05-ai-features');
+
+    // ProjectView на мобиле
+    await page.goto('/');
+    await page.waitForTimeout(1200);
+    await page.getByText('Anotee – Commercial Spot X').first().click().catch(() => {});
+    await page.waitForTimeout(1500);
+    await shoot(page, 'mobile-07-projectview');
 
     // таб-бар крупным планом
     await page.goto('/');
