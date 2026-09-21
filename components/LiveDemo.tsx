@@ -136,7 +136,7 @@ export const LiveDemo: React.FC<LiveDemoProps> = ({ onBack }) => {
     const activeAsset = project.assets[activeAssetIndex] || project.assets[0];
 
     return (
-        <div className="relative h-screen w-screen overflow-hidden bg-black">
+        <div className="relative h-[100dvh] w-full overflow-hidden bg-black">
             <Player 
                 asset={activeAsset}
                 project={project}
