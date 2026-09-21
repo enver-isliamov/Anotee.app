@@ -111,9 +111,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                             <a
                                 id="tour-profile-btn"
                                 href="/profile"
-                                onClick={(e) => { e.preventDefault(); onNavigate('PROFILE'); }}
-                                className={`p-1.5 rounded-full transition-colors ${currentView === 'PROFILE' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'}`}
-                                title="Subscription & Settings"
+                                onClick={(e) => { e.preventDefault(); onNavigate('SETTINGS'); }}
+                                className={`p-1.5 rounded-full transition-colors ${currentView === 'SETTINGS' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'}`}
+                                title={t('nav.settings')}
+                                data-testid="header-settings"
                             >
                                 <Settings size={18} />
                             </a>
@@ -138,15 +139,18 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                         />
                                     </div>
                                 )}
-                                <UserButton
-                                    afterSignOutUrl="/"
-                                    userProfileMode="modal"
-                                    appearance={{
-                                        elements: {
-                                            avatarBox: "w-7 h-7 rounded-full border border-zinc-900 hover:border-indigo-500 transition-colors"
-                                        }
-                                    }}
-                                />
+                                {/* T-222: аватар открывает «Профиль» (выход — внутри профиля) */}
+                                <button
+                                    onClick={() => onNavigate('PROFILE')}
+                                    title={t('nav.profile')}
+                                    data-testid="header-profile-avatar"
+                                    aria-label={t('nav.profile')}
+                                    className={`w-7 h-7 rounded-full overflow-hidden border transition-colors ${currentView === 'PROFILE' ? 'border-indigo-500' : 'border-zinc-900 hover:border-indigo-500'}`}
+                                >
+                                    {currentUser?.avatar
+                                        ? <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                                        : <span className="w-full h-full flex items-center justify-center bg-zinc-700 text-[11px] font-bold text-white">{(currentUser?.name || 'U').slice(0, 1).toUpperCase()}</span>}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -182,6 +186,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {!hideNav && (
                     <button 
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        data-testid="mobile-menu-toggle"
+                        aria-label="Menu"
                         className="md:hidden text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
                     >
                         {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -193,7 +199,30 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         {/* Mobile Menu Dropdown (Fullscreen on small screens) */}
         {isMobileMenuOpen && !hideNav && (
             <div className="md:hidden fixed top-16 left-0 right-0 bottom-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 z-40 p-4 flex flex-col gap-2 animate-in slide-in-from-top-2 overflow-y-auto">
-                {/* T-142: навигация перенесена в нижний таб-бар — в шапке только сервисные действия */}
+                {/* T-222: возвращаем навигацию по разделам в меню-гамбургер */}
+                <div className="mb-2" data-testid="mobile-menu-nav">
+                    <div className="px-4 pb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Разделы</div>
+                    {[
+                        { id: 'AI_FEATURES', label: t('nav.features') },
+                        { id: 'WORKFLOW', label: t('nav.how') },
+                        { id: 'LIVE_DEMO', label: t('nav.demo') },
+                        { id: 'PRICING', label: t('nav.pricing') },
+                        { id: 'ROADMAP', label: t('nav.roadmap') },
+                        { id: 'ABOUT', label: t('nav.about') },
+                        { id: 'TERMS', label: t('nav.terms') },
+                        { id: 'PRIVACY', label: t('nav.privacy') }
+                    ].map((item) => (
+                        <button
+                            key={item.id}
+                            data-testid={'mobile-menu-' + item.id.toLowerCase()}
+                            onClick={() => { setIsMobileMenuOpen(false); onNavigate(item.id); }}
+                            className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentView === item.id ? 'bg-indigo-500/15 text-indigo-300' : 'text-zinc-300 hover:bg-zinc-800'}`}
+                        >
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="h-px bg-zinc-800 my-2"></div>
 
                 
                 {/* Mobile Tour Button */}

@@ -97,4 +97,26 @@ test.describe('Гостевая навигация (неавторизованн
       expect(len, path + ': пустая страница').toBeGreaterThan(50);
     }
   });
+
+  test('гость: меню-гамбургер содержит все разделы, переходы работают', async ({ page }) => {
+    test.setTimeout(150_000);
+    asGuest(page);
+    await page.goto('/pricing');
+    await page.waitForTimeout(1500);
+
+    await page.getByTestId('mobile-menu-toggle').click();
+    await page.waitForTimeout(500);
+
+    const ids = ['mobile-menu-ai_features', 'mobile-menu-workflow', 'mobile-menu-live_demo', 'mobile-menu-pricing', 'mobile-menu-roadmap', 'mobile-menu-about', 'mobile-menu-terms', 'mobile-menu-privacy'];
+    for (const id of ids) {
+      expect(await page.getByTestId(id).count(), id + ': нет пункта в меню-гамбургере').toBeGreaterThan(0);
+    }
+    const text = await page.getByTestId('mobile-menu-nav').innerText();
+    console.log('HAMBURGER items=' + ids.length + ' text="' + text.replace(/\n/g, '|') + '"');
+
+    // переход по Roadmap из меню
+    await page.getByTestId('mobile-menu-roadmap').click();
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => location.pathname), 'roadmap не открылся из меню').toBe('/roadmap');
+  });
 });
