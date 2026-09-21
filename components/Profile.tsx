@@ -116,13 +116,8 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
 
 export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout, initialSection = 'profile' }) => {
   const { t } = useLanguage();
-  // T-164: разделы страницы — «Профиль» (аккаунт, организация, план) и «Настройки» (хранилище, сервис)
-  const [section, setSection] = useState<'profile' | 'settings'>(initialSection);
-  const goSection = (next: 'profile' | 'settings') => {
-    setSection(next);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  useEffect(() => { goSection(initialSection); /* точка входа из навигации */ }, [initialSection]);
+  // T-212: «Профиль» и «Настройки» — РАЗНЫЕ страницы (/profile и /settings), а не вкладки.
+  const section: 'profile' | 'settings' = initialSection;
   const { getToken } = useAuth();
   const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
   const { user } = useUser();
@@ -641,10 +636,15 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
   return (
         <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
-            {/* T-164: разделы страницы — «Профиль» (аккаунт) и «Настройки» (хранилище, сервис) */}
-            <div className="flex items-center gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800 w-full max-w-sm">
-                <button data-testid="section-profile" onClick={() => goSection('profile')} className={'flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-colors ' + (section === 'profile' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200')}>Профиль</button>
-                <button data-testid="section-settings" onClick={() => goSection('settings')} className={'flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-colors ' + (section === 'settings' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200')}>Настройки</button>
+            {/* T-212: «Профиль» и «Настройки» — разные страницы (/profile и /settings), переключателя вкладок нет */}
+            <div className="flex justify-end">
+                <button
+                    onClick={() => onNavigate && onNavigate(section === 'profile' ? 'SETTINGS' : 'PROFILE')}
+                    data-testid="profile-cross-nav"
+                    className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                    {section === 'profile' ? 'Настройки хранилища →' : '← Профиль'}
+                </button>
             </div>
 
             {/* T-164: карточка аккаунта (личные данные, организация, план) */}

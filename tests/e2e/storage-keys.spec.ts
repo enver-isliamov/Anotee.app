@@ -13,11 +13,9 @@ test.describe('Хранилище: создание ключа и сохране
       if (u.includes('/api/storage?action=config')) configCalls.push(req.method() + ' ' + u);
     });
 
-    await page.goto('/profile');
+    // T-212: «Настройки» — отдельная страница (/settings), хранилище живёт там
+    await page.goto('/settings');
     await page.waitForTimeout(1200);
-    // раздел «Настройки» — хранилище живёт там
-    await page.getByTestId('section-settings').click().catch(() => {});
-    await page.waitForTimeout(700);
 
     // выбираем провайдера Cloudflare, чтобы форма S3 была активна
     await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
@@ -72,10 +70,8 @@ test.describe('Хранилище: создание ключа и сохране
       });
     });
 
-    await page.goto('/profile');
+    await page.goto('/settings');
     await page.waitForTimeout(1200);
-    await page.getByTestId('section-settings').click().catch(() => {});
-    await page.waitForTimeout(700);
 
     await page.getByTestId('cf-token-open').click();
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
