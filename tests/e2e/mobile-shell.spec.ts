@@ -17,7 +17,7 @@ test.describe('Мобильная оболочка (PWA)', () => {
     // «Диагностика» в пользовательской навигации быть не должно
     await expect(nav.getByText('Диагностика')).toHaveCount(0);
 
-    const tabs = ['bottom-nav-dashboard', 'bottom-nav-pricing', 'bottom-nav-profile'];
+    const tabs = ['bottom-nav-dashboard', 'bottom-nav-ai_features', 'bottom-nav-profile'];
     for (const t of tabs) {
       const btn = page.getByTestId(t);
       if (await btn.count()) {

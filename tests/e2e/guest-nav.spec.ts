@@ -21,7 +21,7 @@ test.describe('Гостевая навигация (неавторизованн
     await expect(nav).toBeVisible();
 
     // доступные гостю пункты
-    const guestTabs = ['bottom-nav-ai_features', 'bottom-nav-workflow', 'bottom-nav-pricing', 'bottom-nav-about'];
+    const guestTabs = ['bottom-nav-ai_features', 'bottom-nav-workflow', 'bottom-nav-live_demo', 'bottom-nav-pricing', 'bottom-nav-about'];
     const navText = await nav.innerText();
     for (const t of guestTabs) {
       expect(await page.getByTestId(t).count(), t + ': нет пункта у гостя').toBeGreaterThan(0);
@@ -32,7 +32,8 @@ test.describe('Гостевая навигация (неавторизованн
     console.log('GUEST-NAV tabs=' + guestTabs.length + ' text="' + navText.replace(/\n/g, '|') + '"');
 
     // переходы по публичным страницам + отсутствие горизонтального overflow
-    for (const t of guestTabs) {
+    // (демо открывается в собственной оболочке — проверяем его отдельно, последним)
+    for (const t of guestTabs.filter((x) => x !== 'bottom-nav-live_demo')) {
       await page.getByTestId(t).first().click();
       await page.waitForTimeout(900);
       const m = await page.evaluate(() => ({
@@ -45,6 +46,16 @@ test.describe('Гостевая навигация (неавторизованн
       expect(m.scrollW, t + ': горизонтальный overflow').toBeLessThanOrEqual(m.clientW + 1);
       expect(m.len, t + ': пустая страница').toBeGreaterThan(50);
     }
+
+    // демо: переход открывает LiveDemo, затем возврат к публичным разделам
+    await page.goto('/pricing');
+    await page.waitForTimeout(1200);
+    await page.getByTestId('bottom-nav-live_demo').first().click();
+    await page.waitForTimeout(1500);
+    const demo = await page.evaluate(() => ({ path: location.pathname, len: (document.body.innerText || '').length }));
+    console.log('GUEST-NAV demo -> ' + demo.path + ' len=' + demo.len);
+    expect(demo.path, 'демо не открылось').toBe('/demo');
+    expect(demo.len, 'страница демо пуста').toBeGreaterThan(50);
   });
 
   test('гость не видит пользовательских разделов по прямым адресам', async ({ page }) => {
@@ -58,6 +69,32 @@ test.describe('Гостевая навигация (неавторизованн
       const hasAccountCard = await page.locator('#profile-block').count();
       expect(hasAccountCard, r + ': гостю показан личный кабинет').toBe(0);
       console.log('GUEST-GUARD ' + r + ' len=' + text.length + ' profileBlock=' + hasAccountCard);
+    }
+  });
+
+  test('футер: из него открываются все публичные разделы (включая Roadmap, Оферту, Политику)', async ({ page }) => {
+    test.setTimeout(150_000);
+    asGuest(page);
+    await page.goto('/pricing');
+    await page.waitForTimeout(1500);
+
+    const footerLinks = ['footer-nav-ai_features', 'footer-nav-workflow', 'footer-nav-live_demo', 'footer-nav-pricing', 'footer-nav-about', 'footer-nav-roadmap'];
+    for (const id of footerLinks) {
+      expect(await page.getByTestId(id).count(), id + ': нет ссылки в футере').toBeGreaterThan(0);
+    }
+
+    // переход по Roadmap из футера
+    await page.getByTestId('footer-nav-roadmap').first().click();
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => location.pathname), 'roadmap не открылся').toBe('/roadmap');
+
+    // оферта и политика доступны гостю
+    for (const [id, path] of [['foot-check-terms', '/terms'], ['foot-check-privacy', '/privacy']]) {
+      await page.goto(path);
+      await page.waitForTimeout(900);
+      const len = await page.evaluate(() => (document.body.innerText || '').length);
+      console.log('GUEST-FOOTER ' + path + ' len=' + len);
+      expect(len, path + ': пустая страница').toBeGreaterThan(50);
     }
   });
 });
