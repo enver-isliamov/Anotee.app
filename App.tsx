@@ -30,6 +30,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
 import { setToastHandler } from './services/toastBus';
+import { registerServiceWorker } from './services/swRegister';
+import { OfflineBanner } from './components/OfflineBanner';
 import { DriveProvider, useDrive } from './services/driveContext';
 import { OnboardingWidget } from './components/OnboardingWidget';
 import useSWR, { mutate } from 'swr';
@@ -148,6 +150,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
+  // T-158: применить доступное обновление приложения (Service Worker)
+  const [swUpdate, setSwUpdate] = useState<null | (() => void)>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   
@@ -206,6 +210,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   });
 
   // Sync SWR Data to Local State (Preserving Blob URLs)
+  useEffect(() => {
+    // T-158: сама регистрация SW — в index.tsx; здесь только ловим событие «доступно обновление»
+    const handler = () => {
+      navigator.serviceWorker?.getRegistration().then((reg) => {
+        reg?.addEventListener('updatefound', () => {
+          const inst = reg.installing;
+          inst?.addEventListener('statechange', () => {
+            if (inst.state === 'installed' && navigator.serviceWorker.controller) {
+              setSwUpdate(() => () => { inst.postMessage({ type: 'SKIP_WAITING' }); window.location.reload(); });
+            }
+          });
+        });
+      }).catch(() => {});
+    };
+    handler();
+  }, []);
+
   useEffect(() => {
       if (serverProjects && Array.isArray(serverProjects)) {
           if (Date.now() - lastLocalUpdateRef.current < 2000) return;
@@ -654,6 +675,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     {view.type === 'TERMS' && <LegalPage type="TERMS" />}
                     {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
                 </Suspense></MainLayout>
+                <OfflineBanner updateAvailable={Boolean(swUpdate)} onApplyUpdate={() => swUpdate && swUpdate()} />
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
             </div>
           );
@@ -758,7 +780,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             />
         )}
 
-        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <OfflineBanner updateAvailable={Boolean(swUpdate)} onApplyUpdate={() => swUpdate && swUpdate()} />
+                <ToastContainer toasts={toasts} removeToast={removeToast} />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {isMockMode && <div className="fixed bottom-0 w-full bg-yellow-500/90 text-black text-center text-xs font-bold pointer-events-none z-[100]">PREVIEW MODE</div>}
       </main>
