@@ -374,11 +374,19 @@ if (req.method === 'GET') {
                         buckets = ((b.body && b.body.result && b.body.result.buckets) || []).map((x) => x.name);
                     } catch (e) { buckets = []; }
                 }
+                // T-179: можно ли этим токеном создавать R2-ключи (нужно право Account API Tokens: Edit).
+                // Проверяем заранее, чтобы UI сразу предложил ручной путь вместо непонятной ошибки.
+                let canCreateKeys = false;
+                try {
+                    const pg = await cf('/accounts/' + acc.id + '/tokens/permission_groups');
+                    canCreateKeys = pg.status === 200;
+                } catch (e) { canCreateKeys = false; }
                 return res.status(200).json({
                     success: true,
                     accountId: acc.id,
                     accountName: acc.name || null,
                     tokenType,
+                    canCreateKeys,
                     accounts: [{ id: acc.id, name: acc.name || null }],
                     buckets,
                     endpoints: {
@@ -453,8 +461,29 @@ if (req.method === 'GET') {
                 });
                 const cj = await createRes.json().catch(() => null);
                 if (!cj || !cj.success || !cj.result) {
-                    const msg = (cj && cj.errors && cj.errors[0] && cj.errors[0].message) || ('HTTP ' + createRes.status);
-                    return res.status(400).json({ error: 'Не удалось создать R2-ключ: ' + msg });
+                    const cfErr = (cj && cj.errors && cj.errors[0]) || null;
+                    const msg = (cfErr && cfErr.message) || ('HTTP ' + createRes.status);
+                    // T-179: у токена нет права «Account API Tokens: Edit» — автocreate невозможен (проверено на реальном аккаунте:
+                    // /accounts/{id}/tokens и /tokens/permission_groups отдают 9109 Unauthorized to access requested resource).
+                    const manualUrl = 'https://dash.cloudflare.com/?to=/:account/r2/api-tokens';
+                    const forbidden = createRes.status === 403 || createRes.status === 401 ||
+                        (cfErr && (cfErr.code === 9109 || /unauthor|not authorized|permission|forbidden/i.test(msg)));
+                    if (forbidden) {
+                        return res.status(400).json({
+                            error: 'У Cloudflare-токена нет права «Account API Tokens: Edit» — автосоздание R2-ключа недоступно',
+                            cfStatus: createRes.status,
+                            cfCode: cfErr ? cfErr.code : null,
+                            fallback: 'manual',
+                            manualUrl,
+                            hint: 'Создайте R2 API-токен вручную (10 секунд): R2 → Manage API Tokens → Create API token → права Object Read & Write → скопируйте Access Key ID и Secret Access Key в поля ниже.'
+                        });
+                    }
+                    return res.status(400).json({
+                        error: 'Не удалось создать R2-ключ: ' + msg,
+                        cfStatus: createRes.status,
+                        cfCode: cfErr ? cfErr.code : null,
+                        manualUrl
+                    });
                 }
                 const secret = createHash('sha256').update(String(cj.result.value)).digest('hex');
                 return res.status(200).json({ success: true, accessKeyId: cj.result.id, secretAccessKey: secret, bucketScoped: !!bucketName, tokenName });
