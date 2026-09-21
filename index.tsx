@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { registerServiceWorker } from './services/swRegister';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -9,6 +10,9 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+
+// T-158: офлайн-режим — регистрация SW в точке входа (не зависит от UI-ветки)
+registerServiceWorker();
 
 root.render(
 <React.StrictMode>
