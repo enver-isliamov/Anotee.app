@@ -243,4 +243,28 @@ test.describe('Мобильная оболочка (PWA)', () => {
     const m = await page.evaluate(() => ({ scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth }));
     expect(m.scrollW).toBeLessThanOrEqual(m.clientW + 2);
   });
+
+  test('меню-гамбургер: из него открываются «Профиль» и «Настройки»', async ({ page }) => {
+    test.setTimeout(150_000);
+    resetMockData(page);
+    await page.goto('/');
+    await page.waitForTimeout(1500);
+
+    // Профиль
+    await page.getByTestId('mobile-menu-toggle').click();
+    await page.waitForTimeout(400);
+    await page.getByTestId('mobile-menu-profile-entry').click();
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => location.pathname), 'профиль не открылся из меню').toBe('/profile');
+    expect(await page.locator('#profile-block').count(), 'нет карточки аккаунта').toBeGreaterThan(0);
+
+    // Настройки
+    await page.getByTestId('mobile-menu-toggle').click();
+    await page.waitForTimeout(400);
+    await page.getByTestId('mobile-menu-settings-entry').click();
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => location.pathname), 'настройки не открылись из меню').toBe('/settings');
+    await expect(page.locator('#storage-block')).toBeVisible();
+    console.log('HAMBURGER-PROFILE-SETTINGS ok');
+  });
 });
