@@ -1,6 +1,6 @@
 ﻿
 import React, { useState } from 'react';
-import { Menu, X, PlayCircle, Shield, Settings, CircleHelp } from 'lucide-react';
+import { Menu, X, PlayCircle, Shield, Settings, CircleHelp, UserRound } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { LanguageSelector } from './LanguageSelector';
 import { User } from '../types';
@@ -250,12 +250,22 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 {currentUser && (
                     <div className="space-y-3">
                         {/* Profile Link */}
-                        <button 
+                        {/* T-229: на мобильном те же две сущности, что и иконки в шапке: профиль и настройки */}
+                        <button
                             onClick={() => { setIsMobileMenuOpen(false); onNavigate('PROFILE'); }}
-                            className="w-full text-left px-4 py-3 rounded-xl text-sm font-bold bg-zinc-800 text-white flex items-center gap-3 hover:bg-zinc-700 transition-colors"
+                            data-testid="mobile-menu-profile-entry"
+                            className="w-full text-left px-4 py-3 rounded-xl text-sm font-bold bg-zinc-800 text-white flex items-center gap-3 hover:bg-zinc-700"
+                        >
+                            <UserRound size={18} className="text-zinc-400" />
+                            {t('nav.profile')}
+                        </button>
+                        <button
+                            onClick={() => { setIsMobileMenuOpen(false); onNavigate('SETTINGS'); }}
+                            data-testid="mobile-menu-settings-entry"
+                            className="w-full text-left px-4 py-3 rounded-xl text-sm font-bold bg-zinc-800 text-white flex items-center gap-3 hover:bg-zinc-700"
                         >
                             <Settings size={18} className="text-zinc-400" />
-                            Профиль и Подписка
+                            {t('nav.settings')}
                         </button>
 
                         {/* Org Switcher Card */}
