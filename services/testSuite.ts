@@ -1725,6 +1725,25 @@ export const TEST_SUITE: TestGroup[] = [
             const btns = Array.from(document.querySelectorAll('button'));
             const iconOnly = btns.filter((b) => !b.textContent?.trim() && !b.getAttribute('aria-label') && !b.getAttribute('title')).length;
             res.push({ name: 'Icon Buttons', description: 'Кнопки без текста должны иметь aria-label/title.', passed: iconOnly === 0, expected: '0 без описания', received: iconOnly + ' из ' + btns.length, passCondition: 'Иконочные кнопки описаны.', failCondition: 'Часть кнопок нечитаема для скринридера и не имеет подсказки.', severity: 'info', diagnosis: 'Добавьте aria-label или title иконочным кнопкам.', task: iconOnly ? regressionTask('Icon Buttons', 'кнопки без доступного имени') : undefined });
+            // T-232: у ссылок-иконок и контролов шапки должно быть доступное имя
+            const links = Array.from(document.querySelectorAll('a'));
+            const namelessLinks = links.filter((a) => {
+                const hasText = (a.textContent || '').trim().length > 0;
+                const hasName = a.getAttribute('aria-label') || a.getAttribute('title');
+                const hasImgAlt = !!a.querySelector('img[alt]:not([alt=""])');
+                return !hasText && !hasName && !hasImgAlt;
+            }).length;
+            res.push({ name: 'Link Names', description: 'Ссылки-иконки должны иметь текст, aria-label или title.', passed: namelessLinks === 0, expected: '0 без имени', received: String(namelessLinks) + ' из ' + links.length, passCondition: 'Все ссылки имеют доступное имя.', failCondition: 'Часть ссылок нечитаема для скринридера.', severity: 'info', diagnosis: 'Добавьте текст, aria-label или title ссылкам-иконкам.', task: namelessLinks ? regressionTask('Link Names', 'ссылки без доступного имени') : undefined });
+
+            const header = document.querySelector('header');
+            const headerControls = header ? Array.from(header.querySelectorAll('button, a')) : [];
+            const namelessHeader = headerControls.filter((el) => {
+                const hasText = (el.textContent || '').trim().length > 0;
+                const hasName = el.getAttribute('aria-label') || el.getAttribute('title');
+                return !hasText && !hasName;
+            }).length;
+            res.push({ name: 'Header Controls Labeled', description: 'Кнопки/ссылки шапки имеют доступное имя (aria-label/title/текст).', passed: namelessHeader === 0, expected: '0 без имени', received: String(namelessHeader) + ' из ' + headerControls.length, passCondition: 'Контролы шапки подписаны.', failCondition: 'Часть кнопок шапки нечитаема для скринридера.', severity: 'info', diagnosis: 'Добавьте aria-label или title кнопкам шапки.', task: namelessHeader ? regressionTask('Header Controls Labeled', 'контролы шапки без имени') : undefined });
+
             const lang = document.documentElement.getAttribute('lang') || '';
             res.push({ name: 'Document Language', description: 'У <html> задан атрибут lang.', passed: !!lang, expected: 'например ru/en', received: lang || 'нет', passCondition: 'Язык документа указан.', failCondition: 'Скринридеры неверно читают текст.', severity: 'info', diagnosis: 'Добавьте lang в index.html.', task: lang ? undefined : regressionTask('Document Language', 'нет lang у html') });
             return res;
