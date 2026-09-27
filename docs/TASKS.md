@@ -26,12 +26,12 @@
 - Acceptance: unit-тест на отклонение подделанного webhook; ручная проверка на staging с тестовыми ключами обоих провайдеров.
 - Риски: не сломать реальный webhook (железное правило №1 — правки в том же файле `payment.js`).
 
-### T-02 P0 `todo` Org-IDOR: список проектов организации
+### T-02 P0 `done` Org-IDOR: список проектов организации (666afd2)
 - Проблема: `api/data.js:361-368` — GET с `orgId` возвращает все проекты орг без проверки членства (в `check_updates` проверка есть — `data.js:117-118`).
 - Цель: перед org-запросом — `getOrganizationMembershipList` и 403 при отсутствии членства.
 - Acceptance: запрос с чужим orgId → 403; свой org → список. E2E/Diagnostics-проверка auth-матрицы.
 
-### T-03 P0 `todo` Крипто: фолбэк мастер-ключа
+### T-03 P0 `done` Крипто: фолбэк мастер-ключа → AES-256-GCM (666afd2)
 - Проблема: `api/_crypto.js:6` — при отсутствии env используется захардкоженный `'default-fallback-secret-key-do-not-use-in-prod'`; AES-CBC без HMAC (malleability).
 - Цель: падать с явной ошибкой при отсутствии `CLERK_SECRET_KEY` (не шифровать предсказуемым ключом); миграция на AES-256-GCM с сохранением чтения старых записей (re-encrypt on read).
 - Acceptance: unit-тест encrypt/decrypt roundtrip; тест, что без env функция бросает.
