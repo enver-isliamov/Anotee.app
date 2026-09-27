@@ -4,6 +4,7 @@ import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
 import { isOrgMember, extractOrgIds } from './_orgAccess.js';
+import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -525,6 +526,11 @@ export default async function handler(req, res) {
                return res.status(403).json({ error: "Restricted users cannot modify project settings." });
           }
 
+          // T-06: настройки проекта (имя, команда, доступы, блокировка) меняет только владелец/менеджер
+          if (touchesStructuralFields(updates) && !canManageProject(user, rows[0])) {
+              return res.status(403).json({ error: "Insufficient permissions: only owner or manager can change project settings" });
+          }
+
           const currentDbData = rows[0].data;
           const currentVer = currentDbData._version || 0;
           
@@ -576,6 +582,21 @@ export default async function handler(req, res) {
                     const existingData = checkExists.rows[0].data;
                     const member = existingData.team?.find(m => m.id === user.id);
                     if (member?.restrictedAssetId) continue; 
+
+                    // T-06: участник без прав на управление не может перезаписать настройки проекта —
+                    // серверные значения структурных полей сохраняются, принимаются только данные ревью.
+                    if (!canManageProject(user, checkExists.rows[0])) {
+                        const safeProject = stripStructuralChanges(project, existingData);
+                        safeProject._version = newVersion;
+                        await sql`
+                            UPDATE projects 
+                            SET data = ${JSON.stringify(safeProject)}::jsonb, updated_at = ${Date.now()}
+                            WHERE id = ${project.id}
+                            AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
+                        `;
+                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                        continue;
+                    }
 
                     await sql`
                         UPDATE projects 

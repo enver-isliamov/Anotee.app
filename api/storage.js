@@ -5,6 +5,7 @@ import { verifyUser } from './_auth.js';
 import { encrypt, decrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
 import { checkProjectAccess } from './_permissions.js';
+import { isKeyInProject, areKeysInProject } from './_access.js';
 import { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -565,6 +566,11 @@ if (req.method === 'GET') {
                 return res.status(400).json({ error: "Missing operation or key" });
             }
 
+            // T-04: ключ обязан лежать в папке проекта — иначе доступ есть, а объект чужой
+            if (projectId && !isKeyInProject(key, projectId)) {
+                return res.status(403).json({ error: "Key does not belong to this project" });
+            }
+
             // CRITICAL: Switch context if projectId is provided
             const { s3, config } = await getContextS3(projectId);
             
@@ -618,6 +624,11 @@ if (req.method === 'GET') {
                 return res.status(400).json({ error: "No keys provided" });
             }
 
+            // T-04: все удаляемые ключи должны принадлежать этому проекту
+            if (projectId && !areKeysInProject(keys, projectId)) {
+                return res.status(403).json({ error: "Some keys do not belong to this project" });
+            }
+
             // CRITICAL: Switch context if projectId is provided
             const { s3, config } = await getContextS3(projectId);
 
@@ -639,6 +650,11 @@ if (req.method === 'GET') {
             
             const { prefix, projectId } = req.body;
             if (!prefix) return res.status(400).json({ error: "Prefix required" });
+
+            // T-04: префикс папки тоже привязан к проекту
+            if (projectId && !isKeyInProject(prefix, projectId)) {
+                return res.status(403).json({ error: "Prefix does not belong to this project" });
+            }
 
             // CRITICAL: Switch context if projectId is provided
             const { s3, config } = await getContextS3(projectId);
