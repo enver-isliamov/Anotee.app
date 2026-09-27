@@ -3,6 +3,7 @@ import { sql } from '@vercel/postgres';
 import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
+import { isOrgMember, extractOrgIds } from './_orgAccess.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -433,6 +434,25 @@ export default async function handler(req, res) {
 
           } else if (targetOrgId) {
               // --- ORG LIST ---
+              // T-02: без проверки членства любой авторизованный пользователь мог выгрузить проекты чужой организации.
+              let userOrgIds = [];
+              if (user.isVerified && user.userId) {
+                  try {
+                      const clerk = getClerkClient();
+                      const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId, limit: 100 });
+                      userOrgIds = extractOrgIds(memberships);
+                  } catch (e) {
+                      // Проверить доступ не удалось — не отдаём данные (fail-closed), но и не «403»: это временный сбой.
+                      console.error("Org membership check failed:", e && e.message ? e.message : e);
+                      return res.status(503).json({ error: "Не удалось проверить доступ к организации. Повторите запрос.", code: "ORG_CHECK_UNAVAILABLE" });
+                  }
+              } else {
+                  return res.status(403).json({ error: "Access denied: not authorized" });
+              }
+              if (!isOrgMember(userOrgIds, targetOrgId)) {
+                  return res.status(403).json({ error: "Access denied: you are not a member of this organization" });
+              }
+
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
