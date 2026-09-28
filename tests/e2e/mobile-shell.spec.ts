@@ -242,6 +242,41 @@ test.describe('Мобильная оболочка (PWA)', () => {
     expect(m.scrollW).toBeLessThanOrEqual(m.clientW + 2);
   });
 
+  test('мобильная геометрия панели хранилища: во всю ширину, без двойных отступов', async ({ page }) => {
+    test.setTimeout(120_000);
+    resetMockData(page);
+    await page.goto('/settings');
+    await page.waitForTimeout(1500);
+
+    const m = await page.evaluate(() => {
+      const sb = document.getElementById('storage-block');
+      const viewport = window.innerWidth;
+      if (!sb) return null;
+      const r = sb.getBoundingClientRect();
+      const cards = sb.querySelector('div[class*="grid-cols-3"]');
+      const cr = cards ? cards.getBoundingClientRect() : null;
+      return {
+        viewport,
+        blockLeft: Math.round(r.left),
+        blockWidth: Math.round(r.width),
+        cardsWidth: cr ? Math.round(cr.width) : null
+      };
+    });
+    console.log('MOBILE-GEOM ' + JSON.stringify(m));
+    expect(m, 'storage-block не найден').not.toBeNull();
+    if (!m) return;
+    // панель занимает экран минус 2×16px (без «двойных» 32px отступов)
+    expect(m.blockLeft, 'левый отступ панели больше 20px').toBeLessThanOrEqual(20);
+    expect(m.blockWidth, 'панель зажата (меньше 340px при 390px экране)').toBeGreaterThanOrEqual(viewportMinus(m.viewport, 56));
+    // карточки занимают почти всю ширину панели
+    expect(m.cardsWidth, 'карточки сильно уже панели').toBeGreaterThanOrEqual(m.blockWidth - 40);
+    // нет горизонтального переполнения
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    expect(overflow, 'горизонтальный overflow').toBe(false);
+  });
+
+  function viewportMinus(v: number, n: number) { return v - n; }
+
   test('меню-гамбургер: из него открываются «Профиль» и «Настройки»', async ({ page }) => {
     test.setTimeout(150_000);
     resetMockData(page);
