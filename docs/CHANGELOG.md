@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-28 (пятая) · Cloudflare R2: причина 6003 и понятная инструкция
+
+### Исправлено
+- **Причина ошибки «Invalid request headers (код Cloudflare: 6003)»**: три запроса к Cloudflare API (`cf_create_bucket`, `permission_groups`, `cf_create_r2_key`) отправляли `Authorization` со звёздочками вместо схемы `Bearer`. Исправлено; проверка байтово: 4× `Bearer`, 0 звёздочек.
+
+### Изменено
+- Инструкция Cloudflare в приложении переписана по реальному интерфейсу: страница `R2 → Manage API Tokens` (`/r2/api-tokens`), кнопка **«Create Account API token»**, страница Success (`/r2/api-tokens/success`) с парой **Access Key ID / Secret Access Key**. В модалке — две кликабельные ссылки и пояснения по полям.
+- Selectel: ссылка на документацию обновлена на `docs.selectel.ru/s3/`.
+
+### Проверено
+- tsc 0 · unit 94/94 · verify 0 · playwright 54 passed · build 0.
+
+
 ## 2026-09-28 (четвёртая) · Логирование и локализация (ISS-011, ISS-014)
 
 ### Изменено
