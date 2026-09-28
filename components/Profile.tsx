@@ -703,7 +703,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   
   )}
                                 
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
                                     <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} configured={activeProvider === 'google'} onSwitch={() => handleSwitchProvider('google' as ExtendedProvider)} color="bg-green-600" />
                                     <ProviderCard id="yandex" label="Yandex" configured={configuredProviders.includes('yandex')} onSwitch={() => handleSwitchProvider('yandex' as ExtendedProvider)} icon="Y" color="bg-red-500" />
                                     <ProviderCard id="cloudflare" label="R2" configured={configuredProviders.includes('cloudflare')} onSwitch={() => handleSwitchProvider('cloudflare' as ExtendedProvider)} icon="C" color="bg-orange-500" />
@@ -711,7 +711,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     <ProviderCard id="custom" label="Custom" configured={configuredProviders.includes('custom')} onSwitch={() => handleSwitchProvider('custom' as ExtendedProvider)} icon="?" color="bg-zinc-600" />
                                 </div>
 
-                                <div className="bg-zinc-950/50 p-5 rounded-xl border border-zinc-800/50 min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
+                                <div className="bg-zinc-950/50 p-4 sm:p-5 rounded-xl border border-zinc-800/50 min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
                                     
                                     {selectedTab === 'google' && (
                                         <div className="flex flex-col items-center justify-center h-full py-4 text-center space-y-4">
@@ -916,11 +916,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         
                                                 </div>
 
-                                                <div className="flex gap-2">
+                                                <div className="flex flex-col sm:flex-row gap-2">
                                                     <button 
                                                         onClick={handleTestConnection}
                                                         disabled={isSavingS3 || isTestingS3}
-                                                        className="px-4 py-2 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+                                                        className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
                                                     >
                                                         {isTestingS3 ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Проверить
                                                     </button>
@@ -928,7 +928,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         onClick={handleSaveAndActivate}
                                                         data-testid="storage-save-btn"
                                                         disabled={isSavingS3 || isTestingS3}
-                                                        className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
+                                                        className={`w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
                                                             activeProvider === selectedTab 
                                                                 ? 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700' 
                                                                 : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
