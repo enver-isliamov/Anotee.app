@@ -91,24 +91,14 @@ test.describe('Хранилище: создание ключа и сохране
       console.log('NO-CREATEKEYS-WARN не отрисован (модалка могла закрыться)');
     }
 
-    // пробуем создать ключ — приходит структурированная ошибка
-    const createBtn = page.getByText(/Создать R2-ключ/i).first();
-    if (await createBtn.count()) {
-      await createBtn.click();
-      await page.waitForTimeout(1200);
-      const errBox = page.getByTestId('cf-key-error');
-      if (await errBox.count()) {
-        await expect(errBox).toBeVisible();
-        const t = await errBox.innerText();
-        expect(t).toContain('Account API Tokens');
-        expect(t).toContain('9109');
-        const href = await errBox.locator('a').first().getAttribute('href');
-        expect(href || '').toContain('r2/api-tokens');
-        console.log('KEY-ERROR-CHECK текст="' + t.replace(/\n/g, ' | ').slice(0, 140) + '" link=' + href);
-      } else {
-        console.log('KEY-ERROR не отрисован');
-      }
-    }
+    // T-313: при canCreateKeys=false кнопки автосоздания НЕТ — показывается ручной путь
+    await expect(page.getByTestId('cf-create-key-btn')).toHaveCount(0);
+    const steps = await page.getByTestId('cf-no-createkeys').innerText();
+    expect(steps).toContain('Create Account API token');
+    expect(steps).toContain('Access Key ID');
+    const href = await page.getByTestId('cf-no-createkeys').locator('a').first().getAttribute('href');
+    expect(href || '').toContain('/r2/api-tokens');
+    console.log('NO-CREATEKEYS-STEPS ok, link=' + href);
     await page.screenshot({ path: 'test-results/screens/cf-key-error.png' }).catch(() => {});
   });
 });
