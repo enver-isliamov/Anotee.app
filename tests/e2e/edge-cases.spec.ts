@@ -34,8 +34,8 @@ test.describe('Граничные случаи', () => {
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
 
     // короткий токен (клиентская валидация до сети)
-    await page.locator('input[placeholder="Вставьте токен"]').fill('short');
-    await page.getByText(/Проверить и заполнить/i).click();
+    await page.getByTestId('cf-token-input').fill('short');
+    await page.getByTestId('cf-probe-submit').click();
     await page.waitForTimeout(800);
 
     const body = await page.evaluate(() => document.body.innerText || '');

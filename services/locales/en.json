@@ -1,4 +1,10 @@
 {
+  "settings.cf_account_placeholder": "e.g. 39bb41ab2b9b8e6f8f667f4817dbce58",
+  "settings.cf_token_placeholder": "Paste the token",
+  "settings.new_secret_placeholder": "New Secret Access Key (changing the Access Key does not reuse the old secret)",
+  "settings.make_active": "Make active",
+  "common.hide": "Hide",
+  "player.transcript.clear_confirm": "Clear the whole transcript?",
   "app.name": "Anotee",
   "auth.btn.join": "Join",
   "auth.btn.login": "Enter",

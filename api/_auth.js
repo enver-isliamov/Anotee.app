@@ -1,5 +1,6 @@
 
 import { createClerkClient, verifyToken } from '@clerk/backend';
+import { logWarn } from './_log.js';
 
 // Helper to get client securely
 export function getClerkClient() {
@@ -48,7 +49,7 @@ export async function getUserFromToken(token, requireEmail = false) {
         // 2. SLOW PATH (Fallback): API Call
         // Used only if custom claims are missing (e.g. old session) AND email is required
         if (requireEmail) {
-            console.log("⚠️ Auth: Falling back to slow API call (Custom Claims missing)");
+            logWarn('AUTH', 'Falling back to slow API call (Custom Claims missing)');
             const clerk = getClerkClient();
             const user = await clerk.users.getUser(verified.sub);
             

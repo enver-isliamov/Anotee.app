@@ -1,5 +1,6 @@
 ﻿
 import { sql } from '@vercel/postgres';
+import { logInfo, logDebug } from './_log.js';
 import { createHash } from 'crypto';
 import { verifyUser } from './_auth.js';
 import { encrypt, decrypt } from './_crypto.js';
@@ -498,7 +499,7 @@ if (req.method === 'GET') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
             const { s3, config } = await getS3Client(user.id);
-            console.log(`Testing S3 connection for user ${user.id} to ${config.endpoint}`);
+            logInfo('STORAGE', `Testing S3 connection for user ${user.id} to ${config.endpoint}`);
 
             try {
                 const command = new HeadBucketCommand({ Bucket: config.bucket });

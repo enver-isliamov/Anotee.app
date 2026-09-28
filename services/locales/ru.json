@@ -1,4 +1,10 @@
 {
+  "settings.cf_account_placeholder": "напр. 39bb41ab2b9b8e6f8f667f4817dbce58",
+  "settings.cf_token_placeholder": "Вставьте токен",
+  "settings.new_secret_placeholder": "Новый Secret Access Key (при смене Access Key старый секрет не переиспользуется)",
+  "settings.make_active": "Сделать активным",
+  "common.hide": "Скрыть",
+  "player.transcript.clear_confirm": "Очистить весь транскрипт?",
   "app.name": "Anotee",
   "auth.btn.join": "Присоединиться",
   "auth.btn.login": "Войти",

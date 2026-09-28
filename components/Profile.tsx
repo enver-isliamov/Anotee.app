@@ -586,7 +586,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                   <span
                       role="radio"
                       aria-checked={false}
-                      title="Сделать активным"
+                      title={t('settings.make_active')}
                       onClick={(e) => { e.stopPropagation(); onSwitch(); }}
                       className="mt-0.5 w-full text-center text-[10px] font-bold text-emerald-500 border border-emerald-500/30 rounded-lg py-0.5 hover:bg-emerald-500/10 transition-colors"
                   >сделать активным</span>
@@ -883,7 +883,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                                 value={s3Form.secretAccessKey} 
                                                                 onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
                                                                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
-                                                                placeholder="Новый Secret Access Key (при смене Access Key старый секрет не переиспользуется)"
+                                                                placeholder={t('settings.new_secret_placeholder')}
                                                             />
                                                             <button onClick={() => setShowSecretKey(!showSecretKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
                                                                 {showSecretKey ? <EyeOff size={14} /> : <Eye size={14} />} 
@@ -1142,14 +1142,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                             </a>
                         </div>
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Cloudflare API-токен (Token value)</label>
-                        <input autoComplete="off" value={cfToken} onChange={(e) => setCfToken(e.target.value)} placeholder="Вставьте токен" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
+                        <input autoComplete="off" data-testid="cf-token-input" value={cfToken} onChange={(e) => setCfToken(e.target.value)} placeholder={t('settings.cf_token_placeholder')} className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
                         <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Account ID (только для Account API Token)</label>
-                        <input autoComplete="off" data-testid="cf-account-id" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} placeholder="напр. 39bb41ab2b9b8e6f8f667f4817dbce58" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
+                        <input autoComplete="off" data-testid="cf-account-id" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} placeholder={t('settings.cf_account_placeholder')} className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
                         {cfToken.trim().startsWith('cfat_') && !cfAccountId.trim() && (
                             <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-2">Это Account API Token (cfat_…) — обязательно укажите Account ID ниже.</p>
                         )}
                         <p className="text-[10px] text-zinc-500 mb-3">User API Token (Profile → API Tokens) — Account ID не нужен. Account API Token (Manage Account → Account API Tokens, начинается с cfat_) — /user/tokens/verify его не принимает, поэтому укажите Account ID из R2 → Account Details.</p>
-                        <button onClick={handleCfProbe} disabled={cfBusy} className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-bold">{cfBusy ? 'Проверяем…' : 'Проверить и заполнить'}</button>
+                        <button onClick={handleCfProbe} disabled={cfBusy} data-testid="cf-probe-submit" className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-bold">{cfBusy ? 'Проверяем…' : 'Проверить и заполнить'}</button>
                         {cfData && (
                             <div className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs text-zinc-700 dark:text-zinc-200 space-y-2">
                                 <div>Account: <b>{cfData.accountName || '—'}</b> <span className="text-zinc-500 font-mono">({cfData.accountId})</span></div>

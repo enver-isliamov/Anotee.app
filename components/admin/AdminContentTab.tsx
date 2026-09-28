@@ -346,7 +346,7 @@ const AdminContentTabInner: React.FC = () => {
                             value={customPrompt}
                             onChange={(e) => setCustomPrompt(e.target.value)}
                             className="w-full h-48 md:h-64 bg-zinc-900 p-4 text-sm text-zinc-300 font-mono outline-none resize-none leading-relaxed placeholder-zinc-700"
-                            placeholder="Здесь появится сгенерированная инструкция..."
+                            placeholder="Generated instruction will appear here..."
                         />
                         
                         <div className="bg-zinc-900 p-2 flex justify-end border-t border-zinc-800">

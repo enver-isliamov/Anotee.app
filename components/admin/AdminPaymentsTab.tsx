@@ -533,10 +533,10 @@ export const AdminPaymentsTab: React.FC = () => {
                         </p>
                         <div className="bg-white dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
                             <LockedConfigInput 
-                                label="Прямая Ссылка для Донатов (URL)" 
+                                label="Direct donation link (URL)" 
                                 value={paymentConfig.donationUrl || ''} 
                                 onChange={(val) => setPaymentConfig(prev => ({...prev, donationUrl: val}))}
-                                placeholder="https://cloudtips.ru/... или https://tinkoff.ru/..."
+                                placeholder="https://cloudtips.ru/... or https://tinkoff.ru/..."
                                 icon={LinkIcon}
                             />
                         </div>

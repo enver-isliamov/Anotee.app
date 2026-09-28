@@ -1,5 +1,6 @@
 
 import { sql } from '@vercel/postgres';
+import { logInfo, logDebug } from './_log.js';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { GoogleGenAI, Type } from "@google/genai";
 import { encrypt, decrypt } from './_crypto.js';
@@ -474,7 +475,7 @@ export default async function handler(req, res) {
             
             // Log old plan for Audit
             const oldPlan = currentMeta.plan || 'free';
-            console.log(`[ADMIN AUDIT] User ${userId} plan changed: ${oldPlan} -> ${plan} by Admin ${user.userId}`);
+            logInfo('ADMIN', `[ADMIN AUDIT] User ${userId} plan changed: ${oldPlan} -> ${plan} by Admin ${user.userId}`);
 
             let newMeta = { ...currentMeta };
             newMeta.plan = plan;
