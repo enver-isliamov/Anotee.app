@@ -22,6 +22,12 @@ interface ProfileProps {
 // Added 'google' to generic type for UI handling
 type ExtendedProvider = S3Config['provider'] | 'google';
 
+/** T-316: из ссылки https://<accountId>.r2.cloudflarestorage.com вытаскиваем Account ID. */
+const parseR2Endpoint = (value: string): string | null => {
+    const m = String(value || '').match(/^https?:\/\/([a-f0-9]{32})\.r2\.cloudflarestorage\.com\/?/i);
+    return m ? m[1] : null;
+};
+
 const S3_PRESETS: Record<string, Partial<S3Config>> = {
     yandex: {
         provider: 'yandex',
@@ -427,6 +433,24 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Failed to save"); }
           
           setS3Saved(true);
+
+          // T-323: «Сохранить и активировать» должен реально переключить активного провайдера
+          // (раньше менялось только локальное состояние: legacy-зеркало не обновлялось и
+          // «Проверить» падало с «S3 Configuration not found»).
+              try {
+                  const sw = await fetch('/api/storage?action=switch_provider', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ provider: selectedTab })
+                  });
+                  if (!sw.ok) {
+                      const swErr = await sw.json().catch(() => ({}));
+                      console.warn('switch_provider failed:', swErr.error || sw.status);
+                  }
+              } catch (e: any) {
+                  console.warn('switch_provider network error:', e?.message);
+              }
+
           // Update active provider state
           setActiveProvider(selectedTab);
           
@@ -828,7 +852,16 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 <LockedInput 
                                                     label="Endpoint URL"
                                                     value={s3Form.endpoint}
-                                                    onChange={(e: any) => setS3Form(p => ({...p, endpoint: e.target.value}))}
+                                                    onChange={(e: any) => {
+                                                        const v = e.target.value;
+                                                        setS3Form((p: any) => ({ ...p, endpoint: v }));
+                                                        // T-316: если вставили ссылку R2 — определяем Account ID и подсказываем про пару ключей
+                                                        const acc = parseR2Endpoint(v);
+                                                        if (acc) {
+                                                            setCfAccountId(acc);
+                                                            toast('Account ID определён: ' + acc + '. Осталось создать пару ключей (R2 → Manage API Tokens → Create Account API token) и вставить Access Key ID и Secret.');
+                                                        }
+                                                    }}
                                                     isEditing={editingFields.endpoint}
                                                     onToggleEdit={() => toggleEdit('endpoint')}
                                                     icon={<Globe size={14} />}
@@ -837,6 +870,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 {selectedTab === 'cloudflare' && (
                                                     <p className="text-[9px] text-zinc-500 mt-1 pl-2">
                                                         Пример: <code>https://&lt;ACCOUNT_ID&gt;.r2.cloudflarestorage.com</code> (без бакета!)
+                                                    </p>
+                                                )}
+                                                {selectedTab === 'cloudflare' && (
+                                                    <p className="text-[9px] text-zinc-500 mt-1 pl-2" data-testid="cf-endpoint-hint">
+                                                        Можно вставить готовую ссылку вида <b>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</b> — Account ID определится автоматически; останется вставить Access Key ID и Secret.
                                                     </p>
                                                 )}
                                             </div>

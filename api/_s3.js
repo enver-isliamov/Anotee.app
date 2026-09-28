@@ -10,8 +10,28 @@ import { decrypt } from './_crypto.js';
 export async function getS3Client(userId) {
     if (!userId) throw new Error("UserId required for S3 Client");
 
-    const { rows } = await sql`SELECT * FROM storage_config WHERE user_id = ${userId}`;
-    
+    // T-322: сначала пробуем per-provider конфиг активного провайдера (storage_configs),
+    // legacy storage_config — только как fallback. Раньше «Сохранить» без «активации»
+    // оставляло legacy пустым и «Проверить» падало с «S3 Configuration not found».
+    let rows = [];
+    try {
+        const prefRows = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${userId}`;
+        const active = prefRows.length > 0 ? prefRows[0].active_provider : null;
+        const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${userId}`;
+        if (cfgRows.length > 0) {
+            const chosen = (active && cfgRows.find(r => r.provider === active)) || cfgRows[0];
+            rows = [chosen];
+        }
+    } catch (e) {
+        // таблица storage_configs может быть недоступна — идём в legacy
+        console.warn('per-provider read failed, legacy fallback:', e && e.message ? e.message : e);
+    }
+
+    if (rows.length === 0) {
+        const legacy = await sql`SELECT * FROM storage_config WHERE user_id = ${userId}`;
+        rows = legacy.rows;
+    }
+
     if (rows.length === 0) {
         throw new Error("S3 Configuration not found for this user");
     }
