@@ -22,50 +22,24 @@ test.describe('Граничные случаи', () => {
     }
   });
 
-  test('Cloudflare-модалка: короткий токен отклоняется понятным сообщением', async ({ page }) => {
+  test('Cloudflare: автозаполнение удалено, ручное подключение доступно', async ({ page }) => {
     test.setTimeout(120_000);
     resetMockData(page);
     await page.goto('/settings');
     await page.waitForTimeout(1200);
 
-    await page.waitForTimeout(1200);
-
     await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
     await page.waitForTimeout(500);
-    await page.getByTestId('cf-token-open').click();
-    await expect(page.getByTestId('cf-token-modal')).toBeVisible();
 
-    // короткий токен (клиентская валидация до сети)
-    await page.getByTestId('cf-token-input').fill('short');
-    await page.getByTestId('cf-probe-submit').click();
+    // модалки и кнопки автозаполнения нет
+    await expect(page.getByTestId('cf-token-open')).toHaveCount(0);
+    await expect(page.getByTestId('cf-token-modal')).toHaveCount(0);
+
+    // пустой Access Key ID не отправляет конфиг и подсказывает про ключи (T-179 guard сохранён)
+    await page.getByTestId('storage-save-btn').click();
     await page.waitForTimeout(800);
-
     const body = await page.evaluate(() => document.body.innerText || '');
-    expect(/Вставьте Cloudflare API-токен/i.test(body), 'нет понятного сообщения о коротком токене').toBe(true);
-    // модалка не закрылась и не упала
-    await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-  });
-
-  test('Cloudflare-модалка: закрывается и не оставляет состояния', async ({ page }) => {
-    test.setTimeout(120_000);
-    resetMockData(page);
-    await page.goto('/settings');
-    await page.waitForTimeout(1200);
-
-    await page.waitForTimeout(1200);
-
-    await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
-    await page.waitForTimeout(500);
-    await page.getByTestId('cf-token-open').click();
-    await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
-    // после повторного открытия поле пустое (нет «залипшего» состояния)
-    const again = page.getByTestId('cf-token-open');
-    if (!(await page.getByTestId('cf-token-modal').count())) {
-      await again.click();
-      await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-    }
+    expect(/Access Key ID/i.test(body), 'нет подсказки про Access Key ID').toBe(true);
   });
 
   test('страница диагностики открывается и запускает проверки', async ({ page }) => {

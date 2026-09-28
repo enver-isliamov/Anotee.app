@@ -92,7 +92,7 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
             '2. В правах выберите «Admin Read & Write» (Object Read & Write) — этого достаточно для загрузки и раздачи файлов.',
             '3. После создания откроется страница Success: там сразу видны Access Key ID и Secret Access Key (Secret показывается один раз!).',
             '4. Скопируйте оба значения в поля ниже: Access Key ID → «Access Key ID», Secret Access Key → «Secret Access Key».',
-            '5. Account ID и Endpoint подставятся автоматически после «🔑 Заполнить по Cloudflare-токену» (API-токен нужен только для автозаполнения и не сохраняется).'
+            '5. Account ID — в правом сайдбаре R2 («Account Details»); если вставить ссылку вида https://<Account ID>.r2.cloudflarestorage.com в поле Endpoint, приложение определит Account ID автоматически.'
         ],
         link: 'https://dash.cloudflare.com/?to=/:account/r2/api-tokens',
         linkText: 'Открыть R2 → Manage API Tokens',
@@ -167,14 +167,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [configOwner, setConfigOwner] = useState('');
     const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
     const [configuredProviders, setConfiguredProviders] = useState<string[]>([]); // T-93: настроенные S3-провайдеры (с сервера)
-    // T-114: автозаполнение по Cloudflare API-токену (Token value)
-    const [showCfProbe, setShowCfProbe] = useState(false);
-    const [cfToken, setCfToken] = useState('');
-    const [cfBusy, setCfBusy] = useState(false);
-    // T-179: ошибка автосоздания ключа (с подсказкой и ссылкой на ручной путь)
-  const [cfKeyError, setCfKeyError] = useState<null | { error: string; hint?: string; manualUrl?: string; cfCode?: number | null }>(null);
-  const [cfData, setCfData] = useState<{ canCreateKeys?: boolean; accountId: string; accountName?: string | null; buckets: string[]; endpoints: { default: string; eu: string; us: string } } | null>(null);
-    const [cfAccountId, setCfAccountId] = useState(''); // T-117: для Account API Token (cfat_…)
 
   const saveStoragePrefs = async (activeProvider: string, disabled: string[], auditAction: string) => {
     try {
@@ -344,57 +336,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         } catch (e: any) { toast(e?.message || 'Сбой сети'); }
     };
 
-    // T-115: создать бакет в один клик
-    const handleCfCreateBucket = async () => {
-        if (!cfData || !s3Form.bucket) { toast('Сначала проверьте токен и укажите имя бакета'); return; }
-        setCfBusy(true);
-        try {
-            const token = await getToken();
-            const res = await fetch('/api/storage?action=cf_create_bucket', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ apiToken: cfToken.trim(), accountId: cfData.accountId, bucketName: s3Form.bucket }) });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.success) {
-                toast(data.created ? `Бакет '${s3Form.bucket}' создан` : data.note || 'Бакет уже существует', 'success');
-                setCfData((d) => d ? { ...d, buckets: Array.from(new Set([...(d.buckets || []), s3Form.bucket])) } : d);
-            } else { toast(data.error || 'Не удалось создать бакет', 'error'); }
-        } catch (e: any) { toast(e?.message || 'Сбой сети'); } finally { setCfBusy(false); }
-    };
 
-    // T-115: создать R2-ключ доступа автоматически (полный автомат)
-    const handleCfCreateKey = async () => {
-        if (!cfData) { toast('Сначала проверьте токен'); return; }
-        setCfBusy(true);
-        try {
-            const token = await getToken();
-            const res = await fetch('/api/storage?action=cf_create_r2_key', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ apiToken: cfToken.trim(), accountId: cfData.accountId, bucketName: s3Form.bucket || undefined }) });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.success) {
-                setS3Form((pr: any) => ({ ...pr, accessKeyId: data.accessKeyId, secretAccessKey: data.secretAccessKey, provider: 'cloudflare', region: 'auto' }));
-                toast('Ключи доступа созданы и подставлены. Нажмите «Сохранить и активировать»', 'success');
-            } else {
-                setCfKeyError({ error: data.error || 'Не удалось создать ключи', hint: data.hint, manualUrl: data.manualUrl, cfCode: data.cfCode ?? null });
-                toast(data.error || 'Не удалось создать ключи', 'error');
-            }
-        } catch (e: any) { toast(e?.message || 'Сбой сети'); } finally { setCfBusy(false); }
-    };
 
-    // T-114: проверяем Cloudflare-токен на сервере — узнаём Account ID, endpoint и бакеты (токен не сохраняем)
-    const handleCfProbe = async () => {
-        if (!cfToken || cfToken.length < 20) { toast('Вставьте Cloudflare API-токен (Token value)'); return; }
-        setCfBusy(true);
-        try {
-            const token = await getToken();
-            const res = await fetch('/api/storage?action=cf_probe', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ apiToken: cfToken.trim(), accountId: cfAccountId.trim() || undefined }) });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.success) {
-                setCfData({ accountId: data.accountId, accountName: data.accountName, buckets: data.buckets || [], endpoints: data.endpoints, canCreateKeys: data.canCreateKeys !== false });
-                setCfKeyError(null);
-                setS3Form((pr: any) => ({ ...pr, provider: 'cloudflare', endpoint: data.endpoints.default, region: 'auto', bucket: (data.buckets && data.buckets[0]) || pr.bucket }));
-                toast('Account ID и Endpoint подставлены. ' + (data.buckets && data.buckets.length ? 'Выберите бакет из списка.' : 'Введите имя бакета вручную.') + (data.canCreateKeys === false ? ' Автосоздание ключа недоступно — создайте R2-ключ вручную.' : ''));
-            } else {
-                toast(data.error || 'Не удалось проверить токен', 'error');
-            }
-        } catch (e: any) { toast(e?.message || 'Сбой сети'); } finally { setCfBusy(false); }
-    };
 
     const handleMigrateStorage = async () => {
     if (!confirm('Починить источники видео: версии с Google Drive получат корректный тип storage. Продолжить?')) return;
@@ -415,7 +358,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
       // T-179: не отправляем конфиг без Access Key ID — иначе сервер отвечает 400 «Missing required fields: accessKeyId»
       if (selectedTab === 'cloudflare' && !String(s3Form.accessKeyId || '').trim()) {
-          toast('Сначала создайте R2-ключ (кнопка «Создать R2-ключ» или вручную) — поле Access Key ID пустое', 'error');
+          toast('Заполните Access Key ID — создайте пару ключей в R2 → Manage API Tokens (Create Account API token) и вставьте оба значения', 'error');
           return;
       }
       setIsSavingS3(true);
@@ -838,14 +781,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 </div>
                                             )}
 
-                                            {selectedTab === 'cloudflare' && (
-                                                <div className="col-span-2">
-                                                    <button onClick={() => setShowCfProbe(true)} data-testid="cf-token-open" className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2">
-                                                        <Zap size={14} /> Автозаполнение: Account ID, Endpoint и бакеты по Cloudflare-токену
-                                                    </button>
-                                                    <p className="text-[10px] text-zinc-500 mt-1.5 text-center">Токен используется один раз и не сохраняется. Нужен только для автозаполнения — ключи для работы вставляются ниже.</p>
-                                                </div>
-                                            )}
 
                                             {/* ENDPOINT */}
                                             <div className="col-span-2">
@@ -858,8 +793,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         // T-316: если вставили ссылку R2 — определяем Account ID и подсказываем про пару ключей
                                                         const acc = parseR2Endpoint(v);
                                                         if (acc) {
-                                                            setCfAccountId(acc);
-                                                            toast('Account ID определён: ' + acc + '. Осталось создать пару ключей (R2 → Manage API Tokens → Create Account API token) и вставить Access Key ID и Secret.');
+                                                            toast('Account ID определён: ' + acc + '. Создайте пару ключей (R2 → Manage API Tokens → Create Account API token) и вставьте Access Key ID и Secret.');
                                                         }
                                                     }}
                                                     isEditing={editingFields.endpoint}
@@ -992,6 +926,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     </button>
                                                     <button 
                                                         onClick={handleSaveAndActivate}
+                                                        data-testid="storage-save-btn"
                                                         disabled={isSavingS3 || isTestingS3}
                                                         className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
                                                             activeProvider === selectedTab 
@@ -1007,14 +942,25 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                         </div>
                                     )}
                                     {/* T-93: сервисные действия — больше не перемешаны с формой и карточками */}
-                                    <details className="col-span-2 mt-4" data-testid="storage-service-actions">
-                                        <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none">Сервисные действия</summary>
-                                        <div className="mt-3 flex flex-col gap-2">
-                                            <button onClick={handleMigrateStorage} className="py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold hover:bg-amber-500/20 transition-colors">🛠 Починить источники видео (Drive) — исправить тип storage у старых версий</button>
-                                            <button onClick={() => setShowCorsHelp(true)} className="py-2 rounded-xl bg-zinc-800/50 text-zinc-400 border border-zinc-700 text-xs font-bold hover:bg-zinc-800 transition-colors">🛡 Настроить CORS для бакета (если загрузки блокируются браузером)</button>
-                                            <button onClick={handleResetConfig} data-testid="reset-config" className="py-2 rounded-xl bg-zinc-800/50 text-zinc-400 border border-zinc-700 text-xs font-bold hover:bg-zinc-800 transition-colors">♻️ Сбросить конфигурацию хранилища (если ключи «застряли»)</button>
-                                        </div>
-                                    </details>
+                                    <details className="col-span-2 mt-4 group/maintenance" data-testid="storage-service-actions">
+    <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none flex items-center gap-1.5">
+        <Wrench size={12} /> Обслуживание и справка
+    </summary>
+    <div className="mt-3 flex flex-col gap-2 text-xs">
+        <button onClick={handleMigrateStorage} className="py-2.5 px-3 rounded-xl bg-zinc-800/60 text-zinc-300 border border-zinc-700/60 hover:bg-zinc-800 text-left transition-colors">
+            <b>Исправить источники у старых проектов</b>
+            <span className="block text-[10px] text-zinc-500 mt-0.5">Google Drive ⇄ S3: версии с неверным типом хранилища получат корректный</span>
+        </button>
+        <button onClick={() => setShowCorsHelp(true)} className="py-2.5 px-3 rounded-xl bg-zinc-800/60 text-zinc-300 border border-zinc-700/60 hover:bg-zinc-800 text-left transition-colors">
+            <b>Показать JSON для CORS бакета</b>
+            <span className="block text-[10px] text-zinc-500 mt-0.5">Скопируйте и вставьте в настройки CORS вашего провайдера, если браузер блокирует файлы</span>
+        </button>
+        <button onClick={handleResetConfig} data-testid="reset-config" className="py-2.5 px-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 text-left transition-colors">
+            <b>Удалить настройки хранилища</b>
+            <span className="block text-[10px] text-red-400/70 mt-0.5">Сохранённые ключи будут удалены — понадобится ввести их заново</span>
+        </button>
+    </div>
+</details>
                                 </div>
                             </div>
                         )}
@@ -1164,81 +1110,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
 {/* T-92: блок «Хранилища» вынесен из help-модалки — рендерится всегда */}
         
-            {showCfProbe && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                        <button onClick={() => setShowCfProbe(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
-                        <h2 data-testid="cf-token-modal" className="text-lg font-bold text-zinc-900 dark:text-white mb-1">Заполнить по Cloudflare-токену</h2>
-                        <p className="text-xs text-zinc-500 mb-4">Вставьте <b>Token value</b> (Cloudflare API-токен с правами Account: Read и R2: Read). Приложение само определит Account ID, Endpoint и список бакетов. Токен не сохраняется.</p>
-                        <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 space-y-2 text-xs">
-                            <div className="font-bold text-zinc-900 dark:text-white">Шаги в Cloudflare</div>
-                            <a href={(cfAccountId.trim() ? 'https://dash.cloudflare.com/' + cfAccountId.trim() : 'https://dash.cloudflare.com/?to=/:account') + '/r2/api-tokens'} target="_blank" rel="noreferrer" data-testid="cf-link-tokens" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 hover:border-indigo-400 transition-colors">
-                                <span>1. R2 → Manage API Tokens<span className="block text-[10px] text-zinc-500">нажмите <b>«Create Account API token»</b>; права: Admin Read & Write</span></span>
-                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
-                            </a>
-                            <a href={(cfAccountId.trim() ? 'https://dash.cloudflare.com/' + cfAccountId.trim() : 'https://dash.cloudflare.com/?to=/:account') + '/r2/api-tokens/success'} target="_blank" rel="noreferrer" data-testid="cf-link-success" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 hover:border-indigo-400 transition-colors">
-                                <span>2. Скопировать Access Key ID и Secret<span className="block text-[10px] text-zinc-500">страница Success после создания токена — Secret виден один раз</span></span>
-                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
-                            </a>
-                            <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 hover:border-indigo-400 transition-colors">
-                                <span>3. Account ID (если нужен вручную)<span className="block text-[10px] text-zinc-500">R2 → Account Details → Account ID</span></span>
-                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
-                            </a>
-                        </div>
-                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Cloudflare API-токен (Token value)</label>
-                        <input autoComplete="off" data-testid="cf-token-input" value={cfToken} onChange={(e) => setCfToken(e.target.value)} placeholder={t('settings.cf_token_placeholder')} className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
-                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Account ID (только для Account API Token)</label>
-                        <input autoComplete="off" data-testid="cf-account-id" value={cfAccountId} onChange={(e) => setCfAccountId(e.target.value)} placeholder={t('settings.cf_account_placeholder')} className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-100 mb-3" />
-                        {cfToken.trim().startsWith('cfat_') && !cfAccountId.trim() && (
-                            <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-2">Это Account API Token (cfat_…) — обязательно укажите Account ID ниже.</p>
-                        )}
-                        <p className="text-[10px] text-zinc-500 mb-3">User API Token (Profile → API Tokens) — Account ID не нужен. Account API Token (Manage Account → Account API Tokens, начинается с cfat_) — /user/tokens/verify его не принимает, поэтому укажите Account ID из R2 → Account Details.</p>
-                        <button onClick={handleCfProbe} disabled={cfBusy} data-testid="cf-probe-submit" className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-bold">{cfBusy ? 'Проверяем…' : 'Проверить и заполнить'}</button>
-                        {cfData && (
-                            <div className="mt-4 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs text-zinc-700 dark:text-zinc-200 space-y-2">
-                                <div>Account: <b>{cfData.accountName || '—'}</b> <span className="text-zinc-500 font-mono">({cfData.accountId})</span></div>
-                                <div>Endpoint: <code className="font-mono">{cfData.endpoints.default}</code></div>
-                                {cfData.buckets.length > 0 && (
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Бакет</label>
-                                        <select value={s3Form.bucket} onChange={(e) => setS3Form((pr: any) => ({ ...pr, bucket: e.target.value }))} className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs">
-                                            {cfData.buckets.map((b) => (<option key={b} value={b}>{b}</option>))}
-                                        </select>
-                                    </div>
-                                )}
-                                {!cfData.buckets.length && (<div className="text-amber-600 dark:text-amber-400">Список пуст — у токена нет права R2: Read. Введите имя бакета ниже и создайте его.</div>)}
-                                <div className="flex flex-col gap-2 pt-1">
-                                    <label className="text-[10px] font-bold uppercase text-zinc-500">Имя бакета</label>
-                                    <input value={s3Form.bucket} onChange={(e) => setS3Form((pr: any) => ({ ...pr, bucket: e.target.value }))} placeholder="anotee" className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs font-mono" />
-                                    {s3Form.bucket && !cfData.buckets.includes(s3Form.bucket) && (
-                                        <button onClick={handleCfCreateBucket} disabled={cfBusy} className="w-full py-2 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-600 dark:text-amber-400 text-xs font-bold disabled:opacity-50">＋ Создать бакет «{s3Form.bucket}» в один клик</button>
-                                    )}
-                                    {cfData.canCreateKeys !== false && (
-                                        <button onClick={handleCfCreateKey} disabled={cfBusy} data-testid="cf-create-key-btn" className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50 transition-colors">
-                                            Создать R2-ключ автоматически
-                                        </button>
-                                    )}
-                                </div>
-                                {cfData.canCreateKeys === false && (
-                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-[11px] text-amber-800 dark:text-amber-200 space-y-1.5" data-testid="cf-no-createkeys">
-                                        <div className="font-bold">Этот токен не может создавать ключи автоматически — создайте пару ключей вручную (10 секунд):</div>
-                                        <div>1. Откройте <a className="underline" href={(cfData.accountId ? 'https://dash.cloudflare.com/' + cfData.accountId : 'https://dash.cloudflare.com/?to=/:account') + '/r2/api-tokens'} target="_blank" rel="noreferrer">R2 → Manage API Tokens</a> и нажмите <b>«Create Account API token»</b> (права Admin Read &amp; Write).</div>
-                                        <div>2. На странице Success скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b>.</div>
-                                        <div>3. Вставьте оба значения в поля формы ниже и нажмите «Сохранить и активировать».</div>
-                                    </div>
-                                )}
-                                {cfKeyError && (
-                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-[11px] text-red-700 dark:text-red-200 space-y-1" data-testid="cf-key-error">
-                                        <div>{cfKeyError.error}{cfKeyError.cfCode ? ' (код Cloudflare: ' + cfKeyError.cfCode + ')' : ''}</div>
-                                        {cfKeyError.hint && <div className="text-zinc-500 dark:text-zinc-400">{cfKeyError.hint}</div>}
-                                        {cfKeyError.manualUrl && <a href={cfKeyError.manualUrl} target="_blank" rel="noreferrer" className="underline">Открыть R2 → Manage API Tokens</a>}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
 
             {showCorsHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">

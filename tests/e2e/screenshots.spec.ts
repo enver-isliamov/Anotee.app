@@ -31,14 +31,7 @@ test.describe('Screenshots', () => {
     await page.waitForTimeout(1200);
     await shoot(page, 'desktop-02b-settings');
 
-    const cf = page.getByTestId('cf-token-open');
-    if (await cf.count()) {
-      await cf.first().click();
-      await page.waitForTimeout(700);
-      await shoot(page, 'desktop-03-cf-token-modal');
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(400);
-    }
+    await shoot(page, 'desktop-03-storage-panel');
     await page.goto('/pricing');
     await page.waitForTimeout(1200);
     await shoot(page, 'desktop-04-pricing');
@@ -68,14 +61,7 @@ test.describe('Screenshots', () => {
     await page.goto('/settings');
     await page.waitForTimeout(1200);
     await shoot(page, 'mobile-02b-settings');
-    const cf = page.getByTestId('cf-token-open');
-    if (await cf.count()) {
-      await cf.first().click();
-      await page.waitForTimeout(700);
-      await shoot(page, 'mobile-03-cf-token-modal');
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(400);
-    }
+    await shoot(page, 'mobile-03-storage-panel');
     await page.goto('/pricing');
     await page.waitForTimeout(1200);
     await shoot(page, 'mobile-04-pricing');

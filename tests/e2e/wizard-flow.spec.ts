@@ -19,21 +19,22 @@ test('хранилище: без мастера, есть подключение
   await expect(page.getByTestId('wizard-open')).toHaveCount(0);
   await expect(page.getByTestId('wizard-overlay')).toHaveCount(0);
 
-  // карточки провайдеров и кнопка подключения по токену
+  // карточки провайдеров и ручная настройка (T-328: автозаполнение удалено по просьбе владельца)
   await expect(page.getByTestId('provider-card-cloudflare')).toBeVisible();
-  // T-296: автозаполнение — внутри панели Cloudflare, сначала выбираем провайдера
   await page.getByTestId('provider-card-cloudflare').click();
   await page.waitForTimeout(600);
-  const cfBtn = page.getByTestId('cf-token-open');
-  await expect(cfBtn).toBeVisible();
-  await cfBtn.click();
-  await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-  // T-285: шаги ведут на R2 → Manage API Tokens (кнопка Create Account API token) и на страницу Success
-  await expect(page.getByTestId('cf-link-tokens')).toBeVisible();
-  await expect(page.getByTestId('cf-link-success')).toBeVisible();
-  // содержимое шагов: кнопка Create Account API token и пара Access/Secret
-  await expect(page.getByTestId('cf-link-tokens')).toContainText(/Create Account API token/i);
-  await expect(page.getByTestId('cf-link-success')).toContainText(/Access Key ID и Secret/i);
+  // автозаполнения больше нет
+  await expect(page.getByTestId('cf-token-open')).toHaveCount(0);
+  await expect(page.getByTestId('cf-token-modal')).toHaveCount(0);
+  // инструкция «Как получить ключи» доступна в панели и содержит нужные шаги
+  await expect(page.getByTestId('provider-help')).toBeVisible();
+  await page.getByTestId('provider-help').click();
+  await page.waitForTimeout(400);
+  const helpText = await page.getByTestId('provider-help-steps').innerText();
+  expect(helpText).toMatch(/Create Account API token/);
+  expect(helpText).toMatch(/Success/);
+  // поля ручного ввода на месте
+  await expect(page.locator('input[value][placeholder], input').first()).toBeVisible();
 });
 
 test('«Профиль» и «Настройки» — разные страницы, навигация из шапки', async ({ page }) => {
