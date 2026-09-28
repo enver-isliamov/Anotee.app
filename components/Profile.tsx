@@ -757,6 +757,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     Храните файлы на личном диске. Бесплатно и безопасно. 
                                                     {activeProvider !== 'google' && " (Сейчас не активно)"}
                                                 </p>
+                                                <p className="text-[10px] text-zinc-600 max-w-sm mx-auto mt-1.5">
+                                                    Файлы не копируются на наши серверы: Anotee подключается к вашему Google Drive через OAuth и работает с ним напрямую.
+                                                </p>
                                             </div>
                                             
                                             <button 
@@ -800,6 +803,16 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     </div>
                                                 </details>
                                             </div>
+
+                                            {selectedTab === 'custom' && (
+                                                <div className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 space-y-1.5 text-[11px] text-zinc-400" data-testid="custom-s3-hint">
+                                                    <div className="font-bold text-zinc-200">Для S3-совместимых сервисов</div>
+                                                    <div>Подходит для AWS S3, Wasabi, Backblaze B2 (S3 API), MinIO, VK Cloud и других.</div>
+                                                    <div><b>Access Key ID / Secret</b> — в разделе «API Keys» / «Access keys» вашего провайдера (пример: AWS → IAM → Security credentials).</div>
+                                                    <div><b>Endpoint</b> — из документации провайдера, например https://s3.us-east-1.amazonaws.com</div>
+                                                    <div>Регион: как указано у провайдера (для AWS — us-east-1 и т.п., для S3-совместимых часто auto).</div>
+                                                </div>
+                                            )}
 
                                             {selectedTab === 'cloudflare' && (
                                                 <div className="col-span-2">
