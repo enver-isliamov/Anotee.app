@@ -5,6 +5,7 @@ import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
 import { isOrgMember, extractOrgIds } from './_orgAccess.js';
 import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
+import { resolveSyncOutcome } from './_sync.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -545,11 +546,18 @@ export default async function handler(req, res) {
               updatedAt: 'Just now'
           };
 
-          await sql`
+          const patchUpd = await sql`
             UPDATE projects 
             SET data = ${JSON.stringify(newData)}::jsonb, updated_at = ${Date.now()}
             WHERE id = ${projectId}
+            AND ((data->>'_version')::int = ${currentVer} OR data->>'_version' IS NULL)
           `;
+          if (patchUpd.rowCount === 0) {
+              // T-05: между SELECT и UPDATE версия изменилась — отдаём 409 с актуальным документом
+              const fresh = await sql`SELECT data FROM projects WHERE id = ${projectId}`;
+              const serverData = fresh.rows[0] ? fresh.rows[0].data : null;
+              return res.status(409).json({ error: "Conflict", serverVersion: serverData ? serverData._version : null, project: serverData });
+          }
 
           return res.status(200).json({ success: true, project: newData });
       }
@@ -588,23 +596,35 @@ export default async function handler(req, res) {
                     if (!canManageProject(user, checkExists.rows[0])) {
                         const safeProject = stripStructuralChanges(project, existingData);
                         safeProject._version = newVersion;
-                        await sql`
+                        const updSafe = await sql`
                             UPDATE projects 
                             SET data = ${JSON.stringify(safeProject)}::jsonb, updated_at = ${Date.now()}
                             WHERE id = ${project.id}
                             AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                         `;
-                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                        if (updSafe.rowCount === 0) {
+                            const fresh = await sql`SELECT data FROM projects WHERE id = ${project.id}`;
+                            updatesResults.push({ id: project.id, ...resolveSyncOutcome(0, newVersion, fresh.rows[0] ? fresh.rows[0].data : null) });
+                        } else {
+                            updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                        }
                         continue;
                     }
 
-                    await sql`
+                    const upd = await sql`
                         UPDATE projects 
                         SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
                         WHERE id = ${project.id}
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
-                    updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    // T-05: 0 обновлённых строк = гонка проиграна → сообщаем конфликт, не врём «updated»
+                    if (upd.rowCount === 0) {
+                        const fresh = await sql`SELECT data FROM projects WHERE id = ${project.id}`;
+                        const serverData = fresh.rows[0] ? fresh.rows[0].data : null;
+                        updatesResults.push({ id: project.id, ...resolveSyncOutcome(0, newVersion, serverData) });
+                    } else {
+                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    }
                 } else {
                     await sql`
                         INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)

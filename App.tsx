@@ -429,10 +429,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           setIsSyncing(true);
           const updates = await api.syncProjects(projectsData, currentUser, token);
           if (updates && updates.length > 0) {
+              // T-05: сервер сообщает о конфликтах версий — принимаем серверные данные вместо локальных
+              const conflicts = updates.filter((u: any) => u && u.status === 'conflict' && u.server);
               setProjects(current => current.map(p => {
+                  const conflict = conflicts.find((u: any) => u.id === p.id);
+                  if (conflict) return { ...conflict.server };
                   const update = updates.find((u: any) => u.id === p.id);
-                  return update ? { ...p, _version: update._version } : p;
+                  return update && update._version ? { ...p, _version: update._version } : p;
               }));
+              if (conflicts.length > 0) {
+                  notify('Version conflict: server data applied', 'warning');
+              }
               mutateProjects();
           }
       } catch (e: any) {
