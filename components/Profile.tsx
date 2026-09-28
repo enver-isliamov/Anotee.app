@@ -1175,11 +1175,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     {s3Form.bucket && !cfData.buckets.includes(s3Form.bucket) && (
                                         <button onClick={handleCfCreateBucket} disabled={cfBusy} className="w-full py-2 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-600 dark:text-amber-400 text-xs font-bold disabled:opacity-50">＋ Создать бакет «{s3Form.bucket}» в один клик</button>
                                     )}
-                                    <button onClick={handleCfCreateKey} disabled={cfBusy} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50">🔑 Создать ключи доступа автоматически</button>
+                                    {cfData.canCreateKeys !== false && (
+                                        <button onClick={handleCfCreateKey} disabled={cfBusy} data-testid="cf-create-key-btn" className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50 transition-colors">
+                                            Создать R2-ключ автоматически
+                                        </button>
+                                    )}
                                 </div>
                                 {cfData.canCreateKeys === false && (
-                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-[11px] text-amber-700 dark:text-amber-200" data-testid="cf-no-createkeys">
-                                        У токена нет права «Account API Tokens: Edit» — автосоздание ключа недоступно. Создайте R2 API-токен вручную: R2 → Manage API Tokens → Create API token (права Object Read & Write) и вставьте Access Key ID и Secret ниже.
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-[11px] text-amber-800 dark:text-amber-200 space-y-1.5" data-testid="cf-no-createkeys">
+                                        <div className="font-bold">Этот токен не может создавать ключи автоматически — создайте пару ключей вручную (10 секунд):</div>
+                                        <div>1. Откройте <a className="underline" href={(cfData.accountId ? 'https://dash.cloudflare.com/' + cfData.accountId : 'https://dash.cloudflare.com/?to=/:account') + '/r2/api-tokens'} target="_blank" rel="noreferrer">R2 → Manage API Tokens</a> и нажмите <b>«Create Account API token»</b> (права Admin Read &amp; Write).</div>
+                                        <div>2. На странице Success скопируйте <b>Access Key ID</b> и <b>Secret Access Key</b>.</div>
+                                        <div>3. Вставьте оба значения в поля формы ниже и нажмите «Сохранить и активировать».</div>
                                     </div>
                                 )}
                                 {cfKeyError && (
@@ -1189,7 +1196,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                         {cfKeyError.manualUrl && <a href={cfKeyError.manualUrl} target="_blank" rel="noreferrer" className="underline">Открыть R2 → Manage API Tokens</a>}
                                     </div>
                                 )}
-                                <div className="text-[10px] text-zinc-500">Если у токена есть право «R2 Admin», можно создать R2-ключ на dash.cloudflare.com → R2 → Manage API Tokens и вставить Access/Secret ниже.</div>
                             </div>
                         )}
                     </div>
