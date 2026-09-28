@@ -411,7 +411,7 @@ if (req.method === 'GET') {
             try {
                 const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + accountId + '/r2/buckets', {
                     method: 'POST',
-                    headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': 'Bearer ' + apiToken, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: bucketName })
                 });
                 const j = await r.json().catch(() => null);
@@ -433,7 +433,7 @@ if (req.method === 'GET') {
                 let groups = [];
                 for (const gp of ['/user/tokens/permission_groups', '/accounts/' + accountId + '/tokens/permission_groups']) {
                     const pgRes = await fetch('https://api.cloudflare.com/client/v4' + gp, {
-                        headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' }
+                        headers: { 'Authorization': 'Bearer ' + apiToken, 'Content-Type': 'application/json' }
                     });
                     const pgJson = await pgRes.json().catch(() => null);
                     if (pgRes.status === 200 && pgJson && Array.isArray(pgJson.result) && pgJson.result.length > 0) { groups = pgJson.result; break; }
@@ -458,7 +458,7 @@ if (req.method === 'GET') {
                 const tokenName = 'anotee-' + (bucketName || 'all') + '-' + Date.now().toString(36);
                 const createRes = await fetch('https://api.cloudflare.com/client/v4/accounts/' + accountId + '/tokens', {
                     method: 'POST',
-                    headers: { 'Authorization': '***' + apiToken, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': 'Bearer ' + apiToken, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: tokenName, policies: [{ effect: 'allow', resources, permission_groups: [{ id: readId }, { id: writeId }] }] })
                 });
                 const cj = await createRes.json().catch(() => null);

@@ -25,8 +25,11 @@ test('хранилище: без мастера, есть подключение
   await expect(cfBtn).toBeVisible();
   await cfBtn.click();
   await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-  await expect(page.getByText(/Создать Account API Token/i)).toBeVisible();
-  await expect(page.getByText(/Скопировать Account ID/i)).toBeVisible();
+  // T-285: шаги ведут на R2 → Manage API Tokens (кнопка Create Account API token) и на страницу Success
+  await expect(page.getByTestId('cf-link-tokens')).toBeVisible();
+  await expect(page.getByTestId('cf-link-success')).toBeVisible();
+  await expect(page.getByText(/Create Account API token/i).first()).toBeVisible();
+  await expect(page.getByText(/Access Key ID и Secret/i).first()).toBeVisible();
 });
 
 test('«Профиль» и «Настройки» — разные страницы, навигация из шапки', async ({ page }) => {

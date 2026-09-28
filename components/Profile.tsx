@@ -77,15 +77,15 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     cloudflare: {
         title: 'Cloudflare R2',
         steps: [
-            '1. Скопируйте Account ID: R2 → Account Details (ссылка на R2 ниже).',
-            '2. Создайте Account API Token с правами: Account: Read, Workers R2 Storage: Read (+ Edit — чтобы ключи создавались автоматически).',
-            '3. Быстрый путь: вернитесь в приложение и нажмите «🔑 Заполнить по Cloudflare-токену» — Account ID, Endpoint и бакеты определятся автоматически. Для ручного пути: Manage API Tokens -> Create API token -> права Object Read & Write.',
-            '4. Permissions: выберите "Admin Read & Write".',
-            '5. Нажмите "Create". Скопируйте "Access Key ID" и "Secret Access Key".'
+            '1. Откройте R2 → Manage API Tokens (кнопка ниже) и нажмите зелёную «Create Account API token».',
+            '2. В правах выберите «Admin Read & Write» (Object Read & Write) — этого достаточно для загрузки и раздачи файлов.',
+            '3. После создания откроется страница Success: там сразу видны Access Key ID и Secret Access Key (Secret показывается один раз!).',
+            '4. Скопируйте оба значения в поля ниже: Access Key ID → «Access Key ID», Secret Access Key → «Secret Access Key».',
+            '5. Account ID и Endpoint подставятся автоматически после «🔑 Заполнить по Cloudflare-токену» (API-токен нужен только для автозаполнения и не сохраняется).'
         ],
         link: 'https://dash.cloudflare.com/?to=/:account/r2/api-tokens',
-        linkText: 'Открыть Cloudflare R2',
-        warning: 'В поле Endpoint вставляйте URL аккаунта, а не бакета. Бакет указывается отдельно.'
+        linkText: 'Открыть R2 → Manage API Tokens',
+        warning: 'Access Key ID и Secret Access Key — это пара из токена R2 (страница Success). Сам API-токен нужен только для автозаполнения Account ID и Endpoint.'
     },
     selectel: {
         title: 'Selectel Storage',
@@ -95,7 +95,7 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
             'Создайте пользователя с ролью «Администратор объектного хранилища».',
             'Имя пользователя = Access Key ID, пароль = Secret Access Key.',
             'Endpoint уже подставлен: https://s3.storage.selcloud.ru (регион ru-1).',
-            'Документация: docs.selectel.ru/cloud/object-storage/'
+            'Документация: docs.selectel.ru/s3/'
         ],
         link: 'https://my.selectel.ru/',
         linkText: 'Открыть Selectel'
@@ -834,7 +834,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             {/* ACCESS KEY */}
                                             <div className="col-span-2">
                                                 <LockedInput 
-                                                    label="Access Key ID"
+                                                    label="Access Key ID (из R2 → Manage API Tokens → Success)"
                                                     value={s3Form.accessKeyId}
                                                     onChange={(e: any) => setS3Form(p => ({...p, accessKeyId: e.target.value}))}
                                                     isEditing={editingFields.accessKey}
@@ -849,7 +849,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                                             {/* Secret Key (Smart UI - Keep existing logic as it's distinct) */}
                                             <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key <span className="text-zinc-400 normal-case font-normal">(второе значение со страницы Success)</span></label>
                                                 <div className="relative group">
                                                     <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
                                                     
@@ -1131,13 +1131,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         <h2 data-testid="cf-token-modal" className="text-lg font-bold text-zinc-900 dark:text-white mb-1">Заполнить по Cloudflare-токену</h2>
                         <p className="text-xs text-zinc-500 mb-4">Вставьте <b>Token value</b> (Cloudflare API-токен с правами Account: Read и R2: Read). Приложение само определит Account ID, Endpoint и список бакетов. Токен не сохраняется.</p>
                         <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 space-y-2 text-xs">
-                            <div className="font-bold text-zinc-900 dark:text-white">Два шага в Cloudflare</div>
-                            <a href="https://dash.cloudflare.com/?to=/:account/account-api-tokens" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 px-3 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-800">
-                                <span>1. Создать Account API Token<span className="block text-[10px] text-zinc-500">права: Account: Read, Workers R2 Storage: Read (+ Edit, чтобы ключи создавались автоматически)</span></span>
+                            <div className="font-bold text-zinc-900 dark:text-white">Шаги в Cloudflare</div>
+                            <a href={(cfAccountId.trim() ? 'https://dash.cloudflare.com/' + cfAccountId.trim() : 'https://dash.cloudflare.com/?to=/:account') + '/r2/api-tokens'} target="_blank" rel="noreferrer" data-testid="cf-link-tokens" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 hover:border-indigo-400 transition-colors">
+                                <span>1. R2 → Manage API Tokens<span className="block text-[10px] text-zinc-500">нажмите <b>«Create Account API token»</b>; права: Admin Read & Write</span></span>
                                 <ExternalLink size={12} className="shrink-0 text-zinc-400" />
                             </a>
-                            <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 px-3 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-800">
-                                <span>2. Скопировать Account ID<span className="block text-[10px] text-zinc-500">R2 → Account Details → Account ID</span></span>
+                            <a href={(cfAccountId.trim() ? 'https://dash.cloudflare.com/' + cfAccountId.trim() : 'https://dash.cloudflare.com/?to=/:account') + '/r2/api-tokens/success'} target="_blank" rel="noreferrer" data-testid="cf-link-success" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 hover:border-indigo-400 transition-colors">
+                                <span>2. Скопировать Access Key ID и Secret<span className="block text-[10px] text-zinc-500">страница Success после создания токена — Secret виден один раз</span></span>
+                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
+                            </a>
+                            <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 hover:border-indigo-400 transition-colors">
+                                <span>3. Account ID (если нужен вручную)<span className="block text-[10px] text-zinc-500">R2 → Account Details → Account ID</span></span>
                                 <ExternalLink size={12} className="shrink-0 text-zinc-400" />
                             </a>
                         </div>
