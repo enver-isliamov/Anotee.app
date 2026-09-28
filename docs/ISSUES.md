@@ -15,10 +15,10 @@
 | ISS-008 | P1 | Сырые ключи в UI (34 пропущенных перевода) | services/locales/*.json | ✅ fixed (T-52) | Все ключи добавлены; защита: tests/unit/i18n-parity.test.ts |
 | ISS-009 | P1 | e2e-флейк: Media Offline на внешнем демо-видео | tests/e2e/*, мок-данные | ✅ fixed (T-59) | installVideoMock + dispatchVideoLoadedMetadata в transcribe-flow и player-text-parity; прогон 2 passed |
 | ISS-010 | P2 | 33 × alert/confirm вместо тостов | AdminTabs 12, Profile 13, Roadmap 3, Dashboard/Player/ProjectView 5 (confirm) | ✅ fixed-alerts (T-64) | 26 alert -> toast через toastBus (services/toastBus.ts); confirm оставлены нативными (нужен выбор да/нет) |
-| ISS-011 | P2 | 15 × console.log в коде | components/*, api/* | 🟡 open | Чистка/обёртка debug-флагом (~30 мин) |
+| ISS-011 | P2 | 15 × console.log в коде | api/* | ✅ fixed (a2c65cc) | Единый логгер api/_log.js (logInfo/logDebug по DEBUG_LOGS); в коде остались только 2 вызова внутри логгера |
 | ISS-012 | P2 | 4 × пустых catch | api/data.js:134,185,505; api/payment.js:93 | ✅ wontfix | Проверено вручную: все 4 — легитимные fallback-парсеры (JSON.parse строки, ожидаемая ветка); логирование создало бы шум |
 | ISS-013 | P3 | 136 неиспользуемых ключей локалей (6 языков) | services/locales/*.json | ✅ fixed (96f89c3) | Удалено 308 дублей-ключей по всем языкам (динамических t() не найдено); i18n-parity тест защищает от повторения |
-| ISS-014 | P3 | 5 хардкод-RU строк в JSX | components/* | 🟡 open | Перевод в i18n (~30 мин) |
+| ISS-014 | P3 | 5 хардкод-RU строк в JSX | components/* | ✅ fixed (a2c65cc) | Переведены через i18n (OfflineBanner, Profile, Player); админ-табы — на английском (вне i18n-контура) |
 | ISS-015 | P3 | 37 mock-ссылок | constants, services | ✅ решение юзера: демо-витрину оставить; TestRunner скрыт на проде (74ca7a6) | — |
 | ISS-016 | P1 | 246K req/день → 75% лимита Vercel | App.tsx (polling), Cloudflare | ✅ fixed (9416079, c6a9396, 48703a2) | Polling 45с/30мин + сон при скрытой вкладке. Дополнительно: CF Cache Rule для /assets/ (действие владельца) |
 | ISS-017 | P2 | Серверный _version-конфликт для комментариев (409) | api/data.js (comment route) | ✅ fixed (a0e93f0) | Retry-with-merge: при конфликте сервер перечитывает свежие данные и применяет ту же comment-операцию (last-write-wins, идемпотентно по id) |

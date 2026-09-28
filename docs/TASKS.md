@@ -26,25 +26,25 @@
 - Acceptance: unit-тест на отклонение подделанного webhook; ручная проверка на staging с тестовыми ключами обоих провайдеров.
 - Риски: не сломать реальный webhook (железное правило №1 — правки в том же файле `payment.js`).
 
-### T-02 P0 `todo` Org-IDOR: список проектов организации
+### T-02 P0 `done` Org-IDOR: список проектов организации (666afd2)
 - Проблема: `api/data.js:361-368` — GET с `orgId` возвращает все проекты орг без проверки членства (в `check_updates` проверка есть — `data.js:117-118`).
 - Цель: перед org-запросом — `getOrganizationMembershipList` и 403 при отсутствии членства.
 - Acceptance: запрос с чужим orgId → 403; свой org → список. E2E/Diagnostics-проверка auth-матрицы.
 
-### T-03 P0 `todo` Крипто: фолбэк мастер-ключа
+### T-03 P0 `done` Крипто: фолбэк мастер-ключа → AES-256-GCM (666afd2)
 - Проблема: `api/_crypto.js:6` — при отсутствии env используется захардкоженный `'default-fallback-secret-key-do-not-use-in-prod'`; AES-CBC без HMAC (malleability).
 - Цель: падать с явной ошибкой при отсутствии `CLERK_SECRET_KEY` (не шифровать предсказуемым ключом); миграция на AES-256-GCM с сохранением чтения старых записей (re-encrypt on read).
 - Acceptance: unit-тест encrypt/decrypt roundtrip; тест, что без env функция бросает.
 
-### T-04 P1 `todo` Storage-IDOR: ключи S3 не ограничены проектом
+### T-04 P1 `done` Storage-IDOR: ключи S3 привязаны к проекту (8bb915a)
 - Проблема: `api/storage.js:226-282` — presign/delete принимают `key`/`prefix` от клиента без проверки принадлежности проекту; участник проекта A может удалить файлы проекта B и весь бакет.
 - Цель: server-side валидация `key.startsWith('anotee/{projectId}/')` + checkProjectAccess для данного projectId.
 
-### T-05 P1 `todo` Sync: обработка CAS-конфликта
+### T-05 P1 `done` Sync: обработка CAS-конфликта (1a9e63e)
 - Проблема: `api/data.js:487-493` — после UPDATE не проверяется rowCount; клиент получает ложный `status:'updated'` при проигранной гонке → молчаливая потеря правок (комментарии, версии).
 - Цель: при 0 обновлённых строк возвращать 409 + актуальный документ; клиент (`Player` syncCommentAction / `App` forceSync) — повторить применение поверх свежих данных.
 
-### T-06 P1 `todo` Viewer может писать весь проект
+### T-06 P1 `done` Viewer не может менять настройки проекта (8bb915a)
 - Проблема: `api/data.js:417-456, 459-509` — POST/PATCH не проверяют роль участника; viewer перезаписывает team/assets/name.
 - Цель: матрица прав на сервере: owner/manager — полный PUT; member — комментарии/статусы; viewer/public guest — только comment-action.
 

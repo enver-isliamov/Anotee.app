@@ -75,8 +75,8 @@ test.describe('Хранилище: создание ключа и сохране
 
     await page.getByTestId('cf-token-open').click();
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-    await page.locator('input[placeholder="Вставьте токен"]').fill('cfat_abcdefghijklmnopqrstuvwxyz123456');
-    await page.getByText(/Проверить и заполнить/i).click();
+    await page.getByTestId('cf-token-input').fill('cfat_abcdefghijklmnopqrstuvwxyz123456');
+    await page.getByTestId('cf-probe-submit').click();
     await page.waitForTimeout(1200);
 
     // предупреждение о правах токена видно сразу после проверки

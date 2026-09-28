@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { WifiOff, RefreshCw, X, Download } from 'lucide-react';
+import { useLanguage } from '../services/i18n';
 
 /**
  * components/OfflineBanner.tsx — индикатор состояния сети и доступного обновления.
@@ -11,6 +12,7 @@ interface OfflineBannerProps {
 }
 
 export const OfflineBanner: React.FC<OfflineBannerProps> = ({ updateAvailable, onApplyUpdate }) => {
+    const { t } = useLanguage();
   const [offline, setOffline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine === false : false);
   const [dismissedUpdate, setDismissedUpdate] = useState(false);
 
@@ -50,7 +52,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ updateAvailable, o
             <button onClick={onApplyUpdate} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-bold text-white">
               <RefreshCw size={12} /> Обновить
             </button>
-            <button aria-label="Скрыть" onClick={() => setDismissedUpdate(true)} className="text-zinc-500 hover:text-zinc-300 p-1"><X size={14} /></button>
+            <button aria-label={t('common.hide')} onClick={() => setDismissedUpdate(true)} className="text-zinc-500 hover:text-zinc-300 p-1"><X size={14} /></button>
           </div>
         )}
       </div>

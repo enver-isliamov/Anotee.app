@@ -48,7 +48,7 @@ test.describe('Мобильная оболочка (PWA)', () => {
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
     await expect(page.getByTestId('cf-account-id')).toBeVisible();
 
-    await page.locator('input[placeholder="Вставьте токен"]').fill('cfat_abcdefghijklmnopqrstuvwxyz1234567890');
+    await page.getByTestId('cf-token-input').fill('cfat_abcdefghijklmnopqrstuvwxyz1234567890');
     await expect(page.getByText(/обязательно укажите Account ID/i)).toBeVisible();
   });
 

@@ -3,6 +3,9 @@ import { sql } from '@vercel/postgres';
 import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
+import { isOrgMember, extractOrgIds } from './_orgAccess.js';
+import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
+import { resolveSyncOutcome } from './_sync.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -433,6 +436,25 @@ export default async function handler(req, res) {
 
           } else if (targetOrgId) {
               // --- ORG LIST ---
+              // T-02: без проверки членства любой авторизованный пользователь мог выгрузить проекты чужой организации.
+              let userOrgIds = [];
+              if (user.isVerified && user.userId) {
+                  try {
+                      const clerk = getClerkClient();
+                      const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId, limit: 100 });
+                      userOrgIds = extractOrgIds(memberships);
+                  } catch (e) {
+                      // Проверить доступ не удалось — не отдаём данные (fail-closed), но и не «403»: это временный сбой.
+                      console.error("Org membership check failed:", e && e.message ? e.message : e);
+                      return res.status(503).json({ error: "Не удалось проверить доступ к организации. Повторите запрос.", code: "ORG_CHECK_UNAVAILABLE" });
+                  }
+              } else {
+                  return res.status(403).json({ error: "Access denied: not authorized" });
+              }
+              if (!isOrgMember(userOrgIds, targetOrgId)) {
+                  return res.status(403).json({ error: "Access denied: you are not a member of this organization" });
+              }
+
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
@@ -505,6 +527,11 @@ export default async function handler(req, res) {
                return res.status(403).json({ error: "Restricted users cannot modify project settings." });
           }
 
+          // T-06: настройки проекта (имя, команда, доступы, блокировка) меняет только владелец/менеджер
+          if (touchesStructuralFields(updates) && !canManageProject(user, rows[0])) {
+              return res.status(403).json({ error: "Insufficient permissions: only owner or manager can change project settings" });
+          }
+
           const currentDbData = rows[0].data;
           const currentVer = currentDbData._version || 0;
           
@@ -519,11 +546,18 @@ export default async function handler(req, res) {
               updatedAt: 'Just now'
           };
 
-          await sql`
+          const patchUpd = await sql`
             UPDATE projects 
             SET data = ${JSON.stringify(newData)}::jsonb, updated_at = ${Date.now()}
             WHERE id = ${projectId}
+            AND ((data->>'_version')::int = ${currentVer} OR data->>'_version' IS NULL)
           `;
+          if (patchUpd.rowCount === 0) {
+              // T-05: между SELECT и UPDATE версия изменилась — отдаём 409 с актуальным документом
+              const fresh = await sql`SELECT data FROM projects WHERE id = ${projectId}`;
+              const serverData = fresh.rows[0] ? fresh.rows[0].data : null;
+              return res.status(409).json({ error: "Conflict", serverVersion: serverData ? serverData._version : null, project: serverData });
+          }
 
           return res.status(200).json({ success: true, project: newData });
       }
@@ -557,13 +591,40 @@ export default async function handler(req, res) {
                     const member = existingData.team?.find(m => m.id === user.id);
                     if (member?.restrictedAssetId) continue; 
 
-                    await sql`
+                    // T-06: участник без прав на управление не может перезаписать настройки проекта —
+                    // серверные значения структурных полей сохраняются, принимаются только данные ревью.
+                    if (!canManageProject(user, checkExists.rows[0])) {
+                        const safeProject = stripStructuralChanges(project, existingData);
+                        safeProject._version = newVersion;
+                        const updSafe = await sql`
+                            UPDATE projects 
+                            SET data = ${JSON.stringify(safeProject)}::jsonb, updated_at = ${Date.now()}
+                            WHERE id = ${project.id}
+                            AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
+                        `;
+                        if (updSafe.rowCount === 0) {
+                            const fresh = await sql`SELECT data FROM projects WHERE id = ${project.id}`;
+                            updatesResults.push({ id: project.id, ...resolveSyncOutcome(0, newVersion, fresh.rows[0] ? fresh.rows[0].data : null) });
+                        } else {
+                            updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                        }
+                        continue;
+                    }
+
+                    const upd = await sql`
                         UPDATE projects 
                         SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
                         WHERE id = ${project.id}
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
-                    updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    // T-05: 0 обновлённых строк = гонка проиграна → сообщаем конфликт, не врём «updated»
+                    if (upd.rowCount === 0) {
+                        const fresh = await sql`SELECT data FROM projects WHERE id = ${project.id}`;
+                        const serverData = fresh.rows[0] ? fresh.rows[0].data : null;
+                        updatesResults.push({ id: project.id, ...resolveSyncOutcome(0, newVersion, serverData) });
+                    } else {
+                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    }
                 } else {
                     await sql`
                         INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)

@@ -1,5 +1,6 @@
 
 import { handleUpload } from '@vercel/blob';
+import { logDebug } from './_log.js';
 import { sql } from '@vercel/postgres';
 import { checkProjectAccess } from './_permissions.js';
 import { getUserFromToken } from './_auth.js';
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log(`Blob uploaded: ${blob.url}`);
+        logDebug('UPLOAD', `Blob uploaded: ${blob.url}`);
       },
     });
 

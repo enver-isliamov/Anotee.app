@@ -1,5 +1,6 @@
 
 import { verifyUser, getClerkClient } from './_auth.js';
+import { logInfo, logDebug } from './_log.js';
 import { sql } from '@vercel/postgres';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
     const method = req.method ? req.method.toUpperCase() : 'UNKNOWN';
     const queryAction = req.query.action;
     
-    console.log(`[PaymentAPI] Hit: ${method} URL: ${req.url}`);
+    logDebug('PAYMENT', `Hit: ${method} URL: ${req.url}`);
 
     // Permissive CORS for Webhooks
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -42,11 +43,11 @@ export default async function handler(req, res) {
         if (body.type === 'payment.succeeded' || body.type === 'payment.waiting_for_capture') {
             isWebhook = true;
             provider = 'yookassa';
-            console.log("--> Detected YooKassa Webhook via Body");
+            logInfo('PAYMENT', "--> Detected YooKassa Webhook via Body");
         } else if (body.payment_status === 'success' || (req.headers['content-type']?.includes('x-www-form-urlencoded') && req.body?.payment_status)) {
             isWebhook = true;
             provider = 'prodamus';
-            console.log("--> Detected Prodamus Webhook via Body");
+            logInfo('PAYMENT', "--> Detected Prodamus Webhook via Body");
         }
     }
 
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ status: 'online', mode: 'webhook_listener' });
         }
 
-        console.log(`🔔 Processing Webhook (${provider})`);
+        logInfo('PAYMENT', `🔔 Processing Webhook (${provider})`);
 
         try {
             const clerk = getClerkClient();
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
                 const event = body;
                 if (!event || event.type !== 'payment.succeeded') {
                     // We accept waiting_for_capture just to log it, but only process succeeded
-                    console.log("YooKassa Event ignored:", event.type);
+                    logInfo('PAYMENT', "YooKassa Event ignored:", event.type);
                     return res.status(200).send('OK'); 
                 }
 
@@ -77,7 +78,7 @@ export default async function handler(req, res) {
                 const { userId, planType } = payment.metadata || {};
                 const paymentMethodId = payment.payment_method?.id;
 
-                console.log(`✅ YooKassa Success: User ${userId}, Plan ${planType}`);
+                logInfo('PAYMENT', `✅ YooKassa Success: User ${userId}, Plan ${planType}`);
 
                 if (userId) {
                     await upgradeUser(clerk, userId, planType, paymentMethodId, payment.amount.value);
@@ -98,7 +99,7 @@ export default async function handler(req, res) {
                 const userId = sysData.userId;
                 const planType = sysData.planType;
 
-                console.log(`✅ Prodamus Success: User ${userId}`);
+                logInfo('PAYMENT', `✅ Prodamus Success: User ${userId}`);
 
                 if (userId) {
                     await upgradeUser(clerk, userId, planType, null, null);
@@ -140,7 +141,7 @@ export default async function handler(req, res) {
                 ? 'Anotee - Поддержка проекта (Донат)' 
                 : `Anotee ${effectivePlan === 'lifetime' ? 'Lifetime' : 'Pro'} Access`;
 
-            console.log(`Creating Payment: ${user.userId || user.id} -> ${effectivePlan} (${amountVal} RUB)`);
+            logInfo('PAYMENT', `Creating Payment: ${user.userId || user.id} -> ${effectivePlan} (${amountVal} RUB)`);
 
             // YooKassa Init
             if (config.activeProvider === 'yookassa') {
@@ -259,5 +260,5 @@ async function upgradeUser(clerk, userId, planType, paymentMethodId, amount) {
     }
 
     await clerk.users.updateUser(userId, { publicMetadata: updates });
-    console.log(`USER UPGRADED: ${userId} -> ${updates.plan}`);
+    logInfo('PAYMENT', `USER UPGRADED: ${userId} -> ${updates.plan}`);
 }

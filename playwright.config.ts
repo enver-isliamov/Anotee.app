@@ -26,7 +26,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       // Мобильные регрессии — только в проекте «mobile».
       // Regex без ведущей ".*\.": файлы лежат в tests/e2e/, перед "mobile" стоит "/".
-      testIgnore: /mobile\.spec\.ts|touch-gestures\.spec\.ts/,
+      testIgnore: /mobile\.spec\.ts|touch-gestures\.spec\.ts|offline\.spec\.ts/,
     },
     {
       // Pixel 7: 412×915, hasTouch, mobile UA
