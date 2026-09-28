@@ -235,6 +235,8 @@ if (req.method === 'GET') {
                     try { await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]') ON CONFLICT (user_id) DO UPDATE SET active_provider = ${provider}`; await mirrorActiveToLegacy(provider); } catch (e) {}
                 } else if (activeNow === provider) {
                     await mirrorActiveToLegacy(provider);
+                    // T-338: первый провайдер сразу активен — зеркалим в legacy для «Проверить»
+                    await mirrorActiveToLegacy(provider);
                 }
 
                 return res.status(200).json({ success: true });
@@ -261,6 +263,13 @@ if (req.method === 'GET') {
                     const rows = await sql`SELECT provider FROM storage_configs WHERE user_id = ${user.id} AND provider = ${provider}`;
                     configured = rows.length > 0;
                 } catch (e) { console.warn('switch_provider read warning:', e && e.message ? e.message : e); }
+                // T-338: fallback на legacy-таблицу — конфиг мог сохраниться только туда
+                if (!configured) {
+                    try {
+                        const lr = await sql`SELECT provider FROM storage_config WHERE user_id = ${user.id}`;
+                        configured = lr.length > 0 && lr[0].provider === provider;
+                    } catch (e) { console.warn('switch_provider legacy read warning:', e && e.message ? e.message : e); }
+                }
                 if (!configured) return res.status(400).json({ error: 'Провайдер не настроен — сначала сохраните его ключи' });
             }
             const existing = await sql`SELECT user_id FROM storage_prefs WHERE user_id = ${user.id}`;
