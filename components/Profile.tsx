@@ -47,7 +47,12 @@ const S3_PRESETS: Record<string, Partial<S3Config>> = {
         provider: 'custom', 
         endpoint: '',
         region: ''
-    }
+    },
+    custom: {
+        provider: 'custom',
+        endpoint: '',
+        region: ''
+    },
 };
 
 const CORS_CONFIG_JSON = `[
@@ -190,7 +195,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   
   // Helpers
   const [showCorsHelp, setShowCorsHelp] = useState(false);
-  const [showProviderHelp, setShowProviderHelp] = useState(false);
   const [showCnameHelp, setShowCnameHelp] = useState(false);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -289,7 +293,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               // If we switch to a tab we haven't visited yet:
               
               // Load preset defaults
-              const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'];
+              const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'] || {};
               setS3Form({
                   provider: newTab as any,
                   bucket: '',
@@ -717,9 +721,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                         </div>
 
                         {/* T-93: мастер подключения — всегда доступен (Codex-урок: триггер в всегда-рендерящихся блоках) */}
-                        <div className="mb-4">
-                            <button onClick={() => setShowCfProbe(true)} data-testid="cf-token-open" className="w-full mt-2 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold">🔑 Заполнить по Cloudflare-токену (Account API Token)</button>
-                        </div>
 
                         {isS3Loading ? (
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
@@ -782,10 +783,32 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
                                                 <a data-testid="provider-external-link" href={PROVIDER_GUIDES[selectedTab]?.link || 'https://developers.cloudflare.com/r2/'} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1 mr-3">{PROVIDER_GUIDES[selectedTab]?.linkText || 'Открыть раздел провайдера'} <ExternalLink size={10} /></a>
-                                                <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
-                                                        <HelpCircle size={10} /> Инструкция по получению ключей
-                                                </button>
+                                                <details className="group/help w-full md:w-auto" data-testid="provider-help">
+                                                    <summary className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors cursor-pointer list-none">
+                                                        <HelpCircle size={10} /> Как получить ключи
+                                                    </summary>
+                                                    <div className="mt-3 space-y-2 text-xs text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3" data-testid="provider-help-steps">
+                                                        {(PROVIDER_GUIDES[selectedTab]?.steps || []).map((step, idx) => (
+                                                            <div key={idx} className="flex gap-2 leading-relaxed">
+                                                                <span className="shrink-0 w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-500 text-[9px] font-bold flex items-center justify-center mt-0.5">{idx + 1}</span>
+                                                                <span>{step.replace(/^\d+\.\s*/, '')}</span>
+                                                            </div>
+                                                        ))}
+                                                        {PROVIDER_GUIDES[selectedTab]?.warning && (
+                                                            <p className="text-amber-600 dark:text-amber-400 pt-1 border-t border-zinc-200 dark:border-zinc-800">{PROVIDER_GUIDES[selectedTab].warning}</p>
+                                                        )}
+                                                    </div>
+                                                </details>
                                             </div>
+
+                                            {selectedTab === 'cloudflare' && (
+                                                <div className="col-span-2">
+                                                    <button onClick={() => setShowCfProbe(true)} data-testid="cf-token-open" className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2">
+                                                        <Zap size={14} /> Автозаполнение: Account ID, Endpoint и бакеты по Cloudflare-токену
+                                                    </button>
+                                                    <p className="text-[10px] text-zinc-500 mt-1.5 text-center">Токен используется один раз и не сохраняется. Нужен только для автозаполнения — ключи для работы вставляются ниже.</p>
+                                                </div>
+                                            )}
 
                                             {/* ENDPOINT */}
                                             <div className="col-span-2">
@@ -1087,40 +1110,6 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
             )}
 
 {/* HELP MODALS (Unchanged logic, just ensure render) */}
-            {showProviderHelp && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                        <button onClick={() => setShowProviderHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
-                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">{currentProviderGuide.title}</h2>
-                        <div className="mb-4 flex flex-col gap-2">
-                            <a href={PROVIDER_GUIDES[selectedTab]?.link || 'https://developers.cloudflare.com/r2/'} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 px-3 py-2 text-xs hover:bg-zinc-200 dark:hover:bg-zinc-800">
-                                <span>{PROVIDER_GUIDES[selectedTab]?.linkText || 'Открыть раздел провайдера'}<span className="block text-[10px] text-zinc-500">Откроется нужная страница в новой вкладке</span></span>
-                                <ExternalLink size={12} className="shrink-0 text-zinc-400" />
-                            </a>
-                        </div>
-                        {currentProviderGuide.warning && (
-                            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
-                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                                <p className="font-medium">{currentProviderGuide.warning}</p>
-                            </div>
-                        )}
-                        <div className="space-y-3 mb-6">
-                            {currentProviderGuide.steps.map((step, idx) => (
-                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">{idx + 1}</div>
-                                    <p>{step}</p>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                            <a href={currentProviderGuide.link} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-bold">
-                                {currentProviderGuide.linkText} <ExternalLink size={12} />
-                            </a>
-                            <button onClick={() => setShowProviderHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Закрыть</button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
 {/* T-92: блок «Хранилища» вынесен из help-модалки — рендерится всегда */}
         

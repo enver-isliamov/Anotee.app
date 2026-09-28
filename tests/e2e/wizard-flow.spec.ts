@@ -21,6 +21,9 @@ test('хранилище: без мастера, есть подключение
 
   // карточки провайдеров и кнопка подключения по токену
   await expect(page.getByTestId('provider-card-cloudflare')).toBeVisible();
+  // T-296: автозаполнение — внутри панели Cloudflare, сначала выбираем провайдера
+  await page.getByTestId('provider-card-cloudflare').click();
+  await page.waitForTimeout(600);
   const cfBtn = page.getByTestId('cf-token-open');
   await expect(cfBtn).toBeVisible();
   await cfBtn.click();
@@ -28,8 +31,9 @@ test('хранилище: без мастера, есть подключение
   // T-285: шаги ведут на R2 → Manage API Tokens (кнопка Create Account API token) и на страницу Success
   await expect(page.getByTestId('cf-link-tokens')).toBeVisible();
   await expect(page.getByTestId('cf-link-success')).toBeVisible();
-  await expect(page.getByText(/Create Account API token/i).first()).toBeVisible();
-  await expect(page.getByText(/Access Key ID и Secret/i).first()).toBeVisible();
+  // содержимое шагов: кнопка Create Account API token и пара Access/Secret
+  await expect(page.getByTestId('cf-link-tokens')).toContainText(/Create Account API token/i);
+  await expect(page.getByTestId('cf-link-success')).toContainText(/Access Key ID и Secret/i);
 });
 
 test('«Профиль» и «Настройки» — разные страницы, навигация из шапки', async ({ page }) => {

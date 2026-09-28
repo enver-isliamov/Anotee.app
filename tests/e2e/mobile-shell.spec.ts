@@ -42,6 +42,9 @@ test.describe('Мобильная оболочка (PWA)', () => {
     await page.goto('/settings');
     await page.waitForTimeout(1400);
 
+    // T-297: автозаполнение живёт в панели Cloudflare — сначала выбираем провайдера
+    await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
+    await page.waitForTimeout(500);
     const openBtn = page.getByTestId('cf-token-open');
     await expect(openBtn).toBeVisible();
     await openBtn.click();
