@@ -91,6 +91,21 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [driveQuota, setDriveQuota] = useState<DriveQuota | null>(null);
   const [isS3Configured, setIsS3Configured] = useState(false);
   const [loadingStorage, setLoadingStorage] = useState(false);
+
+  // T-326: раньше isS3Configured никогда не выставлялся — из-за этого загрузки всегда
+  // уходили в Google Drive (когда он подключён), даже если активно S3-хранилище.
+  useEffect(() => {
+      let alive = true;
+      (async () => {
+          try {
+              const token = await getToken();
+              const res = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' });
+              const cfg = await res.json().catch(() => null);
+              if (alive) setIsS3Configured(!!cfg && !!cfg.provider && cfg.provider !== 'google');
+          } catch { if (alive) setIsS3Configured(false); }
+      })();
+      return () => { alive = false; };
+  }, []);
   
   // Share / Team View State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);

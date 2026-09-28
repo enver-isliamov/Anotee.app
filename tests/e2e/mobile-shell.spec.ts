@@ -42,17 +42,12 @@ test.describe('Мобильная оболочка (PWA)', () => {
     await page.goto('/settings');
     await page.waitForTimeout(1400);
 
-    // T-297: автозаполнение живёт в панели Cloudflare — сначала выбираем провайдера
+    // T-328: автозаполнение удалено; на странице настроек доступен ручной ввод
     await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
     await page.waitForTimeout(500);
-    const openBtn = page.getByTestId('cf-token-open');
-    await expect(openBtn).toBeVisible();
-    await openBtn.click();
-    await expect(page.getByTestId('cf-token-modal')).toBeVisible();
-    await expect(page.getByTestId('cf-account-id')).toBeVisible();
-
-    await page.getByTestId('cf-token-input').fill('cfat_abcdefghijklmnopqrstuvwxyz1234567890');
-    await expect(page.getByText(/обязательно укажите Account ID/i)).toBeVisible();
+    await expect(page.getByTestId('cf-token-open')).toHaveCount(0);
+    await expect(page.getByTestId('cf-token-modal')).toHaveCount(0);
+    await expect(page.getByTestId('provider-help')).toBeVisible();
   });
 
   test('все основные страницы без горизонтального overflow', async ({ page }) => {
