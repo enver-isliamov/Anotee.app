@@ -30,6 +30,8 @@ test.describe('Граничные случаи', () => {
 
     await page.waitForTimeout(1200);
 
+    await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
+    await page.waitForTimeout(500);
     await page.getByTestId('cf-token-open').click();
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
 
@@ -52,6 +54,8 @@ test.describe('Граничные случаи', () => {
 
     await page.waitForTimeout(1200);
 
+    await page.getByTestId('provider-card-cloudflare').click().catch(() => {});
+    await page.waitForTimeout(500);
     await page.getByTestId('cf-token-open').click();
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
     await page.keyboard.press('Escape');

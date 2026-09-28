@@ -73,6 +73,9 @@ test.describe('Хранилище: создание ключа и сохране
     await page.goto('/settings');
     await page.waitForTimeout(1200);
 
+    // T-296: автозаполнение — в панели Cloudflare
+    await page.getByTestId('provider-card-cloudflare').click();
+    await page.waitForTimeout(600);
     await page.getByTestId('cf-token-open').click();
     await expect(page.getByTestId('cf-token-modal')).toBeVisible();
     await page.getByTestId('cf-token-input').fill('cfat_abcdefghijklmnopqrstuvwxyz123456');
