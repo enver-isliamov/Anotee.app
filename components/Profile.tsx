@@ -535,7 +535,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           <button
               data-testid={'provider-card-' + id}
               onClick={() => handleTabSwitch(id)}
-              className={`relative p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group w-full h-[90px] justify-center
+              className={`relative p-2 sm:p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1.5 sm:gap-2 group w-full h-[74px] sm:h-[90px] justify-center
                   ${isSelected ? `border-indigo-500 bg-zinc-800 shadow-lg scale-[1.02] z-10` : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 opacity-80 hover:opacity-100'}
               `}
           >
@@ -606,7 +606,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const planBadgeClass = getPlanBadgeClass(plan);
 
   return (
-        <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
+        <div className="w-full mx-auto space-y-8 py-6 sm:py-8 animate-in fade-in duration-500 pb-24 md:px-0">
             {/* T-222: навигация между «Профилем» и «Настройками» — иконки в шапке (аватар / шестерёнка) */}
 
             {/* T-164: карточка аккаунта (личные данные, организация, план) */}
@@ -678,8 +678,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                     </div>
 
                     {/* STORAGE CONFIGURATION */}
-                    <div id="storage-block" className={'bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative scroll-mt-24 '+ ((section === 'settings') ? '' : ' hidden')}>
-                        <div className="flex items-center gap-3 mb-6">
+                    <div id="storage-block" className={'bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 relative scroll-mt-24 '+ ((section === 'settings') ? '' : ' hidden')}>
+                        <div className="flex items-center gap-3 mb-4 sm:mb-6">
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300"><Database size={20} /></div>
                             <div>
                                 <h3 className="text-lg font-bold text-white">Провайдер Хранилища</h3>
@@ -703,7 +703,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   
   )}
                                 
-                                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+                                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-2.5">
                                     <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} configured={activeProvider === 'google'} onSwitch={() => handleSwitchProvider('google' as ExtendedProvider)} color="bg-green-600" />
                                     <ProviderCard id="yandex" label="Yandex" configured={configuredProviders.includes('yandex')} onSwitch={() => handleSwitchProvider('yandex' as ExtendedProvider)} icon="Y" color="bg-red-500" />
                                     <ProviderCard id="cloudflare" label="R2" configured={configuredProviders.includes('cloudflare')} onSwitch={() => handleSwitchProvider('cloudflare' as ExtendedProvider)} icon="C" color="bg-orange-500" />
@@ -711,7 +711,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     <ProviderCard id="custom" label="Custom" configured={configuredProviders.includes('custom')} onSwitch={() => handleSwitchProvider('custom' as ExtendedProvider)} icon="?" color="bg-zinc-600" />
                                 </div>
 
-                                <div className="bg-zinc-950/50 p-4 sm:p-5 rounded-xl border border-zinc-800/50 min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
+                                <div className="bg-zinc-950/50 p-3.5 sm:p-5 rounded-xl border border-zinc-800/50 min-h-[180px] sm:min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
                                     
                                     {selectedTab === 'google' && (
                                         <div className="flex flex-col items-center justify-center h-full py-4 text-center space-y-4">
@@ -747,7 +747,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     {selectedTab !== 'google' && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             
-                                            <div className="col-span-2 flex justify-between items-center border-b border-zinc-800 pb-2 mb-2">
+                                            <div className="col-span-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 border-b border-zinc-800 pb-2 mb-2">
                                                 <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
