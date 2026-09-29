@@ -373,8 +373,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               body: JSON.stringify(s3Form)
           });
 
-          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Failed to save"); }
-          
+          const savedInfo = await res.json().catch(() => ({}));
+          if (!res.ok) { throw new Error((savedInfo && savedInfo.error) || "Failed to save"); }
+          // T-355: сервер честно сообщает, что записалось (per-provider / legacy / ошибки)
+          if (savedInfo && savedInfo.saved) {
+              const sv = savedInfo.saved;
+              if (!sv.perProvider) {
+                  toast('Сохранено в резервную конфигурацию хранилища' + (sv.err ? ' (причина: ' + String(sv.err).slice(0, 120) + ')' : ''), 'warning');
+              }
+              console.log('STORAGE-SAVED', JSON.stringify(sv));
+          }
+
           setS3Saved(true);
 
           // T-323: «Сохранить и активировать» должен реально переключить активного провайдера
@@ -425,7 +434,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               setTestResult({ success: true, message: `Успешно! Доступ к бакету '${data.bucket}' есть.` });
           setNoConfigFound(false); setSecretBroken(false);
           } else {
-              setTestResult({ success: false, message: data.error || "Ошибка соединения" });
+              setTestResult({ success: false, message: (data.error || "Ошибка соединения") + (data.debug ? ' · ' + JSON.stringify(data.debug) : '') });
           }
       } catch (e: any) {
           setTestResult({ success: false, message: e.message || "Сбой сети" });
