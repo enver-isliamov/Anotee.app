@@ -160,6 +160,10 @@ if (req.method === 'GET') {
                 try { const pr = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`; active = pr.length > 0 ? pr[0].active_provider : null; } catch (e) {}
                 const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${user.id} ORDER BY updated_at DESC NULLS LAST`;
                 let config = (active ? cfgRows.find(r => r.provider === active) : null) || cfgRows[0] || null;
+                // T-358: самоисцеление — если активный в prefs не совпадает с реально доступным конфигом, синхронизируем
+                if (config && config.provider && config.provider !== active) {
+                    try { await sql`UPDATE storage_prefs SET active_provider = ${config.provider} WHERE user_id = ${user.id}`; } catch (e) {}
+                }
                 if (!config) {
                     const legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
                     if (legacyRows.length === 0) return res.status(200).json(null);
@@ -287,11 +291,9 @@ if (req.method === 'GET') {
 
                 // prefs: update-first без ON CONFLICT
                 try {
-                    // T-357: при «Сохранить и активировать» (activate=true) провайдер становится активным ЖЁСТКО;
-                    // иначе — активный остаётся прежним (или ставится, если его не было).
-                    const pUpd = activate
-                        ? await sql`UPDATE storage_prefs SET active_provider = ${provider} WHERE user_id = ${user.id}`
-                        : await sql`UPDATE storage_prefs SET active_provider = COALESCE(active_provider, ${provider}) WHERE user_id = ${user.id}`;
+                    // T-358: кнопка называется «Сохранить и активировать» — сохранение ВСЕГДА делает провайдера активным,
+                    // независимо от версии клиента (раньше при старом бандле в кэше активация терялась и сбрасывалась на Google Drive).
+                    const pUpd = await sql`UPDATE storage_prefs SET active_provider = ${provider} WHERE user_id = ${user.id}`;
                     if (pUpd.rowCount === 0) {
                         await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]')`;
                     }
