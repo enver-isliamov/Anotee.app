@@ -55,7 +55,7 @@ export default async function handler(req, res) {
                 // T-350: ON CONFLICT (user_id, provider) требует unique-констрейнт. Раньше таблица создавалась БЕЗ него,
                 // из-за чего любой upsert падал («no unique or exclusion constraint…»), catch глотал ошибку — настройки не сохранялись.
                 try {
-                    await sql`DELETE FROM storage_configs a USING storage_configs b WHERE a.user_id = b.user_id AND a.provider = b.provider AND a.ctid < b.ctid AND a.user_id = ${user.id}`;
+                    await sql`DELETE FROM storage_configs a USING storage_configs b WHERE a.user_id = b.user_id AND a.provider = b.provider AND a.ctid < b.ctid`;
                     await sql`CREATE UNIQUE INDEX IF NOT EXISTS storage_configs_user_provider_uniq ON storage_configs (user_id, provider)`;
                 } catch (idxErr) {
                     console.warn('storage_configs unique index warning:', idxErr && idxErr.message ? idxErr.message : idxErr);

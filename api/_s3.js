@@ -17,8 +17,9 @@ export async function getS3Client(userId) {
     try {
         const prefRows = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${userId}`;
         const active = prefRows.length > 0 ? prefRows[0].active_provider : null;
-        const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${userId}`;
+        const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${userId} ORDER BY updated_at DESC NULLS LAST`;
         if (cfgRows.length > 0) {
+            // детерминированный выбор: активный провайдер, иначе — последний обновлённый
             const chosen = (active && cfgRows.find(r => r.provider === active)) || cfgRows[0];
             rows = [chosen];
         }
