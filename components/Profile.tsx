@@ -370,7 +370,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                   'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json'
               },
-              body: JSON.stringify(s3Form)
+              body: JSON.stringify({ ...s3Form, activate: true })
           });
 
           const savedInfo = await res.json().catch(() => ({}));
@@ -386,22 +386,8 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
           setS3Saved(true);
 
-          // T-323: «Сохранить и активировать» должен реально переключить активного провайдера
-          // (раньше менялось только локальное состояние: legacy-зеркало не обновлялось и
-          // «Проверить» падало с «S3 Configuration not found»).
-              try {
-                  const sw = await fetch('/api/storage?action=switch_provider', {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ provider: selectedTab })
-                  });
-                  if (!sw.ok) {
-                      const swErr = await sw.json().catch(() => ({}));
-                      console.warn('switch_provider failed:', swErr.error || sw.status);
-                  }
-              } catch (e: any) {
-                  console.warn('switch_provider network error:', e?.message);
-              }
+          // T-357: активация теперь атомарна — выполняется сервером в самом action=config (activate: true),
+          // отдельный вызов switch_provider больше не нужен (он и давал 400 в консоли).
 
           // Update active provider state
           setActiveProvider(selectedTab);

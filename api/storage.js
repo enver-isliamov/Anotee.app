@@ -204,7 +204,7 @@ if (req.method === 'GET') {
             }
 
             if (req.method === 'POST') {
-                const { region, secretAccessKey, publicUrl } = req.body;
+                const { region, secretAccessKey, publicUrl, activate } = req.body;
                 let { provider, bucket, endpoint, accessKeyId } = req.body;
 
                 if (!provider || !bucket || !endpoint || !accessKeyId) {
@@ -287,7 +287,11 @@ if (req.method === 'GET') {
 
                 // prefs: update-first без ON CONFLICT
                 try {
-                    const pUpd = await sql`UPDATE storage_prefs SET active_provider = COALESCE(active_provider, ${provider}) WHERE user_id = ${user.id}`;
+                    // T-357: при «Сохранить и активировать» (activate=true) провайдер становится активным ЖЁСТКО;
+                    // иначе — активный остаётся прежним (или ставится, если его не было).
+                    const pUpd = activate
+                        ? await sql`UPDATE storage_prefs SET active_provider = ${provider} WHERE user_id = ${user.id}`
+                        : await sql`UPDATE storage_prefs SET active_provider = COALESCE(active_provider, ${provider}) WHERE user_id = ${user.id}`;
                     if (pUpd.rowCount === 0) {
                         await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]')`;
                     }
@@ -324,9 +328,17 @@ if (req.method === 'GET') {
                 // T-338: fallback на legacy-таблицу — конфиг мог сохраниться только туда
                 if (!configured) {
                     try {
-                        const lr = await sql`SELECT provider FROM storage_config WHERE user_id = ${user.id}`;
+                        // T-357: читаем без указания колонки (старые таблицы могут не иметь provider) и сверяем в JS
+                        const lr = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
                         configured = lr.length > 0 && lr[0].provider === provider;
                     } catch (e) { console.warn('switch_provider legacy read warning:', e && e.message ? e.message : e); }
+                }
+                if (!configured) {
+                    // уже активный — переключение бессмысленно, но и не ошибка
+                    try {
+                        const pr = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`;
+                        if (pr.length > 0 && pr[0].active_provider === provider) configured = true;
+                    } catch (e) {}
                 }
                 if (!configured) return res.status(400).json({ error: 'Провайдер не настроен — сначала сохраните его ключи' });
             }
