@@ -220,10 +220,18 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
         toast('Очистите поле «Secret Access Key» и введите ключ заново — в базе для этого аккаунта ещё нет сохранённого конфига.');
         return;
       }
-      const res = await fetch('/api/storage?action=config', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (res.ok) {
+      // T-360: токен Clerk может быть ещё не готов в момент монтирования (гонка) — ретраим 401,
+      // иначе активным оставался дефолтный google и «подключение не запоминалось» после перезагрузки.
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+          const t = (await getToken()) || token;
+          res = await fetch('/api/storage?action=config', {
+              headers: { 'Authorization': `Bearer ${t}` }
+          });
+          if (res.status !== 401) break;
+          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+      }
+      if (res && res.ok) {
                   const data = await res.json();
                   if (data) {
                       const loadedConfig = {
@@ -255,6 +263,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       setActiveProvider('google');
                       setSelectedTab('google'); setNoConfigFound(true); setConfiguredProviders([]);
                   }
+              } else if (res && res.status === 401) {
+                  // после ретраев всё ещё 401 — повторим загрузку чуть позже, НЕ сбрасывая на google
+                  console.warn('storage config: 401 after retries, will retry');
+                  setTimeout(() => { void loadS3Config(); }, 2500);
               }
           } catch (e) {
               console.error("Failed to load S3 config", e);
