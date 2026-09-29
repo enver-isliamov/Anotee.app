@@ -60,6 +60,31 @@ export default async function handler(req, res) {
                 } catch (idxErr) {
                     console.warn('storage_configs unique index warning:', idxErr && idxErr.message ? idxErr.message : idxErr);
                 }
+                // T-354: чиним старые схемы — CREATE TABLE IF NOT EXISTS не добавляет колонки к существующей таблице,
+                // из-за чего INSERT с public_url/updated_at мог падать («column does not exist»).
+                try {
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS user_id TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS provider TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS bucket TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS endpoint TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS region TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS access_key_id TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS secret_access_key TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS public_url TEXT`;
+                    await sql`ALTER TABLE storage_configs ADD COLUMN IF NOT EXISTS updated_at BIGINT`;
+                } catch (colErr) { console.warn('storage_configs columns warning:', colErr && colErr.message ? colErr.message : colErr); }
+                // legacy-таблица: тоже чиним колонки (может быть создана старой версией)
+                try {
+                    await sql`CREATE TABLE IF NOT EXISTS storage_config (user_id TEXT PRIMARY KEY, provider TEXT, bucket TEXT, endpoint TEXT, region TEXT, access_key_id TEXT, secret_access_key TEXT, public_url TEXT, updated_at BIGINT)`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS provider TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS bucket TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS endpoint TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS region TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS access_key_id TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS secret_access_key TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS public_url TEXT`;
+                    await sql`ALTER TABLE storage_config ADD COLUMN IF NOT EXISTS updated_at BIGINT`;
+                } catch (lcolErr) { console.warn('storage_config columns warning:', lcolErr && lcolErr.message ? lcolErr.message : lcolErr); }
                 const cnt = await sql`SELECT count(*)::int AS n FROM storage_configs WHERE user_id = ${user.id}`;
                 if (cnt[0] && cnt[0].n === 0) {
                     const legacy = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
@@ -216,47 +241,63 @@ if (req.method === 'GET') {
                     }
                 }
 
-                // T-93/T-100: per-provider upsert — при недоступности таблицы fallback на legacy-запись (не 500)
+                // T-354: устойчивый upsert БЕЗ ON CONFLICT: update → insert → update.
+                // (ON CONFLICT требует уникальный констрейнт; на старых схемах его нет — всё падало молча.)
+                const saved = { perProvider: false, legacy: false, prefsSet: false, err: null };
                 await ensurePerProviderConfigs();
                 try {
-                await sql`
-                    INSERT INTO storage_configs (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
-                    VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
-                    ON CONFLICT (user_id, provider) 
-                    DO UPDATE SET 
-                        bucket = EXCLUDED.bucket,
-                        endpoint = EXCLUDED.endpoint,
-                        region = EXCLUDED.region,
-                        access_key_id = EXCLUDED.access_key_id,
-                        secret_access_key = EXCLUDED.secret_access_key,
-                        public_url = EXCLUDED.public_url,
-                        updated_at = EXCLUDED.updated_at;
-                `;
-                } catch (ppErr) {
-                    // T-100: таблица недоступна — пишем только legacy-зеркало (старое поведение, без 500)
-                    console.warn('storage_configs upsert failed, legacy only:', ppErr && ppErr.message ? ppErr.message : ppErr);
-                    // T-350: пишем legacy безусловно, иначе сохранение полностью теряется и «Проверить» падает с not found
-                    try {
+                    const upd = await sql`
+                        UPDATE storage_configs SET bucket = ${bucket}, endpoint = ${endpoint}, region = ${region}, access_key_id = ${accessKeyId}, secret_access_key = ${encryptedSecret}, public_url = ${publicUrl || ''}, updated_at = ${Date.now()}
+                        WHERE user_id = ${user.id} AND provider = ${provider}
+                    `;
+                    if (upd.rowCount === 0) {
                         await sql`
-                            INSERT INTO storage_config (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
-                            VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region || 'auto'}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
-                            ON CONFLICT (user_id) DO UPDATE SET provider = EXCLUDED.provider, bucket = EXCLUDED.bucket, endpoint = EXCLUDED.endpoint, region = EXCLUDED.region, access_key_id = EXCLUDED.access_key_id, secret_access_key = EXCLUDED.secret_access_key, public_url = EXCLUDED.public_url, updated_at = EXCLUDED.updated_at
+                            INSERT INTO storage_configs (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
+                            VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
                         `;
-                    } catch (legacyErr) { console.warn('legacy write failed too:', legacyErr && legacyErr.message ? legacyErr.message : legacyErr); }
+                    }
+                    saved.perProvider = true;
+                } catch (ppErr) {
+                    saved.err = ppErr && ppErr.message ? ppErr.message : String(ppErr);
+                    console.warn('storage_configs upsert failed:', saved.err);
                 }
 
-                // T-93: legacy-зеркало storage_config — только если этот провайдер активен или активного нет
-                let activeNow = null;
-                try { const pr = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`; activeNow = pr.length > 0 ? pr[0].active_provider : null; } catch (e) {}
-                if (!activeNow) {
-                    try { await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]') ON CONFLICT (user_id) DO UPDATE SET active_provider = ${provider}`; await mirrorActiveToLegacy(provider); } catch (e) {}
-                } else if (activeNow === provider) {
-                    await mirrorActiveToLegacy(provider);
-                    // T-338: первый провайдер сразу активен — зеркалим в legacy для «Проверить»
-                    await mirrorActiveToLegacy(provider);
+                // T-354: legacy-запись — ВСЕГДА (раньше только для активного провайдера; из-за этого при активном
+                // google «Проверить» не находил конфиг вообще). Устойчиво: update → insert → update.
+                try {
+                    const lUpd = await sql`
+                        UPDATE storage_config SET provider = ${provider}, bucket = ${bucket}, endpoint = ${endpoint}, region = ${region || 'auto'}, access_key_id = ${accessKeyId}, secret_access_key = ${encryptedSecret}, public_url = ${publicUrl || ''}, updated_at = ${Date.now()}
+                        WHERE user_id = ${user.id}
+                    `;
+                    if (lUpd.rowCount === 0) {
+                        try {
+                            await sql`
+                                INSERT INTO storage_config (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
+                                VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region || 'auto'}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
+                            `;
+                        } catch (insErr) {
+                            await sql`UPDATE storage_config SET provider = ${provider}, bucket = ${bucket}, endpoint = ${endpoint}, region = ${region || 'auto'}, access_key_id = ${accessKeyId}, secret_access_key = ${encryptedSecret}, public_url = ${publicUrl || ''}, updated_at = ${Date.now()} WHERE user_id = ${user.id}`;
+                        }
+                    }
+                    saved.legacy = true;
+                } catch (legacyErr) {
+                    saved.err = (saved.err ? saved.err + ' | ' : '') + (legacyErr && legacyErr.message ? legacyErr.message : String(legacyErr));
+                    console.warn('legacy write failed:', legacyErr && legacyErr.message ? legacyErr.message : legacyErr);
                 }
 
-                return res.status(200).json({ success: true });
+                // prefs: update-first без ON CONFLICT
+                try {
+                    const pUpd = await sql`UPDATE storage_prefs SET active_provider = COALESCE(active_provider, ${provider}) WHERE user_id = ${user.id}`;
+                    if (pUpd.rowCount === 0) {
+                        await sql`INSERT INTO storage_prefs (user_id, active_provider, disabled) VALUES (${user.id}, ${provider}, '[]')`;
+                    }
+                    saved.prefsSet = true;
+                } catch (prefErr) {
+                    saved.err = (saved.err ? saved.err + ' | ' : '') + 'prefs: ' + (prefErr && prefErr.message ? prefErr.message : String(prefErr));
+                    console.warn('prefs write warning:', prefErr && prefErr.message ? prefErr.message : prefErr);
+                }
+
+                return res.status(200).json({ success: true, saved });
             }
           } catch (cfgFatal) {
             // T-129: последняя линия обороны — config не должен отдавать 500 никогда
