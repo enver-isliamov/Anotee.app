@@ -52,6 +52,14 @@ export default async function handler(req, res) {
         const ensurePerProviderConfigs = async () => {
             try {
                 await sql`CREATE TABLE IF NOT EXISTS storage_configs (user_id TEXT, provider TEXT, bucket TEXT NOT NULL, endpoint TEXT NOT NULL, region TEXT, access_key_id TEXT NOT NULL, secret_access_key TEXT NOT NULL, public_url TEXT, updated_at BIGINT, PRIMARY KEY (user_id, provider));`;
+                // T-350: ON CONFLICT (user_id, provider) требует unique-констрейнт. Раньше таблица создавалась БЕЗ него,
+                // из-за чего любой upsert падал («no unique or exclusion constraint…»), catch глотал ошибку — настройки не сохранялись.
+                try {
+                    await sql`DELETE FROM storage_configs a USING storage_configs b WHERE a.user_id = b.user_id AND a.provider = b.provider AND a.ctid < b.ctid`;
+                    await sql`CREATE UNIQUE INDEX IF NOT EXISTS storage_configs_user_provider_uniq ON storage_configs (user_id, provider)`;
+                } catch (idxErr) {
+                    console.warn('storage_configs unique index warning:', idxErr && idxErr.message ? idxErr.message : idxErr);
+                }
                 const cnt = await sql`SELECT count(*)::int AS n FROM storage_configs WHERE user_id = ${user.id}`;
                 if (cnt[0] && cnt[0].n === 0) {
                     const legacy = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
@@ -209,6 +217,7 @@ if (req.method === 'GET') {
                 }
 
                 // T-93/T-100: per-provider upsert — при недоступности таблицы fallback на legacy-запись (не 500)
+                await ensurePerProviderConfigs();
                 try {
                 await sql`
                     INSERT INTO storage_configs (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
@@ -226,6 +235,14 @@ if (req.method === 'GET') {
                 } catch (ppErr) {
                     // T-100: таблица недоступна — пишем только legacy-зеркало (старое поведение, без 500)
                     console.warn('storage_configs upsert failed, legacy only:', ppErr && ppErr.message ? ppErr.message : ppErr);
+                    // T-350: пишем legacy безусловно, иначе сохранение полностью теряется и «Проверить» падает с not found
+                    try {
+                        await sql`
+                            INSERT INTO storage_config (user_id, provider, bucket, endpoint, region, access_key_id, secret_access_key, public_url, updated_at)
+                            VALUES (${user.id}, ${provider}, ${bucket}, ${endpoint}, ${region || 'auto'}, ${accessKeyId}, ${encryptedSecret}, ${publicUrl || ''}, ${Date.now()})
+                            ON CONFLICT (user_id) DO UPDATE SET provider = EXCLUDED.provider, bucket = EXCLUDED.bucket, endpoint = EXCLUDED.endpoint, region = EXCLUDED.region, access_key_id = EXCLUDED.access_key_id, secret_access_key = EXCLUDED.secret_access_key, public_url = EXCLUDED.public_url, updated_at = EXCLUDED.updated_at
+                        `;
+                    } catch (legacyErr) { console.warn('legacy write failed too:', legacyErr && legacyErr.message ? legacyErr.message : legacyErr); }
                 }
 
                 // T-93: legacy-зеркало storage_config — только если этот провайдер активен или активного нет
@@ -507,7 +524,20 @@ if (req.method === 'GET') {
         if (action === 'test') {
             if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
-            const { s3, config } = await getS3Client(user.id);
+            let s3, config;
+            try {
+                ({ s3, config } = await getS3Client(user.id));
+            } catch (getErr) {
+                if (/not found/i.test(getErr && getErr.message ? getErr.message : '')) {
+                    // T-350: диагностика — что реально есть в БД, чтобы такие случаи решались за минуту
+                    const debug = {};
+                    try { const a = await sql`SELECT count(*)::int AS n FROM storage_configs WHERE user_id = ${user.id}`; debug.perProviderRows = a[0] ? a[0].n : null; } catch (e) { debug.perProviderRows = 'err'; }
+                    try { const b = await sql`SELECT count(*)::int AS n FROM storage_config WHERE user_id = ${user.id}`; debug.legacyRows = b[0] ? b[0].n : null; } catch (e) { debug.legacyRows = 'err'; }
+                    try { const c = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`; debug.activeProvider = c[0] ? c[0].active_provider : null; } catch (e) { debug.activeProvider = 'err'; }
+                    return res.status(400).json({ error: 'Настройки хранилища не найдены — заполните поля и нажмите «Активировать».', debug });
+                }
+                throw getErr;
+            }
             logInfo('STORAGE', `Testing S3 connection for user ${user.id} to ${config.endpoint}`);
 
             try {
