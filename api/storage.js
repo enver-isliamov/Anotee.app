@@ -158,16 +158,22 @@ if (req.method === 'GET') {
                 // T-93: per-provider — конфиг активного провайдера; список настроенных для статусов карточек
                 let active = null;
                 try { const pr = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${user.id}`; active = pr.length > 0 ? pr[0].active_provider : null; } catch (e) {}
-                const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${user.id} ORDER BY updated_at DESC NULLS LAST`;
-                let config = (active ? cfgRows.find(r => r.provider === active) : null) || cfgRows[0] || null;
+                // T-361 (production parity): первичный источник — storage_config (как в проде);
+                // per-provider — только fallback и для списка настроенных провайдеров.
+                let cfgRows = [];
+                try { cfgRows = (await sql`SELECT * FROM storage_configs WHERE user_id = ${user.id} ORDER BY updated_at DESC NULLS LAST`).rows; } catch (e) {}
+                let config = null;
+                try {
+                    const legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
+                    if (legacyRows.length > 0 && legacyRows[0].provider) config = legacyRows[0];
+                } catch (e) {}
+                if (!config) config = (active ? cfgRows.find(r => r.provider === active) : null) || cfgRows[0] || null;
                 // T-358: самоисцеление — если активный в prefs не совпадает с реально доступным конфигом, синхронизируем
                 if (config && config.provider && config.provider !== active) {
                     try { await sql`UPDATE storage_prefs SET active_provider = ${config.provider} WHERE user_id = ${user.id}`; } catch (e) {}
                 }
                 if (!config) {
-                    const legacyRows = await sql`SELECT * FROM storage_config WHERE user_id = ${user.id}`;
-                    if (legacyRows.length === 0) return res.status(200).json(null);
-                    config = legacyRows[0];
+                    return res.status(200).json(null);
                 }
                 const configured = cfgRows.map(r => r.provider);
                 const legacyConfig = config;

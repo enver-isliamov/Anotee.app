@@ -10,27 +10,22 @@ import { decrypt } from './_crypto.js';
 export async function getS3Client(userId) {
     if (!userId) throw new Error("UserId required for S3 Client");
 
-    // T-322: сначала пробуем per-provider конфиг активного провайдера (storage_configs),
-    // legacy storage_config — только как fallback. Раньше «Сохранить» без «активации»
-    // оставляло legacy пустым и «Проверить» падало с «S3 Configuration not found».
+    // T-361 (production parity): главный источник — storage_config (одна строка user_id, как в проде,
+    // где подключение всегда сохранялось). storage_configs — только fallback для старых записей.
     let rows = [];
     try {
-        const prefRows = await sql`SELECT active_provider FROM storage_prefs WHERE user_id = ${userId}`;
-        const active = prefRows.length > 0 ? prefRows[0].active_provider : null;
-        const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${userId} ORDER BY updated_at DESC NULLS LAST`;
-        if (cfgRows.length > 0) {
-            // детерминированный выбор: активный провайдер, иначе — последний обновлённый
-            const chosen = (active && cfgRows.find(r => r.provider === active)) || cfgRows[0];
-            rows = [chosen];
-        }
-    } catch (e) {
-        // таблица storage_configs может быть недоступна — идём в legacy
-        console.warn('per-provider read failed, legacy fallback:', e && e.message ? e.message : e);
-    }
-
-    if (rows.length === 0) {
         const legacy = await sql`SELECT * FROM storage_config WHERE user_id = ${userId}`;
         rows = legacy.rows;
+    } catch (e) {
+        console.warn('storage_config read failed, per-provider fallback:', e && e.message ? e.message : e);
+    }
+    if (rows.length === 0) {
+        try {
+            const cfgRows = await sql`SELECT * FROM storage_configs WHERE user_id = ${userId} ORDER BY updated_at DESC NULLS LAST`;
+            if (cfgRows.length > 0) rows = [cfgRows[0]];
+        } catch (e) {
+            console.warn('per-provider read failed:', e && e.message ? e.message : e);
+        }
     }
 
     if (rows.length === 0) {
