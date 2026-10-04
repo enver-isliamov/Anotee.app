@@ -17,6 +17,11 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+
+    // T-368: зеркало последнего отрендеренного projects — нужно, чтобы получить итоговое
+    // состояние проекта синхронно (апдейтер setProjects в React 18 выполняется не сразу).
+    const projectsRef = useRef(projects);
+    useEffect(() => { projectsRef.current = projects; }, [projects]);
   // T-44: незавершённые задачи нежизнеспособны после перезагрузки страницы — чистим на маунте
   useEffect(() => { setUploadTasks(prev => prev.filter(t => t.status !== 'uploading' && t.status !== 'processing')); }, []);
     
@@ -283,22 +288,23 @@ export const useUploadManager = (
   }
 
             // 4. Construct Final Project State (Seamless Swap)
-            let finalProjectToSync: Project | null = null;
-            
-            setProjects(currentProjects => {
-                const newAllProjects = [...currentProjects];
-                const idx = newAllProjects.findIndex(p => p.id === projectId);
-                if (idx === -1) return currentProjects;
-                
-                const updatedProject = { ...newAllProjects[idx] };
-                
+            // T-368: раньше итоговый проект «вынимался» из апдейтера setProjects, но в React 18
+            // апдейтеры выполняются не синхронно — переменная оставалась null и блок синхронизации
+            // НЕ выполнялся: файл жил только в оптимистичном UI и исчезал после перезагрузки.
+            // Теперь итог считается чистой функцией applyFinalPatch:
+            //  • локальный стейт — поверх prev (конкурентные правки не теряются);
+            //  • на сервер — снимок из projectsRef (последнее отрендеренное состояние).
+            const applyFinalPatch = (proj: Project): Project => {
+                const updatedProject = { ...proj };
+
                 const assetIdx = updatedProject.assets.findIndex(a => a.id === tempAssetId);
                 if (assetIdx !== -1) {
                     const asset = { ...updatedProject.assets[assetIdx] };
                     const versionIdx = asset.versions.findIndex(v => v.id === tempVersionId);
-                    
+
                     if (versionIdx !== -1) {
                         // Replace optimistic properties with real cloud properties
+                        asset.versions = [...asset.versions];
                         asset.versions[versionIdx] = {
                             ...asset.versions[versionIdx],
                             url: assetUrl,
@@ -307,15 +313,24 @@ export const useUploadManager = (
                             s3Key
                         };
                     }
+                    updatedProject.assets = [...updatedProject.assets];
                     updatedProject.assets[assetIdx] = asset;
                 }
-                
+
                 updatedProject.updatedAt = 'Just now';
-                newAllProjects[idx] = updatedProject;
-                finalProjectToSync = updatedProject;
+                return updatedProject;
+            };
+
+            const refProject = projectsRef.current.find(p => p.id === projectId);
+            const finalProjectToSync: Project | null = refProject ? applyFinalPatch(refProject) : null;
+
+            setProjects(currentProjects => {
+                const idx = currentProjects.findIndex(p => p.id === projectId);
+                if (idx === -1) return currentProjects;
+                const newAllProjects = [...currentProjects];
+                newAllProjects[idx] = applyFinalPatch(currentProjects[idx]);
                 return newAllProjects;
             });
-
             // 5. Try Sync
             if (finalProjectToSync) {
 try {
