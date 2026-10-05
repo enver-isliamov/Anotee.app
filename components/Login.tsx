@@ -1,14 +1,16 @@
 
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { User } from '../types';
 import { ArrowRight, ShieldCheck, PlayCircle, Zap, Clock } from 'lucide-react';
 import { useLanguage } from '../services/i18n';
 import { AppHeader } from './AppHeader';
-import { IntegrationBlock } from './StaticPages';
 import { RoadmapBlock } from './RoadmapBlock';
 import { WorkflowBlock, ROIBlock, FeaturesBlock } from './LandingBlocks';
 import { SignInButton } from '@clerk/clerk-react';
 import { useAppVersion } from '../hooks/useAppVersion';
+
+// T-11: IntegrationBlock — ленивый чанк (StaticPages нужен и другим страницам)
+const IntegrationBlock = lazy(() => import('./StaticPages').then(m => ({ default: m.IntegrationBlock })));
 
 interface LoginProps {
   onLogin: (user: User, token?: string) => void;
@@ -163,7 +165,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
       </div>
 
       {/* 7. INTEGRATIONS & FOOTER */}
-      <IntegrationBlock />
+      <Suspense fallback={null}><IntegrationBlock /></Suspense>
 
       {/* FOOTER */}
       <footer className="py-8 bg-black border-t border-zinc-800 text-center text-xs text-zinc-600">
