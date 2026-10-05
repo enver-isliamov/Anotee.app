@@ -225,7 +225,7 @@ function buildHtml(tasksJson, chronicleJson, problemsJson, roadmapJson, metaDate
     <div class="brand">ANOTEE <span class="bn">·</span> Библия проекта</div>
     <div class="tagline">Все задачи, решения и знания — в одном месте</div>
     <div class="site-right">
-      <span class="meta-line">Собрано: __META_DATE__ · задач: __META_COUNT__</span>
+      <span class="meta-line">Данные: __META_DATE__ · задач: __META_COUNT__ · <span id="liveNow">—</span></span>
       <button class="btn" id="themeBtn" type="button">◐ Тема</button>
       <button class="btn" id="viewBtn" type="button">≣ Карточки</button>
     </div>
@@ -382,7 +382,7 @@ function buildHtml(tasksJson, chronicleJson, problemsJson, roadmapJson, metaDate
 
 <footer class="site">
   <div class="wrap">
-    <span>Anotee — Библия проекта · собрано __META_DATE__</span>
+    <span>Anotee — Библия проекта · данные: __META_DATE__ · <span id="liveNow2">—</span></span>
     <span>Источники: git (main), docs/TASKS.md, docs/bible</span>
     <span>Собрано AutoClaw</span>
   </div>
@@ -681,6 +681,13 @@ function renderRoadmap(){
   }
 }
 
+function tickClock(){
+  var d = new Date(), p = function(n){ return String(n).padStart(2, '0'); };
+  var s = 'сейчас ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  var a = document.getElementById('liveNow'); if (a) a.textContent = s;
+  var b = document.getElementById('liveNow2'); if (b) b.textContent = s;
+}
+
 function stampHM(){
   var d = new Date(), p = function(n){ return String(n).padStart(2, '0'); };
   return p(d.getHours()) + ':' + p(d.getMinutes());
@@ -774,6 +781,7 @@ function initView(){
   apply();
 }
 
+tickClock(); setInterval(tickClock, 30000);
 statRow(); initFilters(); initChronicle(); initProblems(); initRoadmap(); initTabs(); initToolbar(); initTheme(); initView(); render();
 </script>
 </body>

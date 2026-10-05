@@ -97,6 +97,7 @@ npm run test:e2e     # e2e-тесты (Playwright, mock-режим)
 - `api/_auth.js` — смена логики токенов ломает ВСЕ эндпоинты.
 - Расчёт FPS/таймкода в `Player.tsx` — рассинхрон маркеров у всех пользователей.
 - `services/googleDrive.ts` (формат URL, resumable upload) — хрупкая интеграция.
+- BYOS-хранилище (настройки провайдера, `activeProvider`, `loadS3Config`): не менять дефолты и обработку ошибок без e2e (`storage-keys`, `wizard-flow`, `upload-persistence`) и полного прогона — регрессии здесь ломают загрузки у всех пользователей. Сетевые обрывы не должны выглядеть как «сброс на Google» (см. docs/bible/problems).
 
 ## 9. Известный техдолг (кратко, полный список в TASKS)
 
