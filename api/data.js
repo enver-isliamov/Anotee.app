@@ -6,6 +6,7 @@ import { checkProjectAccess } from './_permissions.js';
 import { isOrgMember, extractOrgIds } from './_orgAccess.js';
 import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
 import { resolveSyncOutcome } from './_sync.js';
+import { applyCommentAction } from './_comments.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -207,29 +208,17 @@ export default async function handler(req, res) {
           if (!version) return res.status(404).json({ error: "Version not found" });
           if (!version.comments) version.comments = [];
 
-          switch (commentAction) {
-              case 'create':
-                  version.comments.push({ ...payload, userId: user.id, createdAt: 'Just now' });
-                  break;
-              case 'update':
-                  const uIdx = version.comments.findIndex(c => c.id === payload.id);
-                  if (uIdx !== -1) {
-                      const isCommentOwner = version.comments[uIdx].userId === user.id;
-                      const isProjectOwner = projectRow.owner_id === user.id;
-                      if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
-                      version.comments[uIdx] = { ...version.comments[uIdx], ...payload };
-                  }
-                  break;
-              case 'delete':
-                  const dIdx = version.comments.findIndex(c => c.id === payload.id);
-                  if (dIdx !== -1) {
-                      const isCommentOwner = version.comments[dIdx].userId === user.id;
-                      const isProjectOwner = projectRow.owner_id === user.id;
-                      if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
-                      version.comments.splice(dIdx, 1);
-                  }
-                  break;
+          // T-13: идемпотентное применение — повторный create/retry/гонка не создаёт дубликатов.
+          // Владение проверяем до мутации (как раньше: автор комментария или владелец проекта).
+          if ((commentAction === 'update' || commentAction === 'delete') && payload) {
+              const cIdx = version.comments.findIndex(c => c.id === payload.id);
+              if (cIdx !== -1) {
+                  const isCommentOwner = version.comments[cIdx].userId === user.id;
+                  const isProjectOwner = projectRow.owner_id === user.id;
+                  if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
+              }
           }
+          applyCommentAction(version.comments, commentAction, payload, user.id);
 
           const newVersion = currentVersion + 1;
           projectData._version = newVersion;
@@ -252,21 +241,8 @@ export default async function handler(req, res) {
           const fVersion = (fAsset.versions || []).find(v => v.id === versionId);
           if (!fVersion) return res.status(404).json({ error: "Version not found" });
           if (!fVersion.comments) fVersion.comments = [];
-          switch (commentAction) {
-              case 'create':
-                  fVersion.comments.push({ ...payload, userId: user.id, createdAt: 'Just now' });
-                  break;
-              case 'update': {
-                  const uIdx = fVersion.comments.findIndex(cc => cc.id === payload.id);
-                  if (uIdx !== -1) fVersion.comments[uIdx] = { ...fVersion.comments[uIdx], ...payload };
-                  break;
-              }
-              case 'delete': {
-                  const dIdx = fVersion.comments.findIndex(cc => cc.id === payload.id);
-                  if (dIdx !== -1) fVersion.comments.splice(dIdx, 1);
-                  break;
-              }
-          }
+          // T-13: то же идемпотентное применение в T-80-ветке (без дублей при гонке)
+          applyCommentAction(fVersion.comments, commentAction, payload, user.id);
           freshData._version = freshCurrent + 1;
           await sql`UPDATE projects SET data = ${JSON.stringify(freshData)}::jsonb, updated_at = ${Date.now()} WHERE id = ${projectId}`;
           return res.status(200).json({ success: true, _version: freshData._version });

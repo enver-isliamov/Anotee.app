@@ -647,7 +647,10 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       versionToUpdate.comments = newComments; 
       updatedVersions[currentVersionIdx] = versionToUpdate; 
       const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); 
-      onUpdateProject({ ...project, assets: updatedAssets }); 
+      // T-13: комментарии пишутся ТОЛЬКО через comment-endpoint (инкрементально).
+      // Полный sync проекта отсюда убран: он дублировал запись (POST /api/data + action=comment
+      // → дубликаты комментариев при гонке/retry).
+      onUpdateProject({ ...project, assets: updatedAssets }, true); 
       if (!isDemo && currentUser) {
             try {
                 await api.comment(project.id, asset.id, version.id, action, payload, currentUser);
