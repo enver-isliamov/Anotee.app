@@ -7,6 +7,7 @@ import { isOrgMember, extractOrgIds } from './_orgAccess.js';
 import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
 import { resolveSyncOutcome } from './_sync.js';
 import { applyCommentAction } from './_comments.js';
+import { sanitizeRoadmapPostInput, toggleRoadmapVote, normalizeRoadmapStatus } from './_roadmap.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -60,6 +61,18 @@ function sanitizeProjectForUser(projectData, user, isGuest = false) {
     return projectData;
 }
 
+// T-14x: платформенный админ (Clerk publicMetadata.role) — как в api/admin.js
+async function isPlatformAdmin(user) {
+    try {
+        const clerk = getClerkClient();
+        const clerkUser = await clerk.users.getUser(user.userId);
+        const role = clerkUser.publicMetadata && clerkUser.publicMetadata.role;
+        return role === 'admin' || role === 'superadmin';
+    } catch (e) {
+        return false;
+    }
+}
+
 export default async function handler(req, res) {
   try {
       // ==========================================
@@ -111,6 +124,21 @@ export default async function handler(req, res) {
               comments: publicComments,
               isLocked: !!sharedVersion.isLocked
           });
+      }
+
+      // ==========================================
+      // ROADMAP: публичное чтение доски (раздел /roadmap виден и гостям).
+      // Синхронизируется с «Библией проекта» (/bible.html → «Дорожная карта»).
+      // ==========================================
+      if (earlyAction === 'roadmap' && req.method === 'GET') {
+          try {
+              await sql`CREATE TABLE IF NOT EXISTS roadmap_posts (id TEXT PRIMARY KEY, data JSONB NOT NULL, created_at BIGINT, updated_at BIGINT)`;
+              const { rows } = await sql`SELECT data FROM roadmap_posts ORDER BY created_at DESC LIMIT 300`;
+              return res.status(200).json({ posts: rows.map((r) => r.data) });
+          } catch (e) {
+              console.error("Roadmap read error:", e && e.message ? e.message : e);
+              return res.status(200).json({ posts: [] });
+          }
       }
 
       // FORCE EMAIL FETCH: Required for "Shared with Me" personal invites to work.
@@ -255,6 +283,96 @@ export default async function handler(req, res) {
           return res.status(200).json({ success: true, _version: freshData._version });
       }
           return res.status(200).json({ success: true, _version: newVersion });
+      }
+
+      // ==========================================
+      // MERGED ROUTE: ROADMAP ACTIONS (write)
+      // create/vote/comment — авторизованные; update/delete — платформенный админ.
+      // ==========================================
+      if (req.method === 'POST' && action === 'roadmap_create') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const check = sanitizeRoadmapPostInput(body || {});
+          if (!check.ok) return res.status(400).json({ error: check.error });
+          await sql`CREATE TABLE IF NOT EXISTS roadmap_posts (id TEXT PRIMARY KEY, data JSONB NOT NULL, created_at BIGINT, updated_at BIGINT)`;
+          const post = {
+              id: crypto.randomUUID(),
+              ...check.value,
+              status: 'under_review',
+              authorId: user.id,
+              createdAt: new Date().toISOString(),
+              voterIds: [user.id],
+              comments: [],
+          };
+          await sql`INSERT INTO roadmap_posts (id, data, created_at, updated_at) VALUES (${post.id}, ${JSON.stringify(post)}::jsonb, ${Date.now()}, ${Date.now()})`;
+          return res.status(200).json({ post });
+      }
+      if (req.method === 'POST' && action === 'roadmap_vote') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const postId = body && body.postId;
+          if (!postId) return res.status(400).json({ error: "Missing postId" });
+          const { rows } = await sql`SELECT data FROM roadmap_posts WHERE id = ${postId}`;
+          if (!rows.length) return res.status(404).json({ error: "Post not found" });
+          const post = rows[0].data;
+          const vote = toggleRoadmapVote(post, user.id);
+          post.voterIds = vote.voterIds;
+          await sql`UPDATE roadmap_posts SET data = ${JSON.stringify(post)}::jsonb, updated_at = ${Date.now()} WHERE id = ${postId}`;
+          return res.status(200).json({ post, voted: vote.voted });
+      }
+      if (req.method === 'POST' && action === 'roadmap_comment') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const { postId, content, authorName, authorAvatar } = body || {};
+          const text = typeof content === 'string' ? content.trim() : '';
+          if (!postId || text.length < 1) return res.status(400).json({ error: "Missing content" });
+          if (text.length > 2000) return res.status(400).json({ error: "Comment is too long" });
+          const { rows } = await sql`SELECT data FROM roadmap_posts WHERE id = ${postId}`;
+          if (!rows.length) return res.status(404).json({ error: "Post not found" });
+          const post = rows[0].data;
+          if (!Array.isArray(post.comments)) post.comments = [];
+          const comment = {
+              id: crypto.randomUUID(),
+              authorId: user.id,
+              authorName: String(authorName || 'User').slice(0, 60),
+              authorAvatar: authorAvatar || null,
+              content: text.slice(0, 2000),
+              createdAt: new Date().toISOString(),
+          };
+          post.comments.push(comment);
+          await sql`UPDATE roadmap_posts SET data = ${JSON.stringify(post)}::jsonb, updated_at = ${Date.now()} WHERE id = ${postId}`;
+          return res.status(200).json({ post, comment });
+      }
+      if (req.method === 'POST' && (action === 'roadmap_update' || action === 'roadmap_delete')) {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const postId = body && body.postId;
+          if (!postId) return res.status(400).json({ error: "Missing postId" });
+          if (!(await isPlatformAdmin(user))) return res.status(403).json({ error: "Admin access required" });
+          if (action === 'roadmap_delete') {
+              await sql`DELETE FROM roadmap_posts WHERE id = ${postId}`;
+              return res.status(200).json({ success: true });
+          }
+          const { rows } = await sql`SELECT data FROM roadmap_posts WHERE id = ${postId}`;
+          if (!rows.length) return res.status(404).json({ error: "Post not found" });
+          const post = rows[0].data;
+          if (body.status) {
+              const st = normalizeRoadmapStatus(body.status);
+              if (!st) return res.status(400).json({ error: "Unknown status" });
+              post.status = st;
+          }
+          if (typeof body.title === 'string') {
+              const t = body.title.trim();
+              if (t.length < 3 || t.length > 140) return res.status(400).json({ error: "Bad title length" });
+              post.title = t;
+          }
+          if (typeof body.description === 'string') {
+              const dsc = body.description.trim();
+              if (dsc.length < 3 || dsc.length > 2000) return res.status(400).json({ error: "Bad description length" });
+              post.description = dsc;
+          }
+          await sql`UPDATE roadmap_posts SET data = ${JSON.stringify(post)}::jsonb, updated_at = ${Date.now()} WHERE id = ${postId}`;
+          return res.status(200).json({ post });
       }
 
       // ==========================================

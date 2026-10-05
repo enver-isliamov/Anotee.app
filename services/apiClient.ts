@@ -219,5 +219,52 @@ export const api = {
 
         if (!res.ok) throw new Error("Comment action failed");
         return await res.json();
-    }
+    },
+    // ────────── Дорожная карта (чтение публичное; создание/голос/коммент — авторизованные; правка — админ) ──────────
+    getRoadmap: async (): Promise<any[]> => {
+        const res = await fetch('/api/data?action=roadmap', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Roadmap fetch failed');
+        const data = await res.json();
+        return Array.isArray(data && data.posts) ? data.posts : [];
+    },
+    createRoadmapPost: async (input: { title: string; description: string; type: string }) => {
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch('/api/data?action=roadmap_create', { method: 'POST', headers, body: JSON.stringify(input) });
+        if (!res.ok) throw new Error('Roadmap create failed');
+        return (await res.json()).post;
+    },
+    toggleRoadmapVote: async (postId: string) => {
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch('/api/data?action=roadmap_vote', { method: 'POST', headers, body: JSON.stringify({ postId }) });
+        if (!res.ok) throw new Error('Roadmap vote failed');
+        return (await res.json()).post;
+    },
+    addRoadmapComment: async (postId: string, content: string, authorName: string, authorAvatar?: string) => {
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch('/api/data?action=roadmap_comment', { method: 'POST', headers, body: JSON.stringify({ postId, content, authorName, authorAvatar }) });
+        if (!res.ok) throw new Error('Roadmap comment failed');
+        return (await res.json()).post;
+    },
+    updateRoadmapPost: async (postId: string, patch: Record<string, unknown>) => {
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch('/api/data?action=roadmap_update', { method: 'POST', headers, body: JSON.stringify({ postId, ...patch }) });
+        if (!res.ok) throw new Error('Roadmap update failed');
+        return (await res.json()).post;
+    },
+    deleteRoadmapPost: async (postId: string) => {
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch('/api/data?action=roadmap_delete', { method: 'POST', headers, body: JSON.stringify({ postId }) });
+        if (!res.ok) throw new Error('Roadmap delete failed');
+        return true;
+    },
 };
