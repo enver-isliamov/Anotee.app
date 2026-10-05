@@ -188,6 +188,9 @@
   .rm-card .meta{display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; color:var(--faint); font-size:11.5px; align-items:center}
   .rm-task{font:600 11px/1 system-ui,sans-serif; padding:3px 7px; border:1px solid var(--accent); color:var(--accent); border-radius:3px; cursor:pointer; background:transparent}
   .rm-task:hover{background:var(--accent-soft)}
+  .rm-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0 0;flex-wrap:wrap}
+  .rm-livenote{color:var(--faint);font-size:12px}
+  .stat.s-p0 b{color:var(--p0)} .stat.s-p1 b{color:var(--p1)} .stat.s-p2 b{color:var(--p2)}
 
   /* Руководство */
   .guide h3{font-family:Georgia,serif; font-size:17px; margin:22px 0 8px}
@@ -218,7 +221,7 @@
     <div class="brand">ANOTEE <span class="bn">·</span> Библия проекта</div>
     <div class="tagline">Все задачи, решения и знания — в одном месте</div>
     <div class="site-right">
-      <span class="meta-line">Собрано: 2026-10-05 22:12 · задач: 147</span>
+      <span class="meta-line">Собрано: 2026-10-05 22:25 · задач: 147</span>
       <button class="btn" id="themeBtn" type="button">◐ Тема</button>
       <button class="btn" id="viewBtn" type="button">≣ Карточки</button>
     </div>
@@ -281,6 +284,10 @@
   <section class="tabsec" id="tab-roadmap">
     <h2 class="sechead">Дорожная карта</h2>
     <p class="secsub">Входящий поток идей, фич и багов (в том числе с сайта). Порядок работы: новый пункт появляется в «На рассмотрении» → планируется → берётся в работу (связывается с задачей T-XX, кнопка «→ задача») → завершается. Агенты ведут эту доску вместе с реестром задач (см. «Процесс»).</p>
+    <div class="rm-toolbar">
+      <span class="rm-livenote" id="rmLiveNote">Посты с сайта подгружаются вживую.</span>
+      <button class="btn" id="rmRefresh" type="button">↻ Обновить с сайта</button>
+    </div>
     <div class="rm-board" id="rmBoard"></div>
   </section>
 
@@ -371,7 +378,7 @@
 
 <footer class="site">
   <div class="wrap">
-    <span>Anotee — Библия проекта · собрано 2026-10-05 22:12</span>
+    <span>Anotee — Библия проекта · собрано 2026-10-05 22:25</span>
     <span>Источники: git (main), docs/TASKS.md, docs/bible</span>
     <span>Собрано AutoClaw</span>
   </div>
@@ -529,16 +536,20 @@ function render(){
 }
 
 function statRow(){
-  var total = TASKS.length, done = 0, open = 0, prog = 0, i, t;
+  var total = TASKS.length, done = 0, open = 0, prog = 0, p0 = 0, p1 = 0, p2 = 0, i, t;
   for (i = 0; i < TASKS.length; i++){
     t = TASKS[i];
     if (t.status === 'done') done++; else if (t.status === 'open') open++; else prog++;
+    if (t.priority === 'P0') p0++; else if (t.priority === 'P1') p1++; else if (t.priority === 'P2') p2++;
   }
   document.getElementById('stats').innerHTML =
     '<div class="stat"><b>' + total + '</b><span>всего задач</span></div>' +
     '<div class="stat s-done"><b>' + done + '</b><span>сделано</span></div>' +
     '<div class="stat s-open"><b>' + open + '</b><span>открыто</span></div>' +
-    '<div class="stat s-prog"><b>' + prog + '</b><span>в работе</span></div>';
+    '<div class="stat s-prog"><b>' + prog + '</b><span>в работе</span></div>' +
+    '<div class="stat s-p0"><b>' + p0 + '</b><span>P0 приоритет</span></div>' +
+    '<div class="stat s-p1"><b>' + p1 + '</b><span>P1</span></div>' +
+    '<div class="stat s-p2"><b>' + p2 + '</b><span>P2</span></div>';
   document.getElementById('cntAll').textContent = total;
 }
 
@@ -595,9 +606,49 @@ function rmStatusOf(p){
   return p.status || 'under_review';
 }
 
-function initRoadmap(){
+function rmStatusOf(p){
+  if (p.status === 'completed' || p.status === 'closed') return 'completed';
+  return p.status || 'under_review';
+}
+
+var livePosts = [];
+
+// Пост с сайта → карточка (пометка «с сайта», счётчик голосов)
+function toLive(p){
+  var s = String(p.status || 'under_review');
+  if (s === 'closed') s = 'completed';
+  return {
+    id: 'САЙТ-' + String(p.id || '').slice(0, 6),
+    title: p.title, description: p.description, type: p.type,
+    status: s,
+    votes: Array.isArray(p.voterIds) ? p.voterIds.length : 0,
+    taskId: '', source: 'сайт', live: true,
+    updated: String(p.createdAt || '').slice(0, 10)
+  };
+}
+
+function rmCardHtml(it){
+  var typeCls = it.type === 'bug' ? 'b-bug' : it.type === 'feature' ? 'b-feature' : 'b-improvement';
+  var task = it.taskId ? '<button class="rm-task" data-goto="' + esc(it.taskId) + '" type="button">→ задача ' + esc(it.taskId) + '</button>' : '';
+  var votes = (it.votes ? '<span>▲ ' + it.votes + '</span>' : '');
+  var live = it.live ? '<span class="badge b-model">с сайта</span>' : '';
+  return '<div class="rm-card">'
+    + '<div class="row1"><span class="badge ' + typeCls + '">' + esc(RM_TYPE[it.type] || it.type || '') + '</span>' + live + (it.id ? '<span class="tid">' + esc(it.id) + '</span>' : '') + '</div>'
+    + '<div class="tname">' + esc(it.title) + '</div>'
+    + '<div class="desc">' + esc(it.description || '') + '</div>'
+    + '<div class="meta">' + task + votes + '<span class="mono">' + esc(it.updated || '') + '</span>' + (it.source ? '<span>' + esc(it.source) + '</span>' : '') + '</div>'
+    + '</div>';
+}
+
+function renderRoadmap(){
   var cols = {}, i, p;
   for (i = 0; i < RM_ST.length; i++) cols[RM_ST[i].key] = [];
+  // серверные (с сайта) — первыми в своей колонке
+  for (i = 0; i < livePosts.length; i++){
+    var k1 = rmStatusOf(livePosts[i]);
+    if (!cols[k1]) cols[k1] = [];
+    cols[k1].push(livePosts[i]);
+  }
   for (i = 0; i < ROADMAP.length; i++){
     p = ROADMAP[i];
     var k = rmStatusOf(p);
@@ -608,22 +659,10 @@ function initRoadmap(){
   for (i = 0; i < RM_ST.length; i++){
     var col = RM_ST[i];
     var cards = [], items = cols[col.key] || [];
-    for (var j = 0; j < items.length; j++){
-      var it = items[j];
-      var typeCls = it.type === 'bug' ? 'b-bug' : it.type === 'feature' ? 'b-feature' : 'b-improvement';
-      var task = it.taskId ? '<button class="rm-task" data-goto="' + esc(it.taskId) + '" type="button">→ задача ' + esc(it.taskId) + '</button>' : '';
-      var votes = (it.votes ? '<span>▲ ' + it.votes + '</span>' : '');
-      cards.push('<div class="rm-card">'
-        + '<div class="row1"><span class="badge ' + typeCls + '">' + esc(RM_TYPE[it.type] || it.type || '') + '</span>' + (it.id ? '<span class="tid">' + esc(it.id) + '</span>' : '') + '</div>'
-        + '<div class="tname">' + esc(it.title) + '</div>'
-        + '<div class="desc">' + esc(it.description || '') + '</div>'
-        + '<div class="meta">' + task + votes + '<span class="mono">' + esc(it.updated || '') + '</span>' + (it.source ? '<span>' + esc(it.source) + '</span>' : '') + '</div>'
-        + '</div>');
-    }
+    for (var j = 0; j < items.length; j++) cards.push(rmCardHtml(items[j]));
     html.push('<div class="rm-col"><div class="rm-head"><span>' + col.label + '</span><span class="n">' + items.length + '</span></div><div class="rm-body">' + cards.join('') + '</div></div>');
   }
   document.getElementById('rmBoard').innerHTML = html.join('');
-  document.getElementById('cntRoad').textContent = ROADMAP.length;
   var btns = document.querySelectorAll('.rm-task');
   for (var b = 0; b < btns.length; b++){
     (function(btn){
@@ -636,6 +675,39 @@ function initRoadmap(){
       });
     })(btns[b]);
   }
+}
+
+function stampHM(){
+  var d = new Date(), p = function(n){ return String(n).padStart(2, '0'); };
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function fetchLive(){
+  var btn = document.getElementById('rmRefresh');
+  var note = document.getElementById('rmLiveNote');
+  if (btn) { btn.disabled = true; btn.textContent = '… обновление'; }
+  fetch('/api/data?action=roadmap', { cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+    .then(function(d){
+      var list = (d && d.posts) ? d.posts : [];
+      livePosts = [];
+      for (var i = 0; i < list.length; i++) livePosts.push(toLive(list[i]));
+      if (note) note.textContent = livePosts.length ? ('Загружено с сайта: ' + livePosts.length + ' · ' + stampHM()) : 'На сайте пока нет постов — показана встроенная доска.';
+      document.getElementById('cntRoad').textContent = ROADMAP.length + livePosts.length;
+      renderRoadmap();
+    })
+    .catch(function(){
+      if (note) note.textContent = 'Живые посты недоступны (откройте страницу на сайте Anotee) — показана встроенная доска.';
+    })
+    .then(function(){ if (btn) { btn.disabled = false; btn.textContent = '↻ Обновить с сайта'; } });
+}
+
+function initRoadmap(){
+  document.getElementById('cntRoad').textContent = ROADMAP.length;
+  renderRoadmap();
+  var btn = document.getElementById('rmRefresh');
+  if (btn) btn.addEventListener('click', fetchLive);
+  fetchLive();
 }
 
 function initTabs(){

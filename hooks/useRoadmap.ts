@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RoadmapPost, RoadmapPostStatus, RoadmapPostType, RoadmapComment } from '../types';
 import { generateId } from '../services/utils';
+import { api } from '../services/apiClient';
+
+const STORAGE_KEY = 'anotee_roadmap_posts';
 
 // Mock data for initial state
 const MOCK_POSTS: RoadmapPost[] = [
@@ -87,23 +90,22 @@ export const useRoadmap = (currentUserId?: string) => {
   const [posts, setPosts] = useState<RoadmapPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load initial data
+  // Load initial data: сервер (общая доска) / localStorage в mock-режиме
   useEffect(() => {
-    // Simulate API call
     const loadData = async () => {
       setIsLoading(true);
       try {
-        // In a real app, this would fetch from an API
-        // const response = await fetch('/api/roadmap');
-        // const data = await response.json();
-        
-        // For now, use local storage or mock data
-        const stored = localStorage.getItem('anotee_roadmap_posts');
-        if (stored) {
-          setPosts(JSON.parse(stored));
+        if (api.isMockMode) {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            setPosts(JSON.parse(stored));
+          } else {
+            setPosts(MOCK_POSTS);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_POSTS));
+          }
         } else {
-          setPosts(MOCK_POSTS);
-          localStorage.setItem('anotee_roadmap_posts', JSON.stringify(MOCK_POSTS));
+          const serverPosts = await api.getRoadmap();
+          setPosts(serverPosts);
         }
       } catch (error) {
         console.error('Failed to load roadmap posts', error);
@@ -111,32 +113,37 @@ export const useRoadmap = (currentUserId?: string) => {
         setIsLoading(false);
       }
     };
-    
+
     loadData();
   }, []);
 
-  // Save to local storage whenever posts change (for mock persistence)
+  // Save to local storage (только mock-режим — в реальном режиме источник истины сервер)
   useEffect(() => {
-    if (!isLoading && posts.length > 0) {
-      localStorage.setItem('anotee_roadmap_posts', JSON.stringify(posts));
+    if (api.isMockMode && !isLoading && posts.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
     }
   }, [posts, isLoading]);
 
   const createPost = useCallback(async (data: { title: string; description: string; type: RoadmapPostType }) => {
     if (!currentUserId) throw new Error('Must be logged in to create a post');
-    
-    const newPost: RoadmapPost = {
-      id: generateId(),
-      title: data.title,
-      description: data.description,
-      type: data.type,
-      status: 'under_review',
-      authorId: currentUserId,
-      createdAt: new Date().toISOString(),
-      voterIds: [currentUserId], // Auto-vote for own post
-      comments: []
-    };
 
+    if (api.isMockMode) {
+      const newPost: RoadmapPost = {
+        id: generateId(),
+        title: data.title,
+        description: data.description,
+        type: data.type,
+        status: 'under_review',
+        authorId: currentUserId,
+        createdAt: new Date().toISOString(),
+        voterIds: [currentUserId], // Auto-vote for own post
+        comments: []
+      };
+      setPosts(prev => [newPost, ...prev]);
+      return newPost;
+    }
+
+    const newPost = await api.createRoadmapPost(data);
     setPosts(prev => [newPost, ...prev]);
     return newPost;
   }, [currentUserId]);
@@ -144,55 +151,80 @@ export const useRoadmap = (currentUserId?: string) => {
   const toggleVote = useCallback(async (postId: string) => {
     if (!currentUserId) throw new Error('Must be logged in to vote');
 
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        const hasVoted = post.voterIds.includes(currentUserId);
-        const newVoterIds = hasVoted 
-          ? post.voterIds.filter(id => id !== currentUserId)
-          : [...post.voterIds, currentUserId];
-        
-        return { ...post, voterIds: newVoterIds };
-      }
-      return post;
-    }));
+    if (api.isMockMode) {
+      setPosts(prev => prev.map(post => {
+        if (post.id === postId) {
+          const hasVoted = post.voterIds.includes(currentUserId);
+          const newVoterIds = hasVoted
+            ? post.voterIds.filter(id => id !== currentUserId)
+            : [...post.voterIds, currentUserId];
+
+          return { ...post, voterIds: newVoterIds };
+        }
+        return post;
+      }));
+      return;
+    }
+
+    const updated = await api.toggleRoadmapVote(postId);
+    if (updated) setPosts(prev => prev.map(post => (post.id === postId ? updated : post)));
   }, [currentUserId]);
 
   const addComment = useCallback(async (postId: string, content: string, authorName: string, authorAvatar?: string) => {
     if (!currentUserId) throw new Error('Must be logged in to comment');
 
-    const newComment: RoadmapComment = {
-      id: generateId(),
-      authorId: currentUserId,
-      authorName,
-      authorAvatar,
-      content,
-      createdAt: new Date().toISOString()
-    };
+    if (api.isMockMode) {
+      const newComment: RoadmapComment = {
+        id: generateId(),
+        authorId: currentUserId,
+        authorName,
+        authorAvatar,
+        content,
+        createdAt: new Date().toISOString()
+      };
+      setPosts(prev => prev.map(post => {
+        if (post.id === postId) {
+          return { ...post, comments: [...post.comments, newComment] };
+        }
+        return post;
+      }));
+      return newComment;
+    }
 
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        return { ...post, comments: [...post.comments, newComment] };
-      }
-      return post;
-    }));
-    
-    return newComment;
+    const updated = await api.addRoadmapComment(postId, content, authorName, authorAvatar);
+    if (updated) setPosts(prev => prev.map(post => (post.id === postId ? updated : post)));
+    return;
   }, [currentUserId]);
 
   // Admin functions
   const updatePostStatus = useCallback(async (postId: string, newStatus: RoadmapPostStatus) => {
-    setPosts(prev => prev.map(post => 
-      post.id === postId ? { ...post, status: newStatus } : post
-    ));
+    if (api.isMockMode) {
+      setPosts(prev => prev.map(post =>
+        post.id === postId ? { ...post, status: newStatus } : post
+      ));
+      return;
+    }
+    const updated = await api.updateRoadmapPost(postId, { status: newStatus });
+    if (updated) setPosts(prev => prev.map(post => (post.id === postId ? updated : post)));
   }, []);
 
   const updatePost = useCallback(async (postId: string, data: Partial<RoadmapPost>) => {
-    setPosts(prev => prev.map(post => 
-      post.id === postId ? { ...post, ...data } : post
-    ));
+    if (api.isMockMode) {
+      setPosts(prev => prev.map(post =>
+        post.id === postId ? { ...post, ...data } : post
+      ));
+      return;
+    }
+    const updated = await api.updateRoadmapPost(postId, data as Record<string, unknown>);
+    if (updated) setPosts(prev => prev.map(post => (post.id === postId ? updated : post)));
   }, []);
 
   const deletePost = useCallback(async (postId: string) => {
+    if (api.isMockMode) {
+      setPosts(prev => prev.filter(post => post.id !== postId));
+      return;
+    }
+    await api.deleteRoadmapPost(postId);
     setPosts(prev => prev.filter(post => post.id !== postId));
   }, []);
 
