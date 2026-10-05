@@ -1,10 +1,7 @@
 ﻿
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Dashboard } from './components/Dashboard';
-import { ProjectView } from './components/ProjectView';
-import { Player } from './components/Player';
 import { Login } from './components/Login';
-import { Profile } from './components/Profile';
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
 const TestRunner = lazy(() => import('./components/TestRunner').then(m => ({ default: m.TestRunner })));
 const PublicViewer = lazy(() => import('./components/PublicViewer').then(m => ({ default: m.PublicViewer })));
@@ -15,6 +12,10 @@ const AiFeaturesPage = lazy(() => import('./components/StaticPages').then(m => (
 const RoadmapPage = lazy(() => import('./components/Roadmap/RoadmapPage').then(m => ({ default: m.RoadmapPage })));
 const LegalPage = lazy(() => import('./components/LegalPages').then(m => ({ default: m.LegalPage })));
 const LiveDemo = lazy(() => import('./components/LiveDemo').then(m => ({ default: m.LiveDemo })));
+// T-11: тяжёлые экраны — в ленивые чанки (Player ~143 KB, Profile ~77 KB, ProjectView ~53 KB)
+const Player = lazy(() => import('./components/Player').then(m => ({ default: m.Player })));
+const ProjectView = lazy(() => import('./components/ProjectView').then(m => ({ default: m.ProjectView })));
+const Profile = lazy(() => import('./components/Profile').then(m => ({ default: m.Profile })));
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId } from './services/utils';
@@ -739,6 +740,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
 
         {view.type === 'PROJECT_VIEW' && currentProject && (
           <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
             <ProjectView 
                 project={currentProject} 
                 currentUser={currentUser}
@@ -753,10 +755,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 cancelUpload={cancelUpload}
                 onStartTour={handleStartTour} // PASSED PROP
             />
+            </Suspense>
           </ErrorBoundary>
         )}
         {view.type === 'PLAYER' && currentProject && currentAsset && (
           <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
             <Player 
                 asset={currentAsset} 
                 project={currentProject}
@@ -772,6 +776,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           cancelUpload={cancelUpload}
                 onOpenStorageSettings={() => handleNavigate('SETTINGS')}
             />
+            </Suspense>
           </ErrorBoundary>
         )}
         
