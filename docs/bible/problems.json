@@ -1,0 +1,72 @@
+[
+ {
+  "sym": "«S3 Configuration not found» / настройки не сохранялись",
+  "cause": "Таблица storage_configs была создана без UNIQUE-констрейнта, а запись шла через INSERT … ON CONFLICT — Postgres отклонял каждую вставку, ошибка глоталась.",
+  "fix": "Запись без ON CONFLICT (update → insert → update), всегда пишем и в прод-таблицу storage_config; чтение — из неё первой."
+ },
+ {
+  "sym": "После перезагрузки хранилище «сбрасывалось» на Google Drive",
+  "cause": "При монтировании страницы Clerk-токен ещё не готов → GET config отвечал 401 → клиент оставлял дефолт «google».",
+  "fix": "Ретраи 401 (4 попытки) + фоновый повтор; сохранение всегда активирует провайдера; самоисцеление при рассинхроне."
+ },
+ {
+  "sym": "Загруженный файл исчезал после перезагрузки",
+  "cause": "React 18 выполняет апдейтеры setState не синхронно: переменная finalProjectToSync оставалась null, и синхронизация проекта после загрузки не вызывалась вовсе (без ошибок!).",
+  "fix": "Итог считается чистой функцией applyFinalPatch; на сервер уходит снимок из projectsRef. Регресс-тест upload-persistence."
+ },
+ {
+  "sym": "403 при загрузке в R2 (пресайн)",
+  "cause": "SDK v3 добавлял в подписанный URL x-amz-checksum-mode=ENABLED — R2 отклонял такой GET/PUT из браузера.",
+  "fix": "S3Client: requestChecksumCalculation/responseChecksumValidation = WHEN_REQUIRED."
+ },
+ {
+  "sym": "Ошибка Cloudflare 6003 «Invalid request headers»",
+  "cause": "В трёх запросах к CF API заголовок Authorization содержал звёздочки вместо схемы Bearer.",
+  "fix": "Исправлено и проверено байтово: Bearer в 4/4 местах."
+ },
+ {
+  "sym": "Не создаются R2-ключи автоматически (9109)",
+  "cause": "Account API token (cfat_…) не имеет права «Account API Tokens: Edit» — автосоздание ключей доступно только user-токену с этим правом.",
+  "fix": "Штатный ручной путь: Create Account API token → страница Success → Access Key ID + Secret Access Key. Кнопка автосоздания скрыта при canCreateKeys=false."
+ },
+ {
+  "sym": "Видео не играет в плеере (CORS)",
+  "cause": "CORS бакета R2 не разрешал GET/PUT или не был настроен.",
+  "fix": "«Проверить настройки S3» → «Исправить автоматически (применить CORS)» — allow-origin *, нужные методы."
+ },
+ {
+  "sym": "Старый бандл после деплоя (эффект «ничего не изменилось»)",
+  "cause": "Service Worker отдавал устаревший кэш.",
+  "fix": "SW-версия считается по содержимому; баннер «доступно обновление» (SKIP_WAITING); при ручной проверке — Ctrl+Shift+R."
+ },
+ {
+  "sym": "«Invalid hook call» → чёрный экран",
+  "cause": "useRef внутри useEffect (регрессия фикса тостов).",
+  "fix": "eslint-plugin-react-hooks (rules-of-hooks=error) на весь код + e2e-регрессия transcribe-regression."
+ },
+ {
+  "sym": "Дубликаты комментариев",
+  "cause": "Двойная запись: полный sync проекта + comment-endpoint; при гонке create дублировался.",
+  "fix": "Один канал записи (comment-endpoint) + идемпотентный серверный create по id."
+ },
+ {
+  "sym": "Vercel Edge Requests 246K/сутки (75% лимита)",
+  "cause": "Поллинг с малыми интервалами + отсутствие кэша для /assets/*.",
+  "fix": "Интервалы 45с/15мин + сон при скрытой вкладке; Cloudflare Cache Rule для /assets/*."
+ },
+ {
+  "sym": "«Кривая» мобильная страница настроек",
+  "cause": "Двойной горизонтальный отступ (MainLayout p-4 + Profile px-4).",
+  "fix": "Один источник отступа; e2e-сторож мобильной геометрии (T-347)."
+ },
+ {
+  "sym": "Гостевая ссылка: видео не воспроизводится",
+  "cause": "Для Drive-версий отдавался uc?export=download (часто HTML-страница вместо файла); в PublicViewer не было обработки ошибки видео.",
+  "fix": "Drive-URL через googleapis alt=media&key (как в плеере); onError → понятное сообщение + «Обновить страницу»."
+ },
+ {
+  "sym": "Кириллица в именах файлов ломала ключи S3",
+  "cause": "Sanitize по ASCII \\w вырезал все не-ASCII символы.",
+  "fix": "Unicode-aware sanitize (\\p{L}\\p{N}) — кириллица сохраняется в ключе и имени версии."
+ }
+]

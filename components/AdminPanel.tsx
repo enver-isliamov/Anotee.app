@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Shield, ArrowLeft, Settings, Crown, Layout, CreditCard, TrendingUp, FlaskConical, PenTool } from 'lucide-react';
+import { Shield, ArrowLeft, Settings, Crown, Layout, CreditCard, TrendingUp, FlaskConical, PenTool, BookOpen } from 'lucide-react';
 import { AdminStrategyTab } from './admin/AdminStrategyTab';
 import { AdminUsersTab } from './admin/AdminUsersTab';
 import { AdminFeaturesTab } from './admin/AdminFeaturesTab';
@@ -10,7 +10,7 @@ import { AdminContentTab } from './admin/AdminContentTab';
 
 export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: string) => void }> = ({ onBack, onNavigate }) => {
     const { userId: currentUserId } = useAuth();
-    const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy' | 'content'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'features' | 'payments' | 'strategy' | 'content' | 'bible'>('users');
 
     return (
         <div className="w-full mx-auto py-2 md:py-8 px-2 md:px-4 font-sans text-zinc-900 dark:text-zinc-100 pb-24">
@@ -79,6 +79,12 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
                         >
                             <PenTool size={14} className="md:w-4 md:h-4" /> Контент
                         </button>
+                        <button 
+                            onClick={() => setActiveTab('bible')}
+                            className={`flex items-center justify-center gap-2 px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all ${activeTab === 'bible' ? 'bg-white dark:bg-zinc-800 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
+                        >
+                            <BookOpen size={14} className="md:w-4 md:h-4" /> Библия
+                        </button>
                     </div>
                 </div>
             </div>
@@ -90,6 +96,20 @@ export const AdminPanel: React.FC<{ onBack: () => void, onNavigate?: (page: stri
                 {activeTab === 'features' && <AdminFeaturesTab />}
                 {activeTab === 'payments' && <AdminPaymentsTab />}
                 {activeTab === 'content' && <AdminContentTab />}
+                {activeTab === 'bible' && (
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                Библия проекта: все задачи T-01 → последняя, канбан, дорожная карта, хроника и база знаний.
+                                Обновляется агентами при каждой задаче (<span className="font-mono">docs/bible → npm run bible:build</span>).
+                            </p>
+                            <a href="/bible.html" target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0">Открыть в новой вкладке ↗</a>
+                        </div>
+                        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-950">
+                            <iframe src="/bible.html" title="Библия проекта" className="w-full h-[78vh] min-h-[480px]" loading="lazy" />
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
