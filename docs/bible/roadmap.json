@@ -1,0 +1,68 @@
+[
+ {
+  "id": "RM-1",
+  "title": "Роли и доступы команды",
+  "description": "Полная матрица ролей (owner/manager/member/viewer), управление в ShareModal, аудит действий. Задача T-22.",
+  "type": "feature",
+  "status": "planned",
+  "votes": 0,
+  "taskId": "T-22",
+  "source": "бэклог Anotee",
+  "updated": "2026-09-24"
+ },
+ {
+  "id": "RM-2",
+  "title": "Подпись webhook'ов платежей",
+  "description": "Повторная проверка платежа через API ЮKassa и HMAC-подпись Prodamus — защита от подделки вебхуков. Задача T-01.",
+  "type": "improvement",
+  "status": "planned",
+  "votes": 0,
+  "taskId": "T-01",
+  "source": "аудит безопасности",
+  "updated": "2026-09-28"
+ },
+ {
+  "id": "RM-3",
+  "title": "WASM-модели транскрибации с CDN",
+  "description": "Вынести ort-wasm (21.6 MB) из сборки: загрузка по требованию с зеркала — быстрее деплой и первый запуск. Продолжение T-11.",
+  "type": "improvement",
+  "status": "planned",
+  "votes": 0,
+  "taskId": "T-11",
+  "source": "T-11, остаток",
+  "updated": "2026-10-05"
+ },
+ {
+  "id": "RM-4",
+  "title": "Telegram-уведомления о событиях",
+  "description": "Оповещения владельцу о загрузках, комментариях, платежах (нужен botToken в OpenClaw).",
+  "type": "feature",
+  "status": "under_review",
+  "votes": 0,
+  "taskId": "",
+  "source": "обсуждение с владельцем",
+  "updated": "2026-09-29"
+ },
+ {
+  "id": "RM-5",
+  "title": "Серверная дорожная карта (общая доска)",
+  "description": "Сейчас раздел /roadmap на сайте хранит посты локально (демо-данные). Серверное хранилище + синхронизация с библией: баги/фичи пользователей станут общим входящим потоком.",
+  "type": "feature",
+  "status": "planned",
+  "votes": 0,
+  "taskId": "",
+  "source": "запрос владельца",
+  "updated": "2026-10-05"
+ },
+ {
+  "id": "RM-6",
+  "title": "Доработки гостевого просмотра",
+  "description": "По итогам тестирования публичных ссылок владельцем: очередь доработок (плеер, комментарии, брендинг гостевой страницы).",
+  "type": "improvement",
+  "status": "under_review",
+  "votes": 0,
+  "taskId": "",
+  "source": "тестирование dev",
+  "updated": "2026-10-05"
+ }
+]

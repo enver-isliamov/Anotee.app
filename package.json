@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/build-sw.cjs",
+    "build": "node scripts/build-bible.cjs && vite build && node scripts/build-sw.cjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -16,7 +16,9 @@
     "i18n:check": "i18next --fail-on-update",
     "audit": "node scripts/audit.cjs",
     "verify": "npm run lint && npm run test && npm run audit",
-    "test:e2e:offline": "playwright test --config=playwright.offline.config.ts"
+    "test:e2e:offline": "playwright test --config=playwright.offline.config.ts",
+    "bible:build": "node scripts/build-bible.cjs",
+    "bible:add": "node scripts/bible-add.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
