@@ -26,6 +26,9 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
   const [payload, setPayload] = useState<PublicPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // T-14x: если <video> не смог загрузить файл (ссылка истекла, файл недоступен) —
+  // показываем понятное сообщение вместо чёрного прямоугольника.
+  const [videoFailed, setVideoFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +37,7 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
         // mock: демо-просмотр без сети (для e2e и локальной разработки)
         setTimeout(() => {
           if (!alive) return;
+          setVideoFailed(false);
           setPayload({
             projectName: 'Anotee – Commercial Spot X',
             assetTitle: 'Main_Commercial_Cut',
@@ -53,7 +57,7 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
           setError(body.error || `HTTP ${res.status}`);
         } else {
           const data = await res.json();
-          if (alive) setPayload(data);
+          if (alive) { setVideoFailed(false); setPayload(data); }
         }
       } catch (e: any) {
         if (alive) setError(e?.message || 'Network error');
@@ -90,12 +94,29 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
         {!loading && payload && (
           <>
             <div className="w-full max-w-3xl bg-black rounded-xl overflow-hidden border border-zinc-800">
-              {payload.videoUrl ? (
-                <video src={payload.videoUrl} controls playsInline className="w-full aspect-video bg-black" />
+              {payload.videoUrl && !videoFailed ? (
+                <video
+                  src={payload.videoUrl}
+                  controls
+                  playsInline
+                  className="w-full aspect-video bg-black"
+                  onError={() => setVideoFailed(true)}
+                />
               ) : (
-                <div className="w-full aspect-video flex flex-col items-center justify-center text-zinc-500 gap-2">
+                <div className="w-full aspect-video flex flex-col items-center justify-center text-zinc-500 gap-2 px-4 text-center" data-testid="public-video-unavailable">
                   <Clapperboard size={28} />
-                  <p className="text-xs">{isMockMode ? 'Demo: видео недоступно в mock-режиме' : 'Видео обрабатывается — попробуй позже'}</p>
+                  <p className="text-xs">
+                    {videoFailed
+                      ? 'Не удалось загрузить видео — возможно, ссылка устарела или файл недоступен.'
+                      : isMockMode
+                        ? 'Demo: видео недоступно в mock-режиме'
+                        : 'Видео обрабатывается — попробуй позже'}
+                  </p>
+                  {videoFailed && (
+                    <button onClick={() => window.location.reload()} className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 underline">
+                      Обновить страницу
+                    </button>
+                  )}
                 </div>
               )}
             </div>

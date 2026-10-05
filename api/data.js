@@ -89,7 +89,14 @@ export default async function handler(req, res) {
                   const { GetObjectCommand } = await import('@aws-sdk/client-s3');
                   videoUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: config.bucket, Key: sharedVersion.s3Key }), { expiresIn: 3600 });
               } else if (sharedVersion.storageType === 'drive' && sharedVersion.googleDriveId) {
-                  videoUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
+                  // T-14x: как в основном плеере (googleDrive.getVideoStreamUrlLegacy) — через API-ключ надёжнее,
+                  // чем uc?export=download: последний часто отдаёт interstitial/HTML-страницу,
+                  // из-за чего <video> показывал чёрный экран и «не воспроизводил».
+                  // Файлы, загруженные приложением, публичные (GoogleDriveService.makeFilePublic при загрузке).
+                  const driveKey = process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY;
+                  videoUrl = driveKey
+                      ? `https://www.googleapis.com/drive/v3/files/${sharedVersion.googleDriveId}?alt=media&key=${driveKey}`
+                      : `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
               }
           } catch (presignErr) {
               console.error('public_view presign failed', presignErr);
