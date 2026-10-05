@@ -238,6 +238,7 @@ function buildHtml(tasksJson, chronicleJson, problemsJson, roadmapJson, metaDate
     <button class="tab" data-tab="roadmap" type="button">Дорожная карта<span class="cnt" id="cntRoad"></span></button>
     <button class="tab" data-tab="chron" type="button">Хроника</button>
     <button class="tab" data-tab="storage" type="button">Хранилище (R2)</button>
+    <button class="tab" data-tab="transcribe" type="button">Транскрибация</button>
     <button class="tab" data-tab="problems" type="button">Проблемы<span class="cnt" id="cntProb"></span></button>
     <button class="tab" data-tab="process" type="button">Процесс</button>
   </div>
@@ -332,6 +333,40 @@ function buildHtml(tasksJson, chronicleJson, problemsJson, roadmapJson, metaDate
 
       <h3>Как это устроено под капотом</h3>
       <p>Настройки хранятся в таблице <code>storage_config</code> (одна строка на пользователя — прод-схема). Файлы загружаются напрямую в ваш бакет по presigned-URL (AWS SDK v3, ForcePathStyle, регион auto; чек-суммы — WHEN_REQUIRED — иначе R2 отвечает 403). Просмотр — по presigned-GET; гостевые ссылки подписываются на сервере от имени владельца.</p>
+    </div>
+  </section>
+
+  <section class="tabsec" id="tab-transcribe">
+    <h2 class="sechead">Транскрибация: модель Whisper и зеркало (для РФ)</h2>
+    <p class="secsub">AI-транскрибация работает прямо в браузере (Web Worker + transformers.js): модель скачивается один раз и кэшируется. Из РФ huggingface.co недоступен без VPN — для стабильной работы нужно своё зеркало модели.</p>
+    <div class="guide">
+      <h3>Как устроено</h3>
+      <ul>
+        <li>Движки: <b>whisper</b> (WASM — универсальный), <b>whisper-webgpu</b> (быстрее на видеокартах; при сбое — авто-откат на WASM), <b>vosk</b> (опция).</li>
+        <li>Модели: Fast (Tiny) и Balanced (Base) — выбираются в плеере; язык по умолчанию — язык интерфейса.</li>
+        <li>Модель живёт в кэше браузера (Cache Storage): повторные запуски — мгновенные; после смены зеркала очистите кэш сайта.</li>
+        <li>Диагностика: «Проверить» → группа <b>«Транскрибация»</b> — покажет хост модели (HF/зеркало), WebGPU и состояние кэша.</li>
+      </ul>
+
+      <h3>Зеркало модели — пошагово</h3>
+      <ol>
+        <li>Возьмите хостинг, доступный из РФ: свой VPS + nginx, Object Storage (Yandex/Selectel) или Cloudflare R2 + свой домен.</li>
+        <li><b>Самый простой путь — reverse-proxy:</b> всё, что приходит на <code>https://hf.ваш-домен.ru/</code>, проксируйте на <code>https://huggingface.co/</code> — файлы копировать не нужно.</li>
+        <li>Если копируете файлы — сохраните структуру HF-хаба: <code>https://&lt;зеркало&gt;/Xenova/whisper-tiny/resolve/main/…</code>.<br>
+            Минимум (q8): <span class="mono">config.json, generation_config.json, preprocessor_config.json, tokenizer.json, tokenizer_config.json + onnx/encoder_model_quantized.onnx + onnx/decoder_model_merged_quantized.onnx</span>.<br>
+            Для WebGPU-режима добавьте <span class="mono">onnx/encoder_model.onnx</span> и <span class="mono">onnx/decoder_model_merged.onnx</span> (fp32). Для Base-модели — тот же набор из её репозитория.</li>
+        <li>Включите CORS на зеркале: <code>Access-Control-Allow-Origin: *</code>; отдавайте файлы как статику «как есть».</li>
+        <li>В Vercel → Environment Variables добавьте <code>VITE_WHISPER_MODEL_BASE_URL=https://hf.ваш-домен.ru</code> (без пути модели) и сделайте <b>redeploy</b> — переменная встраивается при сборке.</li>
+        <li>Проверка: «Проверить» → «Транскрибация» → Model Host покажет «источник: зеркало»; DevTools → Network: запросы config.json/*.onnx идут на ваш домен.</li>
+      </ol>
+
+      <h3>Частые проблемы</h3>
+      <div class="kv">
+        <div class="r"><div class="k">Висит «Загрузка модели…»</div><div>Хост модели недоступен (в РФ без VPN — типично). Настройте зеркало (выше); проверьте тестом «Проверить» → «Транскрибация» → Model Host.</div></div>
+        <div class="r"><div class="k">Медленно обрабатывает</div><div>Включите движок <b>whisper-webgpu</b> (Chrome/Edge) или модель Fast; на телефонах работает WASM — это медленнее по определению.</div></div>
+        <div class="r"><div class="k">Русский распознаёт неточно</div><div>Выберите Balanced (Base) и убедитесь, что язык — «ru» (по умолчанию — язык интерфейса); для сложных записей используйте модель выше классом (план: «Точный режим»).</div></div>
+        <div class="r"><div class="k">После смены зеркала не работает</div><div>Очистите кэш сайта в браузере (модель закэширована) и перезагрузите страницу.</div></div>
+      </div>
     </div>
   </section>
 
