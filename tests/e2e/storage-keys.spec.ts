@@ -73,3 +73,16 @@ test.describe('Хранилище: создание ключа и сохране
     expect(inputs, 'нет полей ручного ввода').toBeGreaterThan(2);
   });
 });
+
+// T-14x: сетевой обрыв при загрузке настроек — не подменяем активное хранилище «Google»,
+// показываем понятный статус с кнопкой «Повторить».
+test('хранилище: сетевой обрыв — статус вместо «Google», повтор доступен', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.route('**/api/storage?action=config*', (route) => route.abort());
+  await page.goto('/settings');
+  const netErr = page.getByTestId('storage-net-error');
+  const appeared = await netErr.waitFor({ state: 'visible', timeout: 9000 }).then(() => true).catch(() => false);
+  expect(appeared, 'при сетевом обрыве должен появиться статус вместо «Google»').toBe(true);
+  await expect(page.getByTestId('storage-net-retry')).toBeVisible();
+  console.log('NET-ERR-CHECK ok: баннер сети показан, кнопка «Повторить» доступна');
+});

@@ -159,6 +159,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
     const [noConfigFound, setNoConfigFound] = useState(false);
+  // T-14x: сетевой обрыв (VPN/интернет) не должен выглядеть как «хранилище пропало»
+  const [configNetError, setConfigNetError] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const configRetryRef = useRef(0);
   const [secretBroken, setSecretBroken] = useState(false);
   const handleResetConfig = async () => {
     if (!confirm('Сбросить конфигурацию хранилища? Сохранённые ключи для аккаунта будут удалены, после чего введите их заново.')) return;
@@ -224,12 +229,19 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       // иначе активным оставался дефолтный google и «подключение не запоминалось» после перезагрузки.
       let res: Response | null = null;
       for (let attempt = 0; attempt < 4; attempt++) {
-          const t = (await getToken()) || token;
-          res = await fetch('/api/storage?action=config', {
-              headers: { 'Authorization': `Bearer ${t}` }
-          });
-          if (res.status !== 401) break;
-          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+          try {
+              const t = (await getToken()) || token;
+              res = await fetch('/api/storage?action=config', {
+                  headers: { 'Authorization': `Bearer ${t}` }
+              });
+              if (res.status !== 401) break;
+          } catch {
+              // T-14x: сетевой обрыв — ретраим, состояние хранилища не сбрасываем
+              res = null;
+          }
+          if (attempt < 3) {
+              await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
       }
       if (res && res.ok) {
                   const data = await res.json();
@@ -263,10 +275,27 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       setActiveProvider('google');
                       setSelectedTab('google'); setNoConfigFound(true); setConfiguredProviders([]);
                   }
+              }
+              if (res && res.ok) {
+                  setConfigNetError(false);
+                  configRetryRef.current = 0;
+                  setConfigLoaded(true);
               } else if (res && res.status === 401) {
                   // после ретраев всё ещё 401 — повторим загрузку чуть позже, НЕ сбрасывая на google
                   console.warn('storage config: 401 after retries, will retry');
                   setTimeout(() => { void loadS3Config(); }, 2500);
+              } else {
+                  // T-14x: сеть недоступна или сервер не ответил (5xx) — показываем понятный статус
+                  // и повторяем в фоне (до 12 раз), не подменяя активное хранилище «Google».
+                  const status = res ? res.status : 0;
+                  if (!res || status >= 500) {
+                      console.warn('storage config: network/server error, will retry');
+                      setConfigNetError(true);
+                      if (configRetryRef.current < 12) {
+                          configRetryRef.current += 1;
+                          setTimeout(() => { void loadS3Config(); }, 5000);
+                      }
+                  }
               }
           } catch (e) {
               console.error("Failed to load S3 config", e);
@@ -275,7 +304,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           }
       };
       loadS3Config();
-  }, [getToken]);
+  }, [getToken, retryTick]);
 
   // Tab Switching Logic with Caching
   const handleTabSwitch = (newTab: ExtendedProvider) => {
@@ -698,6 +727,16 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                         {isS3Loading ? (
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
+                        ) : (configNetError && !configLoaded) ? (
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-xs text-amber-200 leading-relaxed" data-testid="storage-net-error">
+                                <b>Не удалось загрузить настройки хранилища — похоже, пропала сеть.</b>{' '}
+                                Подключение не сброшено: как только связь вернётся, настройки подтянутся автоматически. Если вы в РФ, для Cloudflare R2 может потребоваться VPN.
+                                <button
+                                    onClick={() => { configRetryRef.current = 0; setConfigNetError(false); setIsS3Loading(true); setRetryTick(t => t + 1); }}
+                                    className="ml-2 underline font-bold"
+                                    data-testid="storage-net-retry"
+                                >Повторить</button>
+                            </div>
                         ) : (
                             <div className="space-y-6 animate-in fade-in">
   {secretBroken && (
