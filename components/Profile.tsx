@@ -193,6 +193,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   });
   
   const [isTestingS3, setIsTestingS3] = useState(false);
+  const [isApplyingCors, setIsApplyingCors] = useState(false);
   const [isConfiguringCors, setIsConfiguringCors] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   
@@ -422,6 +423,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               if (!sv.perProvider) {
                   toast('Сохранено в резервную конфигурацию хранилища' + (sv.err ? ' (причина: ' + String(sv.err).slice(0, 120) + ')' : ''), 'warning');
               }
+              if (sv.cors === 'failed') {
+                  toast('Подключено, но CORS на бакете не применился автоматически (у ключа может не быть права s3:PutBucketCORS). Нажмите «Применить CORS» или вставьте JSON из «Обслуживание и справка».', 'warning');
+              }
               console.log('STORAGE-SAVED', JSON.stringify(sv));
           }
 
@@ -442,6 +446,29 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           throw e; // T-39: caller knows about failure
       } finally {
           setIsSavingS3(false);
+      }
+  };
+
+  // T-355: применить CORS на бакете (нужен для браузерных операций: транскрибация, декодирование аудио)
+  const handleApplyCors = async () => {
+      setIsApplyingCors(true);
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/storage?action=configure_cors', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              body: JSON.stringify({}),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+              toast('CORS применён — загрузка и транскрибация работают из браузера.');
+          } else {
+              toast(data.error || 'Не удалось применить CORS — скопируйте JSON из «Обслуживание и справка» и вставьте в настройки CORS вашего провайдера.', 'warning');
+          }
+      } catch (e: any) {
+          toast(e?.message || 'Не удалось применить CORS', 'error');
+      } finally {
+          setIsApplyingCors(false);
       }
   };
 
@@ -969,6 +996,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
                                                     >
                                                         {isTestingS3 ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Проверить
+                                                    </button>
+                                                    <button 
+                                                        onClick={handleApplyCors}
+                                                        disabled={isSavingS3 || isTestingS3 || isApplyingCors}
+                                                        data-testid="storage-cors-btn"
+                                                        className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                                                    >
+                                                        {isApplyingCors ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />} Применить CORS
                                                     </button>
                                                     <button 
                                                         onClick={handleSaveAndActivate}

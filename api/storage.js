@@ -309,7 +309,35 @@ if (req.method === 'GET') {
                     console.warn('prefs write warning:', prefErr && prefErr.message ? prefErr.message : prefErr);
                 }
 
-                return res.status(200).json({ success: true, saved });
+                // T-355: авто-CORS при сохранении хранилища — браузерные операции (транскрибация,
+            // декодирование аудио) требуют CORS на бакете. Best effort: не ломаем сохранение.
+            let corsResult = 'skipped';
+            if (saved.legacy || saved.perProvider) {
+                try {
+                    const { s3: corsS3, config: corsCfg } = await getS3Client(user.id);
+                    if (corsCfg && corsCfg.bucket) {
+                        await corsS3.send(new PutBucketCorsCommand({
+                            Bucket: corsCfg.bucket,
+                            CORSConfiguration: {
+                                CORSRules: [
+                                    {
+                                        AllowedHeaders: ["*"],
+                                        AllowedMethods: ["GET", "PUT", "HEAD", "POST", "DELETE"],
+                                        AllowedOrigins: ["*"],
+                                        ExposeHeaders: ["ETag", "x-amz-meta-custom-header"],
+                                        MaxAgeSeconds: 3000
+                                    }
+                                ]
+                            }
+                        }));
+                        corsResult = 'applied';
+                    }
+                } catch (corsErr) {
+                    corsResult = 'failed';
+                    console.warn('auto-CORS on save failed:', corsErr && corsErr.message ? corsErr.message : corsErr);
+                }
+            }
+            return res.status(200).json({ success: true, saved: { ...saved, cors: corsResult } });
             }
           } catch (cfgFatal) {
             // T-129: последняя линия обороны — config не должен отдавать 500 никогда
