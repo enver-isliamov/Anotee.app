@@ -85,6 +85,10 @@ export function startTranscription(versionId: string, opts: {
     }
   };
   worker.onerror = (e) => { fail(e?.message || 'Worker error'); };
+  // T-351: передаём аудио-буфер без копирования (Transferable) — экономия памяти на длинных видео.
+  // Внимание: после этого буфер в главном потоке отсоединяется (audio больше не читаем).
+  const transferables: Transferable[] = [];
+  if (opts.audio && opts.audio.buffer) transferables.push(opts.audio.buffer);
   worker.postMessage({
     type: 'transcribe',
     audio: opts.audio,
@@ -93,5 +97,5 @@ export function startTranscription(versionId: string, opts: {
     wordTimestamps: opts.wordTimestamps,
     modelBaseUrl: opts.modelBaseUrl,
     device: opts.engine === 'whisper-webgpu' ? 'webgpu' : undefined,
-  });
+  }, transferables);
 }
