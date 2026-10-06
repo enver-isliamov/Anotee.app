@@ -394,5 +394,6 @@
   "player.more.viewmode.compare": "Comparar versiones",
   "player.more.localfile": "Archivo local",
   "player.synced": "Sincronizado",
-  "player.transcribe.err_fetch": "No se pudo descargar el vídeo del almacenamiento para la transcripción (red/CORS). Abra Ajustes → Almacenamiento → Comprobar → Corrección automática de CORS y reintente."
+  "player.transcribe.err_fetch": "No se pudo descargar el vídeo del almacenamiento para la transcripción (red/CORS). Abra Ajustes → Almacenamiento → Comprobar → Corrección automática de CORS y reintente.",
+  "player.transcribe.model_hint": "Fast — más rápido; Balanced — más preciso para ruso; Precise — máxima precisión (~460 MB, más lento)."
 }

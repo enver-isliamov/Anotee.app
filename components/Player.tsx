@@ -67,6 +67,7 @@ const TRANSCRIBE_LANGUAGES = [
 const TRANSCRIBE_MODELS = [
     { id: 'Xenova/whisper-tiny', label: 'Fast (Tiny)' },
     { id: 'Xenova/whisper-base', label: 'Balanced (Base)' },
+    { id: 'Xenova/whisper-small', label: 'Precise (Small)' },
 ];
 
 interface TranscriptChunk {
@@ -230,7 +231,7 @@ const PlayerSidebar = React.memo(({
                                         {!isEngineAvailable('vosk') && (<p className="text-[9px] text-zinc-400 leading-relaxed">{t('player.transcribe.vosk_unavailable')}</p>)}
                                         <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Language</label><div className="relative"><select value={transcribeLanguage} onChange={(e) => setTranscribeLanguage(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_LANGUAGES.map(lang => (<option key={lang.code} value={lang.code}>{lang.label}</option>))}</select><ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
                                         {transcribeEngine.startsWith('whisper') && (
-                                        <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Model Quality</label><div className="relative"><select value={transcribeModel} onChange={(e) => setTranscribeModel(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_MODELS.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}</select><Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
+                                        <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Model Quality</label><div className="relative"><select value={transcribeModel} onChange={(e) => setTranscribeModel(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_MODELS.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}</select><Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div><p className="text-[9px] text-zinc-400 leading-relaxed mt-1">{t('player.transcribe.model_hint')}</p></div>
                                         )}
                                         <button onClick={handleTranscribe} disabled={loadingDrive || driveFileMissing || videoError} className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"><Wand2 size={14} /> Generate Transcript</button>
                                     </div>
