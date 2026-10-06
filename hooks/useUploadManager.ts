@@ -208,11 +208,37 @@ export const useUploadManager = (
   } else {
     let s3UploadSuccess = false;
     if (!useDrive) {
+      // T-356: presign с ВСЕГДА свежим токеном + ретрай при 401.
+      // Clerk-токены короткоживущие (~60 c): при длинной multipart-загрузке токен, взятый
+      // один раз в начале, истекал к середине — часть запросов падала с 401 («Upload failed»).
+      const apiPresign = async (payload: Record<string, unknown>): Promise<Response> => {
+          let lastRes: Response | null = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+              let fresh: string | null = null;
+              try {
+                  fresh = attempt === 0
+                      ? await getToken()
+                      : await (getToken as any)({ skipCache: true });
+              } catch {
+                  fresh = await getToken().catch(() => null);
+              }
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (fresh) headers['Authorization'] = `Bearer ${fresh}`;
+              const r = await fetch('/api/storage?action=presign', {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify(payload),
+              });
+              lastRes = r;
+              if (r.status !== 401) return r;
+          }
+          return lastRes as Response;
+      };
+
       if (file.size > 64 * 1024 * 1024) {
         // T-47: multipart для iOS/больших файлов — обходит лимит одного PUT
-        const token = await getToken();
         const s3KeyPath = `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`;
-        const cm = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'createMultipart', key: s3KeyPath, contentType: file.type, projectId }) });
+        const cm = await apiPresign({ operation: 'createMultipart', key: s3KeyPath, contentType: file.type, projectId });
         if (!cm.ok) throw new Error('Multipart init failed');
         const { uploadId } = await cm.json();
         const chunk = 32 * 1024 * 1024;
@@ -220,7 +246,7 @@ export const useUploadManager = (
         const parts: { ETag: string; PartNumber: number }[] = [];
         for (let p = 1; p <= totalParts; p++) {
           if (abortController.signal.aborted) throw new Error('Upload cancelled');
-          const pr = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'part', key: s3KeyPath, uploadId, partNumber: p, projectId }) });
+          const pr = await apiPresign({ operation: 'part', key: s3KeyPath, uploadId, partNumber: p, projectId });
           if (!pr.ok) throw new Error('Multipart part presign failed');
           const { url: partUrl } = await pr.json();
           const blobPart = file.slice((p - 1) * chunk, Math.min(p * chunk, file.size));
@@ -235,13 +261,12 @@ export const useUploadManager = (
           });
           parts.push({ ETag: etag, PartNumber: p });
         }
-        const comp = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'completeMultipart', key: s3KeyPath, uploadId, projectId, parts }) });
+        const comp = await apiPresign({ operation: 'completeMultipart', key: s3KeyPath, uploadId, projectId, parts });
         if (!comp.ok) throw new Error('Multipart complete failed');
         storageType = 's3'; s3Key = s3KeyPath; s3UploadSuccess = true;
       } else {
         try {
-          const token = await getToken();
-          const presignRes = await fetch('/api/storage?action=presign', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'put', key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, contentType: file.type, projectId }) });
+          const presignRes = await apiPresign({ operation: 'put', key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, contentType: file.type, projectId });
           if (presignRes.ok) {
             const { url: uploadUrl, key } = await presignRes.json();
             await new Promise((resolve, reject) => {
