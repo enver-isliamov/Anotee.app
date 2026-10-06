@@ -393,5 +393,6 @@
   "profile.field.endpoint": "Endpoint",
   "profile.field.bucket": "Бакет",
   "profile.field.region": "Регион",
-  "profile.field.accessKey": "Access Key ID"
+  "profile.field.accessKey": "Access Key ID",
+  "player.transcribe.err_fetch": "Не удалось скачать видео из хранилища для транскрибации (сеть/CORS). Откройте «Настройки → Хранилище», нажмите «Проверить» и примените CORS («Исправить автоматически»), затем повторите."
 }

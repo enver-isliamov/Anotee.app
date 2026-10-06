@@ -56,7 +56,20 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
     try { await audioContext.resume(); } catch { /* iOS: suspended context */ }
 
     try {
-        const response = await fetch(fetchUrl);
+        // T-354: ретрай на сетевой блип (2 попытки); TypeError (Failed to fetch) — классифицируем как блокировку
+        let response: Response | null = null;
+        let lastFetchErr: any = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                response = await fetch(fetchUrl);
+                lastFetchErr = null;
+                break;
+            } catch (err) {
+                lastFetchErr = err;
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 700));
+            }
+        }
+        if (!response) throw lastFetchErr;
         if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
         
         const arrayBuffer = await response.arrayBuffer();
@@ -82,6 +95,14 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
     } catch (e: any) {
         console.error("Audio extraction failed", e);
         if (e.message.includes('too large')) throw e;
+        const msg = String(e?.message || '');
+        // T-354: TypeError: Failed to fetch при GET — почти всегда CORS бакета или обрыв сети.
+        // Специальный код, чтобы UI показал понятную инструкцию, а не «Failed to fetch».
+        if (e instanceof TypeError || /Failed to fetch|ERR_FAILED|NetworkError|CORS/i.test(msg)) {
+            const err = new Error('AUDIO_FETCH_BLOCKED');
+            (err as any).original = msg;
+            throw err;
+        }
         throw new Error(e.message || "Failed to extract audio. The file might be corrupted, too large, or format unsupported.");
     } finally {
         // CRITICAL: Close context to release hardware resources

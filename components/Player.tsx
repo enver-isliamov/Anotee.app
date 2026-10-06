@@ -522,7 +522,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [transcribeEngine, setTranscribeEngine] = useState<TranscribeEngineId>(() => (localStorage.getItem('anotee_transcribe_engine') as TranscribeEngineId) || 'whisper');
   const [transcribeLanguage, setTranscribeLanguage] = useState<string>(language === 'ru' ? 'ru' : 'auto'); // T-32: для русского UI — русский по умолчанию
   const changeTranscribeEngine = (id: TranscribeEngineId) => { setTranscribeEngine(id); try { localStorage.setItem('anotee_transcribe_engine', id); } catch { /* ignore */ } };
-  const [transcribeModel, setTranscribeModel] = useState<string>('Xenova/whisper-tiny');
+  // T-354: для русского интерфейса дефолт — Base (точнее для русского, чем Tiny)
+  const [transcribeModel, setTranscribeModel] = useState<string>(language === 'ru' ? 'Xenova/whisper-base' : 'Xenova/whisper-tiny');
   const workerRef = useRef<Worker | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -588,7 +589,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         });
     } catch (e: any) {
         console.error("Transcribe Error:", e);
-        notify(e?.message || "Failed to start", "error");
+        const emsg = String(e?.message || '');
+        if (/AUDIO_FETCH_BLOCKED|Failed to fetch|CORS/i.test(emsg)) {
+            // T-354: не смогли скачать видео для аудио-дорожки (CORS бакета/сеть) —
+            // показываем понятную инструкцию вместо «Failed to fetch».
+            notify(t('player.transcribe.err_fetch'), "error");
+        } else {
+            notify(e?.message || "Failed to start", "error");
+        }
         setIsTranscribing(false); setTranscribeProgress(null);
     }
   };

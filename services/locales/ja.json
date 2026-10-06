@@ -393,5 +393,6 @@
   "player.more.viewmode.single": "単一表示",
   "player.more.viewmode.compare": "バージョン比較",
   "player.more.localfile": "ローカルファイル",
-  "player.synced": "同期済み"
+  "player.synced": "同期済み",
+  "player.transcribe.err_fetch": "文字起こし用にストレージから動画を取得できませんでした（ネットワーク/CORS）。設定 → ストレージ → 確認 → CORS自動修正 を実行し、再試行してください。"
 }
