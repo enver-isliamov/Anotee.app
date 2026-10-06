@@ -1,5 +1,5 @@
 ﻿import { pipeline, env, type PipelineType } from '@huggingface/transformers';
-import { buildWhisperPipelineOptions } from './transcriptionPipelineOptions';
+import { buildWhisperPipelineOptions, legacyModelName } from './transcriptionPipelineOptions';
 
 // Skip local model checks since we are running in browser
 env.allowLocalModels = false;
@@ -18,7 +18,7 @@ const normalizeHost = (url: string): string => (url.endsWith('/') ? url : `${url
 
 class TranscriptionPipeline {
   static task: PipelineType = 'automatic-speech-recognition';
-  static model = 'Xenova/whisper-tiny';
+  static model = 'onnx-community/whisper-tiny';
   static remoteHost = DEFAULT_REMOTE_HOST;
   static device: string | undefined = undefined;
   static instance: any = null;
@@ -49,7 +49,7 @@ self.addEventListener('message', async (event) => {
 
   if (type === 'transcribe') {
     try {
-      const modelName = model || 'Xenova/whisper-tiny';
+      const modelName = model || 'onnx-community/whisper-tiny';
 
       // Кастомное зеркало модели (РФ-устойчивость): выставляем env.remoteHost ДО создания
       // pipeline, иначе файлы модели запросятся с huggingface.co / cdn-lfs.huggingface.co,
@@ -61,9 +61,22 @@ self.addEventListener('message', async (event) => {
         env.remoteHost = requestedHost;
       }
 
-      const transcriber = await TranscriptionPipeline.getInstance((data) => {
-        self.postMessage({ type: 'download', data });
-      }, modelName, requestedHost, device);
+      let transcriber;
+      try {
+        transcriber = await TranscriptionPipeline.getInstance((data) => {
+          self.postMessage({ type: 'download', data });
+        }, modelName, requestedHost, device);
+      } catch (loadErr: any) {
+        // T-352: устойчивость — если новая модель (onnx-community/*) не загрузилась
+        // (например, зеркало наполнено файлами Xenova/*), пробуем классическое имя.
+        const legacy = legacyModelName(modelName);
+        if (!legacy) throw loadErr;
+        self.postMessage({ type: 'warn', data: { message: 'model fallback: ' + modelName + ' → ' + legacy } });
+        TranscriptionPipeline.reset();
+        transcriber = await TranscriptionPipeline.getInstance((data) => {
+          self.postMessage({ type: 'download', data });
+        }, legacy, requestedHost, device);
+      }
 
       const options: any = {
         chunk_length_s: 30,

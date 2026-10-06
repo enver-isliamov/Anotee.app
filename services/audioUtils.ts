@@ -78,7 +78,19 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
         // T-38: ресемплинг до 16000 Hz (Whisper ожидает 16кГц) — линейная интерполяция
         const sourceRate = audioBuffer.sampleRate;
         const targetRate = 16000;
-        const sourceData = audioBuffer.getChannelData(0);
+        // T-351: микс всех каналов (усреднение) — если звук оказался только в правом канале,
+        // он больше не теряется (раньше брался только канал 0).
+        let sourceData = audioBuffer.getChannelData(0);
+        if (audioBuffer.numberOfChannels > 1) {
+            const mixed = new Float32Array(sourceData.length);
+            for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+                const data = audioBuffer.getChannelData(c);
+                for (let i = 0; i < data.length; i++) mixed[i] += data[i];
+            }
+            const inv = 1 / audioBuffer.numberOfChannels;
+            for (let i = 0; i < mixed.length; i++) mixed[i] *= inv;
+            sourceData = mixed;
+        }
         if (sourceRate === targetRate) return sourceData; // уже 16кГц
 
         const ratio = sourceRate / targetRate;

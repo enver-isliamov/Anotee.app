@@ -343,7 +343,7 @@ function buildHtml(tasksJson, chronicleJson, problemsJson, roadmapJson, metaDate
       <h3>Как устроено</h3>
       <ul>
         <li>Движки: <b>whisper</b> (WASM — универсальный), <b>whisper-webgpu</b> (быстрее на видеокартах; при сбое — авто-откат на WASM), <b>vosk</b> (опция).</li>
-        <li>Модели: Fast (Tiny) и Balanced (Base) — выбираются в плеере; язык по умолчанию — язык интерфейса.</li>
+        <li>Модели: Fast (Tiny) / Balanced (Base) / Precise (Small) — выбираются в плеере; язык по умолчанию — язык интерфейса.</li>
         <li>Модель живёт в кэше браузера (Cache Storage): повторные запуски — мгновенные; после смены зеркала очистите кэш сайта.</li>
         <li>Диагностика: «Проверить» → группа <b>«Транскрибация»</b> — покажет хост модели (HF/зеркало), WebGPU и состояние кэша.</li>
       </ul>
@@ -352,9 +352,9 @@ function buildHtml(tasksJson, chronicleJson, problemsJson, roadmapJson, metaDate
       <ol>
         <li>Возьмите хостинг, доступный из РФ: свой VPS + nginx, Object Storage (Yandex/Selectel) или Cloudflare R2 + свой домен.</li>
         <li><b>Самый простой путь — reverse-proxy:</b> всё, что приходит на <code>https://hf.ваш-домен.ru/</code>, проксируйте на <code>https://huggingface.co/</code> — файлы копировать не нужно.</li>
-        <li>Если копируете файлы — сохраните структуру HF-хаба: <code>https://&lt;зеркало&gt;/Xenova/whisper-tiny/resolve/main/…</code>.<br>
+        <li>Если копируете файлы — сохраните структуру HF-хаба: <code>https://&lt;зеркало&gt;/onnx-community/whisper-tiny/resolve/main/…</code>.<br>
             Минимум (q8): <span class="mono">config.json, generation_config.json, preprocessor_config.json, tokenizer.json, tokenizer_config.json + onnx/encoder_model_quantized.onnx + onnx/decoder_model_merged_quantized.onnx</span>.<br>
-            Для WebGPU-режима добавьте <span class="mono">onnx/encoder_model.onnx</span> и <span class="mono">onnx/decoder_model_merged.onnx</span> (fp32). Для Base-модели — тот же набор из её репозитория.</li>
+            Для WebGPU-режима добавьте <span class="mono">onnx/encoder_model.onnx</span> и <span class="mono">onnx/decoder_model_merged.onnx</span> (fp32). Для Base/Small — тот же набор из их репозиториев. Зеркало на Xenova/* тоже поддерживается: при сбое загрузки новой модели приложение само откатится на Xenova/*.</li>
         <li>Включите CORS на зеркале: <code>Access-Control-Allow-Origin: *</code>; отдавайте файлы как статику «как есть».</li>
         <li>В Vercel → Environment Variables добавьте <code>VITE_WHISPER_MODEL_BASE_URL=https://hf.ваш-домен.ru</code> (без пути модели) и сделайте <b>redeploy</b> — переменная встраивается при сборке.</li>
         <li>Проверка: «Проверить» → «Транскрибация» → Model Host покажет «источник: зеркало»; DevTools → Network: запросы config.json/*.onnx идут на ваш домен.</li>
