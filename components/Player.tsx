@@ -65,9 +65,9 @@ const TRANSCRIBE_LANGUAGES = [
 ];
 
 const TRANSCRIBE_MODELS = [
-    { id: 'Xenova/whisper-tiny', label: 'Fast (Tiny)' },
-    { id: 'Xenova/whisper-base', label: 'Balanced (Base)' },
-    { id: 'Xenova/whisper-small', label: 'Precise (Small)' },
+    { id: 'onnx-community/whisper-tiny', label: 'Fast (Tiny)' },
+    { id: 'onnx-community/whisper-base', label: 'Balanced (Base)' },
+    { id: 'onnx-community/whisper-small', label: 'Precise (Small)' },
 ];
 
 interface TranscriptChunk {
@@ -524,7 +524,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const [transcribeLanguage, setTranscribeLanguage] = useState<string>(language === 'ru' ? 'ru' : 'auto'); // T-32: для русского UI — русский по умолчанию
   const changeTranscribeEngine = (id: TranscribeEngineId) => { setTranscribeEngine(id); try { localStorage.setItem('anotee_transcribe_engine', id); } catch { /* ignore */ } };
   // T-354: для русского интерфейса дефолт — Base (точнее для русского, чем Tiny)
-  const [transcribeModel, setTranscribeModel] = useState<string>(language === 'ru' ? 'Xenova/whisper-base' : 'Xenova/whisper-tiny');
+  const [transcribeModel, setTranscribeModel] = useState<string>(language === 'ru' ? 'onnx-community/whisper-base' : 'onnx-community/whisper-tiny');
   const workerRef = useRef<Worker | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);

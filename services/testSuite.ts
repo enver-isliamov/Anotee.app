@@ -1703,14 +1703,29 @@ export const TEST_SUITE: TestGroup[] = [
             const mirrorRaw = typeof env.VITE_WHISPER_MODEL_BASE_URL === 'string' ? env.VITE_WHISPER_MODEL_BASE_URL : '';
             const mirror = mirrorRaw.replace(/\/+$/, '');
             const isMirror = mirror.length > 8;
-            const probeUrl = (isMirror ? mirror : 'https://huggingface.co') + '/Xenova/whisper-tiny/resolve/main/config.json';
+            const hostBase = isMirror ? mirror : 'https://huggingface.co';
             const hostLabel = isMirror ? 'зеркало' : 'huggingface.co';
+            const probeOne = async (model: string) => {
+                const t0 = performance.now();
+                try {
+                    const ctrl = new AbortController();
+                    const to = setTimeout(() => ctrl.abort(), 8000);
+                    const r = await fetch(hostBase + '/' + model + '/resolve/main/config.json', { signal: ctrl.signal, cache: 'no-store' });
+                    clearTimeout(to);
+                    return { ok: r.ok, status: r.status, ms: Math.round(performance.now() - t0) };
+                } catch (e: any) {
+                    return { ok: false, status: 0, ms: Math.round(performance.now() - t0), err: String(e?.message || e) };
+                }
+            };
+            const pNew = await probeOne('onnx-community/whisper-tiny');
+            const pLegacy = pNew.ok ? null : await probeOne('Xenova/whisper-tiny');
+            const probeOk = pNew.ok || (!!pLegacy && pLegacy.ok);
+            const probeDetail = 'onnx-community: ' + (pNew.ok ? ('HTTP ' + pNew.status + ' · ' + pNew.ms + 'ms') : 'нет') +
+                (pLegacy ? (' · Xenova(fallback): ' + (pLegacy.ok ? ('HTTP ' + pLegacy.status + ' · ' + pLegacy.ms + 'ms') : 'нет')) : '') +
+                ' · источник: ' + hostLabel;
             const t0 = performance.now();
             try {
-                const ctrl = new AbortController();
-                const to = setTimeout(() => ctrl.abort(), 8000);
-                const r = await fetch(probeUrl, { signal: ctrl.signal, cache: 'no-store' });
-                clearTimeout(to);
+                const r = { ok: probeOk, status: probeOk ? 200 : (pNew.status || (pLegacy ? pLegacy.status : 0)) };
                 const ms = Math.round(performance.now() - t0);
                 res.push({
                     name: 'Model Host',
@@ -1718,7 +1733,7 @@ export const TEST_SUITE: TestGroup[] = [
                     passed: r.ok,
                     severity: r.ok ? 'info' : 'warning',
                     expected: 'HTTP 200 (config.json модели)',
-                    received: 'HTTP ' + r.status + ' · ' + ms + 'ms · источник: ' + hostLabel,
+                    received: probeDetail,
                     passCondition: 'Хост модели отвечает — модель скачается и закэшируется.',
                     failCondition: 'Хост недоступен — транскрибация зависнет на «Загрузке модели».',
                     diagnosis: r.ok ? undefined : (isMirror
@@ -1728,7 +1743,7 @@ export const TEST_SUITE: TestGroup[] = [
                         '### T-XX Transcription: модель Whisper недоступна',
                         '- Приоритет: P1',
                         '- Источник: [diag] System Diagnostics → Транскрибация → Model Host',
-                        '- Проблема: ' + hostLabel + ' не отдаёт config.json модели (' + probeUrl + ') — скачивание модели не начнётся.',
+                        '- Проблема: хост модели (' + hostLabel + ') не отдаёт config.json ни для onnx-community/whisper-tiny, ни для Xenova/whisper-tiny — скачивание модели не начнётся.',
                         '- Цель: поднять зеркало модели (reverse-proxy на huggingface.co или копия файлов) и задать VITE_WHISPER_MODEL_BASE_URL; см. Библия → «Транскрибация».',
                         '- Acceptance: тест Model Host зелёный; транскрибация запускается без VPN.'
                     ].join('\n'),
@@ -1750,7 +1765,7 @@ export const TEST_SUITE: TestGroup[] = [
                         '### T-XX Transcription: модель Whisper недоступна',
                         '- Приоритет: P1',
                         '- Источник: [diag] System Diagnostics → Транскрибация → Model Host',
-                        '- Проблема: запрос к ' + probeUrl + ' не прошёл (' + (e?.message || 'network error') + ').',
+                        '- Проблема: запросы конфига модели к ' + hostLabel + ' не прошли (' + (e?.message || 'network error') + ').',
                         '- Цель: поднять зеркало модели и задать VITE_WHISPER_MODEL_BASE_URL; см. Библия → «Транскрибация».',
                         '- Acceptance: тест Model Host зелёный; транскрибация запускается без VPN.'
                     ].join('\n'),

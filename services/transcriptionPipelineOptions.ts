@@ -20,3 +20,14 @@ export function buildWhisperPipelineOptions(device?: string): WhisperPipelineOpt
   }
   return { dtype: 'q8' };
 }
+
+/**
+ * T-352: если новая модель (onnx-community/*) не загрузилась (например, зеркало наполнено
+ * старыми файлами Xenova), предлагаем классическое имя репозитория для повторной попытки.
+ */
+export function legacyModelName(model: string): string | null {
+  if (typeof model === 'string' && model.startsWith('onnx-community/')) {
+    return model.replace('onnx-community/', 'Xenova/');
+  }
+  return null;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWhisperPipelineOptions } from '../../services/transcriptionPipelineOptions';
+import { buildWhisperPipelineOptions, legacyModelName } from '../../services/transcriptionPipelineOptions';
 
 describe('buildWhisperPipelineOptions (T-349)', () => {
   it('webgpu: device + fp32 для энкодера и декодера', () => {
@@ -10,5 +10,14 @@ describe('buildWhisperPipelineOptions (T-349)', () => {
   it('wasm/undefined: q8 без device (совместимо с текущим кэшем и зеркалом)', () => {
     expect(buildWhisperPipelineOptions()).toEqual({ dtype: 'q8' });
     expect(buildWhisperPipelineOptions('wasm')).toEqual({ dtype: 'q8' });
+  });
+});
+
+describe('legacyModelName (T-352)', () => {
+  it('onnx-community → Xenova; прочее — null', () => {
+    expect(legacyModelName('onnx-community/whisper-base')).toBe('Xenova/whisper-base');
+    expect(legacyModelName('onnx-community/whisper-small')).toBe('Xenova/whisper-small');
+    expect(legacyModelName('Xenova/whisper-tiny')).toBe(null);
+    expect(legacyModelName('')).toBe(null);
   });
 });

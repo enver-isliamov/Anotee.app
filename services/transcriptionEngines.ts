@@ -13,7 +13,7 @@ export interface TranscribeProgress { status: 'init' | 'downloading' | 'processi
 export interface TranscribeOpts {
   audio: Float32Array;
   language: string;          // 'auto' | 'ru' | 'en' | ...
-  model: string;             // Xenova/whisper-tiny | base | ...
+  model: string;             // onnx-community/whisper-* (Xenova/* — fallback)
   wordTimestamps: boolean;
   modelBaseUrl?: string;
   onProgress?: (p: TranscribeProgress) => void;
