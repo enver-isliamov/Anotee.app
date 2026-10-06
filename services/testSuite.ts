@@ -1685,6 +1685,129 @@ export const TEST_SUITE: TestGroup[] = [
         }
     },
     {
+        id: 'transcription',
+        title: 'Транскрибация',
+        icon: Mic,
+        description: 'Доступность модели Whisper: хост загрузки (HF/зеркало), WebGPU-ускорение и кэш браузера.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime()) {
+                res.push(skippedResult('Model Host', 'Доступность хоста модели Whisper.'));
+                res.push(skippedResult('WebGPU', 'Доступность WebGPU-ускорения.'));
+                res.push(skippedResult('Model Cache', 'Кэш модели в браузере.'));
+                return res;
+            }
+
+            // 1. Хост загрузки модели (HF или зеркало)
+            const env = (import.meta as any).env || {};
+            const mirrorRaw = typeof env.VITE_WHISPER_MODEL_BASE_URL === 'string' ? env.VITE_WHISPER_MODEL_BASE_URL : '';
+            const mirror = mirrorRaw.replace(/\/+$/, '');
+            const isMirror = mirror.length > 8;
+            const probeUrl = (isMirror ? mirror : 'https://huggingface.co') + '/Xenova/whisper-tiny/resolve/main/config.json';
+            const hostLabel = isMirror ? 'зеркало' : 'huggingface.co';
+            const t0 = performance.now();
+            try {
+                const ctrl = new AbortController();
+                const to = setTimeout(() => ctrl.abort(), 8000);
+                const r = await fetch(probeUrl, { signal: ctrl.signal, cache: 'no-store' });
+                clearTimeout(to);
+                const ms = Math.round(performance.now() - t0);
+                res.push({
+                    name: 'Model Host',
+                    description: 'Хост загрузки модели Whisper (источник для транскрибации).',
+                    passed: r.ok,
+                    severity: r.ok ? 'info' : 'warning',
+                    expected: 'HTTP 200 (config.json модели)',
+                    received: 'HTTP ' + r.status + ' · ' + ms + 'ms · источник: ' + hostLabel,
+                    passCondition: 'Хост модели отвечает — модель скачается и закэшируется.',
+                    failCondition: 'Хост недоступен — транскрибация зависнет на «Загрузке модели».',
+                    diagnosis: r.ok ? undefined : (isMirror
+                        ? 'Зеркало модели недоступно: проверьте URL и CORS (структура HF: {model}/resolve/{revision}/). Инструкция — Библия → «Транскрибация».'
+                        : 'huggingface.co недоступен — типично для РФ без VPN. Настройте зеркало модели (VITE_WHISPER_MODEL_BASE_URL); пошагово — Библия → «Транскрибация».'),
+                    task: r.ok ? undefined : [
+                        '### T-XX Transcription: модель Whisper недоступна',
+                        '- Приоритет: P1',
+                        '- Источник: [diag] System Diagnostics → Транскрибация → Model Host',
+                        '- Проблема: ' + hostLabel + ' не отдаёт config.json модели (' + probeUrl + ') — скачивание модели не начнётся.',
+                        '- Цель: поднять зеркало модели (reverse-proxy на huggingface.co или копия файлов) и задать VITE_WHISPER_MODEL_BASE_URL; см. Библия → «Транскрибация».',
+                        '- Acceptance: тест Model Host зелёный; транскрибация запускается без VPN.'
+                    ].join('\n'),
+                });
+            } catch (e: any) {
+                res.push({
+                    name: 'Model Host',
+                    description: 'Хост загрузки модели Whisper (источник для транскрибации).',
+                    passed: false,
+                    severity: 'warning',
+                    expected: 'HTTP 200 (config.json модели)',
+                    received: 'сеть недоступна/таймаут · источник: ' + hostLabel,
+                    passCondition: 'Хост модели отвечает — модель скачается и закэшируется.',
+                    failCondition: 'Хост недоступен — транскрибация зависнет на «Загрузке модели».',
+                    diagnosis: isMirror
+                        ? 'Зеркало не отвечает: проверьте хост и CORS; инструкция — Библия → «Транскрибация».'
+                        : 'huggingface.co недоступен из этой сети (в РФ без VPN — ожидаемо). Настройте зеркало модели; инструкция — Библия → «Транскрибация».',
+                    task: [
+                        '### T-XX Transcription: модель Whisper недоступна',
+                        '- Приоритет: P1',
+                        '- Источник: [diag] System Diagnostics → Транскрибация → Model Host',
+                        '- Проблема: запрос к ' + probeUrl + ' не прошёл (' + (e?.message || 'network error') + ').',
+                        '- Цель: поднять зеркало модели и задать VITE_WHISPER_MODEL_BASE_URL; см. Библия → «Транскрибация».',
+                        '- Acceptance: тест Model Host зелёный; транскрибация запускается без VPN.'
+                    ].join('\n'),
+                });
+            }
+
+            // 2. WebGPU (информационно)
+            const hasGpu = typeof (navigator as any).gpu !== 'undefined';
+            res.push({
+                name: 'WebGPU',
+                description: 'Ускорение транскрибации на видеокарте (движок whisper-webgpu).',
+                passed: true,
+                severity: hasGpu ? 'info' : 'warning',
+                expected: 'navigator.gpu доступен',
+                received: hasGpu ? 'доступен — быстрый режим возможен' : 'нет — транскрибация пойдёт через WASM (медленнее)',
+                passCondition: 'Информационный тест (возможности устройства).',
+                failCondition: 'Не применимо: отсутствие WebGPU — не ошибка, а характеристика устройства.'
+            });
+
+            // 3. Кэш модели
+            try {
+                const keys = await caches.keys();
+                const tf = keys.filter((k) => /transformers/i.test(k));
+                let detail = tf.length ? 'кэш найден: ' + tf.join(', ') : 'кэш пуст — модель ещё не скачивалась';
+                try {
+                    if ((navigator as any).storage?.estimate) {
+                        const est = await (navigator as any).storage.estimate();
+                        detail += ' · хранилище: ' + Math.round((est.usage || 0) / 1048576) + ' МБ';
+                    }
+                } catch { /* ignore */ }
+                res.push({
+                    name: 'Model Cache',
+                    description: 'Кэш модели в браузере — повторные запуски без повторной загрузки.',
+                    passed: true,
+                    severity: 'info',
+                    expected: 'Cache Storage доступен',
+                    received: detail,
+                    passCondition: 'Информационный тест.',
+                    failCondition: 'Не применимо.'
+                });
+            } catch (e: any) {
+                res.push({
+                    name: 'Model Cache',
+                    description: 'Кэш модели в браузере.',
+                    passed: false,
+                    severity: 'warning',
+                    expected: 'Cache Storage доступен',
+                    received: 'ошибка: ' + (e?.message || e),
+                    passCondition: 'caches API работает — модель будет кэшироваться.',
+                    failCondition: 'caches API недоступен (приватный режим/ограничения) — модель будет качаться каждый раз.',
+                    diagnosis: 'Браузер в приватном режиме или ограничил Cache Storage: транскрибация будет работать, но модель не закэшируется.'
+                });
+            }
+            return res;
+        }
+    },
+    {
         id: 'security_client',
         title: 'Безопасность',
         icon: ShieldAlert,

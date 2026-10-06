@@ -1,4 +1,5 @@
 ﻿import { pipeline, env, type PipelineType } from '@huggingface/transformers';
+import { buildWhisperPipelineOptions } from './transcriptionPipelineOptions';
 
 // Skip local model checks since we are running in browser
 env.allowLocalModels = false;
@@ -19,18 +20,24 @@ class TranscriptionPipeline {
   static task: PipelineType = 'automatic-speech-recognition';
   static model = 'Xenova/whisper-tiny';
   static remoteHost = DEFAULT_REMOTE_HOST;
+  static device: string | undefined = undefined;
   static instance: any = null;
 
-  static async getInstance(progressCallback: (data: any) => void, modelName: string, remoteHost: string = DEFAULT_REMOTE_HOST) {
-    // Reload if model or remote host changed, or instance doesn't exist
-    // (env.remoteHost читается pipeline'ом в момент создания, поэтому смена
-    // зеркала требует пересоздания инстанса, как и смена модели).
-    if (this.instance === null || this.model !== modelName || this.remoteHost !== remoteHost) {
+  static reset() {
+    this.instance = null;
+  }
+
+  static async getInstance(progressCallback: (data: any) => void, modelName: string, remoteHost: string = DEFAULT_REMOTE_HOST, device?: string) {
+    // Reload if model / remote host / device changed, or instance doesn't exist.
+    // ВАЖНО (T-349): device и dtype применяются при СОЗДАНИИ pipeline — смена
+    // устройства (webgpu↔wasm) требует пересоздания инстанса.
+    if (this.instance === null || this.model !== modelName || this.remoteHost !== remoteHost || this.device !== device) {
       this.model = modelName;
       this.remoteHost = remoteHost;
-      // Dispose old instance if exists (though JS GC handles it usually, explicit cleanup is hard with closures)
+      this.device = device;
       this.instance = await pipeline(this.task, this.model, {
-        progress_callback: progressCallback
+        progress_callback: progressCallback,
+        ...buildWhisperPipelineOptions(device),
       });
     }
     return this.instance;
@@ -56,7 +63,7 @@ self.addEventListener('message', async (event) => {
 
       const transcriber = await TranscriptionPipeline.getInstance((data) => {
         self.postMessage({ type: 'download', data });
-      }, modelName, requestedHost);
+      }, modelName, requestedHost, device);
 
       const options: any = {
         chunk_length_s: 30,
@@ -64,8 +71,9 @@ self.addEventListener('message', async (event) => {
         return_timestamps: wordTimestamps ? "word" : true,
       };
 
-      // T-27: WebGPU-ускорение (движок whisper-webgpu). При ошибке — авто-откат на WASM.
-      if (device === 'webgpu') options.device = 'webgpu';
+      // T-349: устройство (webgpu) и dtype задаются при СОЗДАНИИ pipeline
+      // (см. TranscriptionPipeline.getInstance → buildWhisperPipelineOptions);
+      // в опциях вызова device не действует.
 
       // If language is specified and not 'auto', force it.
       // If undefined or 'auto', Whisper detects language automatically.
@@ -84,10 +92,15 @@ self.addEventListener('message', async (event) => {
           self.postMessage({ type: 'warn', data: { message: 'word-level unsupported, falling back to sentence-level' } });
           output = await transcriber(audio, { ...options, return_timestamps: true });
         }
-        // T-27: WebGPU не сработал (драйвер/память) — откат на WASM
+        // T-27/T-349: WebGPU не сработал (драйвер/память) — откат на WASM.
+        // Важно: инстанс пересоздаём с device=undefined (иначе останется webgpu-граф).
         else if (device === 'webgpu') {
           self.postMessage({ type: 'warn', data: { message: 'webgpu failed, falling back to wasm' } });
-          output = await transcriber(audio, { ...options, device: 'wasm' });
+          TranscriptionPipeline.reset();
+          const wasmTranscriber = await TranscriptionPipeline.getInstance((data) => {
+            self.postMessage({ type: 'download', data });
+          }, modelName, requestedHost, undefined);
+          output = await wasmTranscriber(audio, options);
         } else {
           throw runErr;
         }
