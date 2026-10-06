@@ -393,5 +393,6 @@
   "player.more.viewmode.single": "단일 보기",
   "player.more.viewmode.compare": "버전 비교",
   "player.more.localfile": "로컬 파일",
-  "player.synced": "동기화됨"
+  "player.synced": "동기화됨",
+  "player.transcribe.err_fetch": "전사를 위해 스토리지에서 동영상을 가져오지 못했습니다(네트워크/CORS). 설정 → 스토리지 → 확인 → CORS 자동 수정 후 다시 시도하세요."
 }

@@ -393,5 +393,6 @@
   "profile.field.endpoint": "Endpoint",
   "profile.field.bucket": "Bucket",
   "profile.field.region": "Region",
-  "profile.field.accessKey": "Access Key ID"
+  "profile.field.accessKey": "Access Key ID",
+  "player.transcribe.err_fetch": "Couldn't download the video from storage for transcription (network/CORS). Open Settings → Storage → Check → Auto-fix CORS, then retry."
 }

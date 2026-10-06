@@ -393,5 +393,6 @@
   "player.more.viewmode.single": "Visão única",
   "player.more.viewmode.compare": "Comparar versões",
   "player.more.localfile": "Arquivo local",
-  "player.synced": "Sincronizado"
+  "player.synced": "Sincronizado",
+  "player.transcribe.err_fetch": "Não foi possível baixar o vídeo do armazenamento para transcrição (rede/CORS). Abra Configurações → Armazenamento → Verificar → Correção automática de CORS e tente novamente."
 }
