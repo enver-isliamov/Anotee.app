@@ -1146,7 +1146,13 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
       const t0 = word?.timestamp?.[0]; const v = videoRef?.current; if (v && typeof t0 === 'number' && Number.isFinite(t0)) v.currentTime = t0;
       if (!word.timestamp) return;
-      setSelRange({ start: idx, end: idx }); setSheetOpen(true); setSheetMode('actions');
+      // T-361: клик ВНУТРИ уже выделенного фрагмента НЕ сбрасывает выделение
+      // (раньше выделение фрагмента «слетало» до одного кликнутого слова).
+      setSelRange((r) => {
+          if (r && idx >= Math.min(r.start, r.end) && idx <= Math.max(r.start, r.end)) return r;
+          return { start: idx, end: idx };
+      });
+      setSheetOpen(true); setSheetMode('actions');
   };
   const wordUi = { onTap: handleWordTap, onExtend: extendSelection, isDeletedAt: isWordDeletedAt, selRange };
   // T-37: подписка на синглтон транскрибации
