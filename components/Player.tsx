@@ -562,6 +562,9 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       return () => window.removeEventListener('resize', handleViewportResize);
   }, []);
 
+  // T-357: одноразовый автоповтор транскрибации после авто-применения CORS
+  const corsRetryRef = useRef(false);
+
   // ... (Other event listeners for resize etc) ...
 
   const handleTranscribe = async () => {
@@ -588,10 +591,34 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             modelBaseUrl: (import.meta as any).env?.VITE_WHISPER_MODEL_BASE_URL,
             engine: transcribeEngine,
         });
+        corsRetryRef.current = false; // успешный старт — сбрасываем флаг автоповтора CORS
     } catch (e: any) {
         console.error("Transcribe Error:", e);
         const emsg = String(e?.message || '');
         if (/AUDIO_FETCH_BLOCKED|Failed to fetch|CORS/i.test(emsg)) {
+            // T-357: похоже на CORS бакета — один раз пробуем применить настройку CORS
+            // автоматически и повторить транскрибацию (обычно это и есть настоящий фикс).
+            if (!corsRetryRef.current) {
+                corsRetryRef.current = true;
+                setIsTranscribing(false); setTranscribeProgress(null);
+                notify('Не удалось скачать видео из хранилища — применяю настройку CORS и повторяю…', "info");
+                try {
+                    const token = await getToken();
+                    const r = await fetch('/api/storage?action=configure_cors', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        body: JSON.stringify({ projectId: project?.id }),
+                    });
+                    if (r.ok) {
+                        notify('CORS применён — повторяю транскрибацию.', "success");
+                        await new Promise((res) => setTimeout(res, 600));
+                        await handleTranscribe();
+                        return;
+                    }
+                } catch { /* покажем инструкцию ниже */ }
+                notify(t('player.transcribe.err_fetch'), "error");
+                return;
+            }
             // T-354: не смогли скачать видео для аудио-дорожки (CORS бакета/сеть) —
             // показываем понятную инструкцию вместо «Failed to fetch».
             notify(t('player.transcribe.err_fetch'), "error");
