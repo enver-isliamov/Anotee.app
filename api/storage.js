@@ -7,7 +7,7 @@ import { encrypt, decrypt } from './_crypto.js';
 import { getS3Client } from './_s3.js';
 import { checkProjectAccess } from './_permissions.js';
 import { isKeyInProject, areKeysInProject } from './_access.js';
-import { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
+import { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, GetBucketCorsCommand, ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export default async function handler(req, res) {
@@ -638,11 +638,30 @@ if (req.method === 'GET') {
                 await s3.send(listCmd);
             }
 
+            // T-358: проверка CORS-правила бакета — нужно для браузерных операций (транскрибация и пр.)
+            let cors = { ok: false, reason: 'unknown' };
+            try {
+                const corsRes = await s3.send(new GetBucketCorsCommand({ Bucket: config.bucket }));
+                const rules = corsRes.CORSRules || [];
+                const httpOrigin = (req.headers.origin) || '';
+                const covers = rules.some((r) => {
+                    const origins = r.AllowedOrigins || [];
+                    const methods = (r.AllowedMethods || []).map((m) => String(m).toUpperCase());
+                    const originOk = origins.includes('*') || (!!httpOrigin && origins.some((o) => o === httpOrigin || httpOrigin.startsWith(String(o))));
+                    return originOk && methods.includes('GET');
+                });
+                cors = { ok: covers, reason: covers ? 'ok' : (rules.length ? 'rules_no_match' : 'not_set'), rules: rules.length };
+            } catch (corsErr) {
+                const m = corsErr && corsErr.message ? corsErr.message : String(corsErr);
+                cors = { ok: false, reason: /NoSuchCORSConfiguration|NoSuchCORS|not found/i.test(m) ? 'not_set' : 'error' };
+            }
+
             return res.status(200).json({ 
                 success: true, 
-                message: "Connection Successful", 
+                message: "Connection Successful · CORS: " + (cors.ok ? 'ok' : (cors.reason === 'not_set' ? 'not set' : 'check failed')), 
                 bucket: config.bucket,
-                provider: config.provider 
+                provider: config.provider,
+                cors
             });
         }
 
