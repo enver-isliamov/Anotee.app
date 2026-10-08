@@ -1,5 +1,5 @@
 
-import { User } from '../types';
+import type { User } from '../types.ts';
 
 /**
  * Maps a Clerk Organization Membership object to the application's User interface.

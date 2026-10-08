@@ -1,9 +1,10 @@
 ﻿
-import { generateEDL, generateResolveXML, generateCSV } from './exportService';
-import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from './utils';
-import { isOrgAdmin } from './userUtils';
-import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
-import { MOCK_PROJECTS } from '../constants';
+import { generateEDL, generateResolveXML, generateCSV } from './exportService.ts';
+import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from './utils.ts';
+import { isOrgAdmin } from './userUtils.ts';
+import type { Comment } from '../types.ts';
+import { CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types.ts';
+import { MOCK_PROJECTS } from '../constants.ts';
 import i18n from 'i18next';
 import { Calculator, Clock, FileOutput, ShieldCheck, Database, Globe, Wifi, ShieldAlert, Zap, Server, Film, Lock, PlayCircle, HardDrive, CreditCard, Cpu, Monitor, Mic, Languages } from 'lucide-react';
 
