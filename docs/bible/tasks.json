@@ -2511,13 +2511,13 @@
   "area": "Плеер",
   "t": "fix",
   "priority": "P2",
-  "status": "open",
+  "status": "done",
   "owner": "AutoCoder",
   "model": "gemini-3.8-flash",
-  "updated": "2026-10-08 07:50",
+  "updated": "2026-10-09 00:55",
   "date": "2026-10-08",
-  "hash": "",
-  "note": "Player.tsx:970 — handleDeleteComment использует t(\"pv.delete_asset_confirm\") («Удалить файл?») вместо подтверждения удаления комментария, пугая пользователя удалением медиафайла."
+  "hash": "982e6d2",
+  "note": "Player.tsx:970 — handleDeleteComment использует t(\"pv.delete_asset_confirm\") («Удалить файл?») вместо подтверждения удаления комментария, пугая пользователя удалением медиафайла. Сделано 2026-10-09: ключ player.comment.delete_confirm («Удалить комментарий?») во всех 6 языках."
  },
  {
   "id": "T-375",
@@ -2526,12 +2526,12 @@
   "area": "Тестирование",
   "t": "fix",
   "priority": "P2",
-  "status": "open",
+  "status": "done",
   "owner": "AutoCoder",
   "model": "gemini-3.8-flash",
-  "updated": "2026-10-08 07:50",
+  "updated": "2026-10-09 00:55",
   "date": "2026-10-08",
-  "hash": "",
-  "note": "services/testSuite.ts импортирует \"./exportService\" без расширения, что препятствует нативному запуску сьют-скриптов в node без vitest/tsx bundling."
+  "hash": "c725462",
+  "note": "services/testSuite.ts импортирует \"./exportService\" без расширения, что препятствует нативному запуску сьют-скриптов в node без vitest/tsx bundling. Сделано 2026-10-09: .ts-расширения + import type; проверка node --experimental-transform-types → IMPORT OK."
  }
 ]
