@@ -2325,8 +2325,8 @@
   "note": "Жалоба владельца: «при клике слетало выделение». Воспроизведено тестом: клик по слову внутри выделенного фрагмента сбрасывал выделение до одного слова. Фикс + регресс-тест transcript-selection.spec.ts. Коммит 965969e. 2026-10-07."
  },
  {
-  "id": "",
-  "num": null,
+  "id": "T-362",
+  "num": 362,
   "name": "Хранилище: корень «S3 Configuration not found» — UNIQUE-констрейнт отсутствовал, ON CONFLICT молча падал",
   "area": "Хранилище",
   "t": "fix",
@@ -2340,8 +2340,8 @@
   "note": "Цепочка фиксов: 551df7e → 5450305 → a5d9922 (upsert без ON CONFLICT)."
  },
  {
-  "id": "",
-  "num": null,
+  "id": "T-363",
+  "num": 363,
   "name": "Хранилище: атомарная активация при сохранении («Сохранить и активировать»)",
   "area": "Хранилище",
   "t": "fix",
@@ -2355,8 +2355,8 @@
   "note": ""
  },
  {
-  "id": "",
-  "num": null,
+  "id": "T-364",
+  "num": 364,
   "name": "Хранилище: гонка Clerk-токена при загрузке («после перезагрузки — Google Drive»)",
   "area": "Хранилище",
   "t": "fix",
@@ -2370,8 +2370,8 @@
   "note": "Ретраи 401 + фоновый повтор + активация при сохранении (0b884cd)."
  },
  {
-  "id": "",
-  "num": null,
+  "id": "T-365",
+  "num": 365,
   "name": "Хранилище: возврат к прод-схеме storage_config (сверка с веткой production)",
   "area": "Хранилище",
   "t": "fix",
@@ -2385,8 +2385,8 @@
   "note": ""
  },
  {
-  "id": "",
-  "num": null,
+  "id": "T-366",
+  "num": 366,
   "name": "Загрузка: файл исчезал после перезагрузки (React 18: finalProjectToSync=null)",
   "area": "Хранилище",
   "t": "fix",
@@ -2400,8 +2400,8 @@
   "note": "Воспроизведено e2e, фикс: applyFinalPatch + projectsRef; регресс-тест upload-persistence."
  },
  {
-  "id": "",
-  "num": null,
+  "id": "T-367",
+  "num": 367,
   "name": "Гостевые ссылки: надёжный Drive-URL + понятная ошибка вместо чёрного экрана",
   "area": "Плеер",
   "t": "fix",
@@ -2413,5 +2413,125 @@
   "date": "2026-10-05",
   "hash": "020b02a",
   "note": ""
+ },
+ {
+  "id": "T-368",
+  "num": 368,
+  "name": "Матрица прав: Org Admin не может управлять проектом организации (team=[])",
+  "area": "Безопасность",
+  "t": "security",
+  "priority": "P0",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "api/_access.js:canManageProject проверяет только owner_id и team.find. Для org-проектов team=[] (Dashboard.tsx:135), поэтому админ организации (не создатель) блокируется при изменении настроек, имени, блокировки и публичного доступа."
+ },
+ {
+  "id": "T-369",
+  "num": 369,
+  "name": "Гостевой доступ: на странице /v/<token> отсутствует возможность оставить комментарий",
+  "area": "Плеер",
+  "t": "fix",
+  "priority": "P1",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "PublicViewer.tsx и api/data.js поддерживают только чтение (GET public_view). Гость/клиент по ссылке не может оставить комментарий — нет формы ввода в UI и нет эндпоинта action=public_comment на бэкенде."
+ },
+ {
+  "id": "T-370",
+  "num": 370,
+  "name": "Плеер: любой участник организации получает статус isManager (права блокировки и удаления)",
+  "area": "Плеер",
+  "t": "fix",
+  "priority": "P1",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "Player.tsx:436 — isManager = ... || (org.id && project.orgId === org.id). Любой рядовой участник и вьюер организации видит кнопки блокировки версии, массового закрытия комментариев и удаления версий. Требуется проверка роли админа/владельца."
+ },
+ {
+  "id": "T-371",
+  "num": 371,
+  "name": "Дашборд: кнопка доната не передаёт Content-Type и planType в /api/payment?action=init",
+  "area": "Платежи",
+  "t": "fix",
+  "priority": "P1",
+  "status": "done",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "Dashboard.tsx:156-160 — handlePayment вызывал fetch без Content-Type: application/json и без тела { planType: \"donation\" }, что приводило к сбою инициализации платежа. Исправлено + открытие confirmationUrl."
+ },
+ {
+  "id": "T-372",
+  "num": 372,
+  "name": "Загрузка S3: при сбое presign (PUT <=64MB) выдаётся ложная ошибка «Drive not connected»",
+  "area": "Хранилище",
+  "t": "fix",
+  "priority": "P1",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "hooks/useUploadManager.ts:270-293 — если apiPresign PUT возвращает !res.ok, ошибка не выбрасывается, а управление переходит к проверке Google Drive и падает с misleading сообщением «Storage Error: S3 not configured...»."
+ },
+ {
+  "id": "T-373",
+  "num": 373,
+  "name": "Экспорт NLE: имя маркера в DaVinci XML и Premiere CSV выводит userId вместо authorName",
+  "area": "Плеер",
+  "t": "fix",
+  "priority": "P1",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "services/exportService.ts:68, 92 — в CSV и XML экспортируется c.userId (Clerk ID) вместо c.authorName || c.userId. В таймлайне монтажер видит абракадабру ID вместо имени режиссера/клиента. В generateCSV таймкод без кадров (substr)."
+ },
+ {
+  "id": "T-374",
+  "num": 374,
+  "name": "Плеер: модалка удаления комментария использует текст подтверждения «Удалить файл?»",
+  "area": "Плеер",
+  "t": "fix",
+  "priority": "P2",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "Player.tsx:970 — handleDeleteComment использует t(\"pv.delete_asset_confirm\") («Удалить файл?») вместо подтверждения удаления комментария, пугая пользователя удалением медиафайла."
+ },
+ {
+  "id": "T-375",
+  "num": 375,
+  "name": "Диагностика: прямой запуск testSuite в Node падает из-за ESM-импортов без расширений",
+  "area": "Тестирование",
+  "t": "fix",
+  "priority": "P2",
+  "status": "open",
+  "owner": "AutoCoder",
+  "model": "gemini-3.8-flash",
+  "updated": "2026-10-08 07:50",
+  "date": "2026-10-08",
+  "hash": "",
+  "note": "services/testSuite.ts импортирует \"./exportService\" без расширения, что препятствует нативному запуску сьют-скриптов в node без vitest/tsx bundling."
  }
 ]
