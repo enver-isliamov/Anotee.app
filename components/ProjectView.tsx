@@ -99,7 +99,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       (async () => {
           try {
               const token = await getToken();
+              // T-359: без токена запрос не отправляем (иначе «Bearer null» → ошибки в консоли)
+              if (!token) { if (alive) setIsS3Configured(false); return; }
               const res = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' });
+              if (!res.ok) { if (alive) setIsS3Configured(false); return; }
               const cfg = await res.json().catch(() => null);
               if (alive) setIsS3Configured(!!cfg && !!cfg.provider && cfg.provider !== 'google');
           } catch { if (alive) setIsS3Configured(false); }

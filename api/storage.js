@@ -10,6 +10,11 @@ import { isKeyInProject, areKeysInProject } from './_access.js';
 import { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, GetBucketCorsCommand, ListObjectsV2Command, HeadBucketCommand, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+// T-359: безопасное чтение секрета — повреждённый/старый формат не должен ронять GET config.
+function safeDecrypt(value) {
+    try { return decrypt(value); } catch (e) { console.warn('decrypt failed (safe fallback):', e && e.message ? e.message : e); return null; }
+}
+
 export default async function handler(req, res) {
     const { action } = req.query;
 
@@ -186,7 +191,7 @@ if (req.method === 'GET') {
                     secretAccessKey: '********', // Masked
                     publicUrl: config.public_url,
             configOwner: user.email || user.id,
-                secretIsMask: (decrypt(config.secret_access_key) || '') === '********',
+                secretIsMask: (safeDecrypt(config.secret_access_key) || '') === '********',
                     isActive: true,
                     configured
                 });
@@ -206,7 +211,7 @@ if (req.method === 'GET') {
                         secretAccessKey: '********',
                         publicUrl: config.public_url,
                         configOwner: user.email || user.id,
-                        secretIsMask: (decrypt(config.secret_access_key) || '') === '********',
+                        secretIsMask: (safeDecrypt(config.secret_access_key) || '') === '********',
                         isActive: true,
                         configured: []
                     });
@@ -837,6 +842,13 @@ if (req.method === 'GET') {
     } catch (error) {
         console.error(`Storage API Error (${action}):`, error);
         
+        // T-359: GET config — только чтение. Даже в крайнем случае (гонка токена/миграция схемы)
+        // возвращаем 200 null: клиент корректно покажет «не настроено», а консоль не пугается 400/500.
+        if (action === 'config' && req.method === 'GET') {
+            console.warn('GET config fallback → 200 null:', error && error.message ? error.message : error);
+            return res.status(200).json(null);
+        }
+
         let msg = error.message;
         if (msg.includes("InvalidAccessKeyId")) msg = "Неверный Access Key ID";
         if (msg.includes("SignatureDoesNotMatch")) msg = "Неверный Secret Key";
