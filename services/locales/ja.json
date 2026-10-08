@@ -395,5 +395,6 @@
   "player.more.localfile": "ローカルファイル",
   "player.synced": "同期済み",
   "player.transcribe.err_fetch": "文字起こし用にストレージから動画を取得できませんでした（ネットワーク/CORS）。設定 → ストレージ → 確認 → CORS自動修正 を実行し、再試行してください。",
-  "player.transcribe.model_hint": "Fast — 高速 / Balanced — ロシア語に高精度 / Precise — 最高精度（約460MB・低速）。"
+  "player.transcribe.model_hint": "Fast — 高速 / Balanced — ロシア語に高精度 / Precise — 最高精度（約460MB・低速）。",
+  "player.comment.delete_confirm": "コメントを削除しますか？"
 }

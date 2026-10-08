@@ -1,5 +1,5 @@
 
-import { Comment } from '../types';
+import type { Comment } from '../types.ts';
 
 /**
  * Generates an EDL optimized for DaVinci Resolve Markers.

@@ -395,5 +395,6 @@
   "profile.field.region": "Region",
   "profile.field.accessKey": "Access Key ID",
   "player.transcribe.err_fetch": "Couldn't download the video from storage for transcription (network/CORS). Open Settings → Storage → Check → Auto-fix CORS, then retry.",
-  "player.transcribe.model_hint": "Fast — quicker; Balanced — more accurate for Russian; Precise — maximum accuracy (~460 MB, slower)."
+  "player.transcribe.model_hint": "Fast — quicker; Balanced — more accurate for Russian; Precise — maximum accuracy (~460 MB, slower).",
+  "player.comment.delete_confirm": "Delete comment?"
 }

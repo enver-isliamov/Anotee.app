@@ -1,5 +1,6 @@
 
-import { Project, CommentStatus, User } from './types';
+import type { Project, User } from './types.ts';
+import { CommentStatus } from './types.ts';
 
 // Internal mocks for initial project data
 const INTERNAL_MOCK_USERS: User[] = [
