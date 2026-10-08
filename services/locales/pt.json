@@ -395,5 +395,6 @@
   "player.more.localfile": "Arquivo local",
   "player.synced": "Sincronizado",
   "player.transcribe.err_fetch": "Não foi possível baixar o vídeo do armazenamento para transcrição (rede/CORS). Abra Configurações → Armazenamento → Verificar → Correção automática de CORS e tente novamente.",
-  "player.transcribe.model_hint": "Fast — mais rápido; Balanced — mais preciso para russo; Precise — precisão máxima (~460 MB, mais lento)."
+  "player.transcribe.model_hint": "Fast — mais rápido; Balanced — mais preciso para russo; Precise — precisão máxima (~460 MB, mais lento).",
+  "player.comment.delete_confirm": "Excluir comentário?"
 }

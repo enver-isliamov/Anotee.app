@@ -967,7 +967,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   // T-19: создание комментария вынесено (text параметром) — push-to-talk коммитит без чтения свежего state (stale closure)
   const createComment = (text: string, timestampOverride?: number, durationOverride?: number) => { const cId = generateId(); syncCommentAction('create', { id: cId, text, timestamp: markerInPoint !== null ? markerInPoint : (timestampOverride ?? currentTime), duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : durationOverride, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
   const handleAddComment = () => { createComment(newCommentText); };
-  const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
+  const handleDeleteComment = (id: string) => { if (confirm(t('player.comment.delete_confirm'))) syncCommentAction('delete', { id }); };
   const handleResolveComment = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const c = comments.find(c => c.id === id); if (c) syncCommentAction('update', { id, status: c.status === CommentStatus.OPEN ? CommentStatus.RESOLVED : CommentStatus.OPEN }); };
   const startEditing = (comment: Comment) => { setEditingCommentId(comment.id); setEditText(comment.text); };
   const cancelEdit = () => { setEditingCommentId(null); setEditText(''); };
