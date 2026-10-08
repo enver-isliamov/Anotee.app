@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
 import { Plus, X, Loader2, FileVideo, Lock, Trash2, AlertTriangle, CalendarClock, Edit2, Share2, Unlock, Copy, Check, Save, Crown, Zap, Shield, ArrowRight, Building2, User as UserIcon, CheckCircle2, Layout, Upload, ChevronRight, Users, Globe, UserPlus, Eye, Link } from 'lucide-react';
@@ -155,12 +155,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
           const token = await getToken();
           const res = await fetch('/api/payment?action=init', {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: { 
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ planType: 'donation' })
           });
           const data = await res.json();
           
           if (res.ok && data.confirmationUrl) {
-              window.location.href = data.confirmationUrl;
+              window.open(data.confirmationUrl, '_blank') || (window.location.href = data.confirmationUrl);
+              setIsBuying(false);
           } else {
               notify("Payment failed: " + (data.error || "Unknown"), "error");
               setIsBuying(false);
