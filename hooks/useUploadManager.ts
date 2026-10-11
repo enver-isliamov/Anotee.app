@@ -267,6 +267,18 @@ export const useUploadManager = (
       } else {
         try {
           const presignRes = await apiPresign({ operation: 'put', key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, contentType: file.type, projectId });
+          if (!presignRes.ok) {
+              // T-372: реальная причина отказа presign — без маскировки под «Drive not connected».
+              let reason = 'HTTP ' + presignRes.status;
+              if (presignRes.status === 401) reason = 'сессия истекла — обновите страницу и повторите';
+              else {
+                  const body = await presignRes.json().catch(() => null);
+                  if (body && (body.error || body.message)) reason = String(body.error || body.message).slice(0, 200);
+              }
+              const cfgErr: any = new Error('S3-хранилище не приняло запрос загрузки: ' + reason);
+              cfgErr.isS3ConfigError = true;
+              throw cfgErr;
+          }
           if (presignRes.ok) {
             const { url: uploadUrl, key } = await presignRes.json();
             await new Promise((resolve, reject) => {
@@ -284,6 +296,8 @@ export const useUploadManager = (
           }
         } catch (e: any) {
           if (e.message === 'Upload cancelled') throw e;
+          // T-372: конфигурационную ошибку S3 не маскируем Drive-фолбэком — показываем реальную причину
+          if (e.isS3ConfigError) throw e;
           console.warn('S3 Upload attempt failed, falling back to Drive/Error', e);
         }
       }
