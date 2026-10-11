@@ -3,7 +3,7 @@ import { sql } from '@vercel/postgres';
 import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
-import { isOrgMember, extractOrgIds } from './_orgAccess.js';
+import { isOrgMember, extractOrgIds, isOrgAdminMembership } from './_orgAccess.js';
 import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
 import { resolveSyncOutcome } from './_sync.js';
 import { applyCommentAction } from './_comments.js';
@@ -73,6 +73,20 @@ async function isPlatformAdmin(user) {
     }
 }
 
+// T-368: админ организации проекта (Clerk memberships) — даёт права менеджера в org-проектах.
+async function isOrgAdminFor(user, orgId) {
+    if (!orgId) return false;
+    try {
+        const clerk = getClerkClient();
+        const userId = user.userId || user.id;
+        const memberships = await clerk.users.getOrganizationMembershipList({ userId, limit: 100 });
+        return isOrgAdminMembership(memberships, orgId);
+    } catch (e) {
+        console.warn('org admin check failed:', e && e.message ? e.message : e);
+        return false;
+    }
+}
+
 export default async function handler(req, res) {
   try {
       // ==========================================
@@ -124,6 +138,63 @@ export default async function handler(req, res) {
               comments: publicComments,
               isLocked: !!sharedVersion.isLocked
           });
+      }
+
+      // ==========================================
+      // T-369: PUBLIC COMMENT — гость оставляет комментарий к расшаренной версии.
+      // Валидация по share-токену; Clerk не требуется. Пишем в ту же версию, что и public_view,
+      // через read-modify-write с CAS и retry (не затираем конкурентные правки проекта).
+      // ==========================================
+      if (earlyAction === 'public_comment' && req.method === 'POST') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const token = String((body && body.token) || '');
+          const content = String((body && body.content) || '').trim();
+          let authorName = String((body && body.authorName) || '').trim();
+          const tsRaw = Number(body && body.timestamp);
+          if (!token || token.length < 20) return res.status(400).json({ error: 'Invalid token' });
+          if (!content || content.length > 2000) return res.status(400).json({ error: 'Comment must be 1..2000 chars' });
+          if (!authorName) authorName = 'Гость';
+          if (authorName.length > 60) authorName = authorName.slice(0, 60);
+
+          const { rows } = await sql`SELECT id, owner_id, data FROM projects WHERE data->'publicShare'->>'token' = ${token} LIMIT 1`;
+          if (!rows || !rows.length) return res.status(404).json({ error: 'Link not found or revoked' });
+          const projectData0 = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+          const share = projectData0.publicShare;
+          if (!share || share.token !== token) return res.status(404).json({ error: 'Link not found or revoked' });
+
+          const comment = {
+              id: crypto.randomUUID(),
+              text: content,
+              authorName,
+              userId: 'guest',
+              authorId: 'guest',
+              guest: true,
+              timestamp: Number.isFinite(tsRaw) && tsRaw >= 0 ? Math.round(tsRaw * 1000) / 1000 : 0,
+              duration: 0,
+              status: 'OPEN',
+              createdAt: new Date().toISOString(),
+          };
+
+          for (let attempt = 0; attempt < 3; attempt++) {
+              const freshRows = attempt === 0
+                  ? [{ data: projectData0 }]
+                  : await sql`SELECT data FROM projects WHERE id = ${rows[0].id}`;
+              const freshData = typeof freshRows[0].data === 'string' ? JSON.parse(freshRows[0].data) : freshRows[0].data;
+              const currentVersion = freshData._version || 0;
+              const fAsset = (freshData.assets || []).find(a => a.id === share.assetId);
+              if (!fAsset) return res.status(404).json({ error: 'Asset not found' });
+              const fVersion = (fAsset.versions || []).find(v => v.id === share.versionId);
+              if (!fVersion) return res.status(404).json({ error: 'Shared version not found or deleted' });
+              if (!Array.isArray(fVersion.comments)) fVersion.comments = [];
+              fVersion.comments.push(comment);
+              freshData._version = currentVersion + 1;
+              const upd = await sql`
+                  UPDATE projects SET data = ${JSON.stringify(freshData)}::jsonb, updated_at = ${Date.now()}
+                  WHERE id = ${rows[0].id} AND ((data->>'_version')::int = ${currentVersion} OR data->>'_version' IS NULL)`;
+              if (upd.rowCount > 0) return res.status(200).json({ success: true, comment });
+          }
+          return res.status(409).json({ error: 'Busy, try again' });
       }
 
       // ==========================================
@@ -629,8 +700,12 @@ export default async function handler(req, res) {
           }
 
           // T-06: настройки проекта (имя, команда, доступы, блокировка) меняет только владелец/менеджер
-          if (touchesStructuralFields(updates) && !canManageProject(user, rows[0])) {
-              return res.status(403).json({ error: "Insufficient permissions: only owner or manager can change project settings" });
+          // T-368: админ организации проекта получает те же права (team может быть пустым).
+          if (touchesStructuralFields(updates)) {
+              const orgAdmin = await isOrgAdminFor(user, rows[0].org_id);
+              if (!canManageProject(user, rows[0], { orgAdmin })) {
+                  return res.status(403).json({ error: "Insufficient permissions: only owner or manager can change project settings" });
+              }
           }
 
           const currentDbData = rows[0].data;
@@ -694,7 +769,9 @@ export default async function handler(req, res) {
 
                     // T-06: участник без прав на управление не может перезаписать настройки проекта —
                     // серверные значения структурных полей сохраняются, принимаются только данные ревью.
-                    if (!canManageProject(user, checkExists.rows[0])) {
+                    // T-368: org-админ проекта — управляет (team может быть пустым).
+                    const syncOrgAdmin = await isOrgAdminFor(user, checkExists.rows[0].org_id);
+                    if (!canManageProject(user, checkExists.rows[0], { orgAdmin: syncOrgAdmin })) {
                         const safeProject = stripStructuralChanges(project, existingData);
                         safeProject._version = newVersion;
                         const updSafe = await sql`

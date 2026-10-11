@@ -18,3 +18,13 @@ export function extractOrgIds(memberships) {
         .map((m) => (m && m.organization && m.organization.id) || null)
         .filter((id) => typeof id === 'string' && id.length > 0);
 }
+
+/** T-368: является ли пользователь администратором организации (по списку членств Clerk). */
+export function isOrgAdminMembership(memberships, targetOrgId) {
+    const list = (memberships && memberships.data) || [];
+    if (!Array.isArray(list) || !targetOrgId) return false;
+    const m = list.find((x) => x && x.organization && x.organization.id === targetOrgId);
+    if (!m) return false;
+    const role = String(m.role || '').toLowerCase();
+    return role === 'org:admin' || role === 'admin' || role === 'owner';
+}

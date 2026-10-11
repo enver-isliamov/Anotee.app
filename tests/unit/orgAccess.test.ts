@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isOrgMember, extractOrgIds } from '../../api/_orgAccess.js';
+import { isOrgMember, extractOrgIds, isOrgAdminMembership } from '../../api/_orgAccess.js';
 
 // T-02: ORG LIST не должен отдавать проекты чужой организации
 describe('isOrgMember', () => {
@@ -38,5 +38,20 @@ describe('extractOrgIds', () => {
     expect(extractOrgIds({ data: [null, {}, { organization: null }] })).toEqual([]);
     expect(extractOrgIds(undefined)).toEqual([]);
     expect(extractOrgIds({ data: 'nope' })).toEqual([]);
+  });
+});
+
+describe('isOrgAdminMembership (T-368)', () => {
+  const memberships = (role: string, orgId = 'org_1') => ({ data: [{ role, organization: { id: orgId } }] });
+  it('org:admin / admin / owner — true', () => {
+    expect(isOrgAdminMembership(memberships('org:admin'), 'org_1')).toBe(true);
+    expect(isOrgAdminMembership(memberships('admin'), 'org_1')).toBe(true);
+    expect(isOrgAdminMembership(memberships('owner'), 'org_1')).toBe(true);
+  });
+  it('участник/другая орг/пусто — false', () => {
+    expect(isOrgAdminMembership(memberships('org:member'), 'org_1')).toBe(false);
+    expect(isOrgAdminMembership(memberships('org:admin', 'org_2'), 'org_1')).toBe(false);
+    expect(isOrgAdminMembership({ data: [] }, 'org_1')).toBe(false);
+    expect(isOrgAdminMembership(null, 'org_1')).toBe(false);
   });
 });
