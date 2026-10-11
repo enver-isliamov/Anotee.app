@@ -2442,7 +2442,7 @@
   "updated": "2026-10-11 20:39",
   "date": "2026-10-08",
   "hash": "bbcd1f2",
-  "note": "PublicViewer.tsx и api/data.js поддерживают только чтение (GET public_view). Гость/клиент по ссылке не может оставить комментарий — нет формы ввода в UI и нет эндпоинта action=public_comment на бэкенде. Сделано 2026-10-11: action=public_comment (CAS+retry) + форма в PublicViewer (имя/текст/таймкод); e2e-шаг гостевого комментария."
+  "note": "PublicViewer.tsx и api/data.js поддерживают только чтение (GET public_view). Гость/клиент по ссылке не может оставить комментарий — нет формы ввода в UI и нет эндпоинта action=public_comment на бэкенде. Сделано 2026-10-11: action=public_comment (CAS+retry) + форма в PublicViewer (имя/текст/таймкод); e2e-шаг гостевого комментария. Codex-ревью 11.10: 4 исправлено (be58eca), frames отклонено (контракт секунд)."
  },
  {
   "id": "T-370",

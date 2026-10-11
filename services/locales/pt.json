@@ -396,5 +396,11 @@
   "player.synced": "Sincronizado",
   "player.transcribe.err_fetch": "Não foi possível baixar o vídeo do armazenamento para transcrição (rede/CORS). Abra Configurações → Armazenamento → Verificar → Correção automática de CORS e tente novamente.",
   "player.transcribe.model_hint": "Fast — mais rápido; Balanced — mais preciso para russo; Precise — precisão máxima (~460 MB, mais lento).",
-  "player.comment.delete_confirm": "Excluir comentário?"
+  "player.comment.delete_confirm": "Excluir comentário?",
+  "public.comment.name": "Seu nome",
+  "public.comment.text": "Comentário no momento atual do vídeo…",
+  "public.comment.send": "Enviar",
+  "public.comment.error": "Não foi possível enviar",
+  "public.comment.locked": "Comentários fechados",
+  "public.comment.guest": "Convidado"
 }

@@ -396,5 +396,11 @@
   "profile.field.accessKey": "Access Key ID",
   "player.transcribe.err_fetch": "Не удалось скачать видео из хранилища для транскрибации (сеть/CORS). Откройте «Настройки → Хранилище», нажмите «Проверить» и примените CORS («Исправить автоматически»), затем повторите.",
   "player.transcribe.model_hint": "Fast — быстрее; Balanced — точнее для русского; Precise — максимальная точность (≈460 МБ, дольше).",
-  "player.comment.delete_confirm": "Удалить комментарий?"
+  "player.comment.delete_confirm": "Удалить комментарий?",
+  "public.comment.name": "Ваше имя",
+  "public.comment.text": "Комментарий к текущему моменту видео…",
+  "public.comment.send": "Отправить",
+  "public.comment.error": "Не удалось отправить",
+  "public.comment.locked": "Комментарии закрыты",
+  "public.comment.guest": "Гость"
 }
