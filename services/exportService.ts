@@ -56,16 +56,24 @@ export const generateEDL = (projectName: string, version: number, comments: Comm
 /**
  * Generates a CSV file compatible with some marker import scripts in Resolve/Premiere.
  */
-export const generateCSV = (comments: Comment[]): string => {
+export const generateCSV = (comments: Comment[], fps: number = 24): string => {
   let csv = 'Timecode, Name, Description, Color\n';
-  
+  const timebase = Math.max(1, Math.round(fps));
+  // T-373: покадровый таймкод HH:MM:SS:FF (как в EDL/XML), с учётом FPS
+  const toTC = (seconds: number) => {
+    const frames = Math.max(0, Math.floor(seconds * timebase));
+    const hh = Math.floor(frames / (3600 * timebase)).toString().padStart(2, '0');
+    const mm = Math.floor((frames % (3600 * timebase)) / (60 * timebase)).toString().padStart(2, '0');
+    const ss = Math.floor((frames % (60 * timebase)) / timebase).toString().padStart(2, '0');
+    const ff = (frames % timebase).toString().padStart(2, '0');
+    return `${hh}:${mm}:${ss}:${ff}`;
+  };
+
   comments.forEach(c => {
-    // Simple HH:MM:SS format
-    const date = new Date(0);
-    date.setSeconds(c.timestamp);
-    const tc = date.toISOString().substr(11, 8);
-    
-    csv += `${tc}, "${c.userId}", "${c.text.replace(/"/g, '""')}", "${c.status === 'resolved' ? 'Green' : 'Red'}"\n`;
+    // T-373: человекочитаемое имя автора (authorName || userId)
+    const name = String(c.authorName || c.userId || '').replace(/"/g, '""');
+    const tc = toTC(c.timestamp);
+    csv += `${tc}, "${name}", "${c.text.replace(/"/g, '""')}", "${c.status === 'resolved' ? 'Green' : 'Red'}"\n`;
   });
 
   return csv;
@@ -89,7 +97,7 @@ export const generateResolveXML = (projectName: string, version: number, comment
     
     markersXML += `
           <marker>
-            <name>${c.userId}</name>
+            <name>${String(c.authorName || c.userId || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</name>
             <comment>${c.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</comment>
             <in>${frame}</in>
             <out>${frame}</out>

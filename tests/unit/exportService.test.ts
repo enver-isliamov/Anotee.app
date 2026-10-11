@@ -35,6 +35,12 @@ const assertWellFormedXml = (xml: string) => {
 };
 
 describe('generateResolveXML', () => {
+  it('имя маркера — authorName, fallback userId (T-373)', () => {
+    const xml = generateResolveXML('T', 1, [makeComment({ authorName: 'Режиссёр' })], 24);
+    expect(xml).toContain('<name>Режиссёр</name>');
+    const anon = generateResolveXML('T', 1, [makeComment({ authorName: '' })], 24);
+    expect(anon).toContain('<name>u1</name>');
+  });
   it('генерирует валидный xmeml с таймкодом маркеров в кадрах', () => {
     const xml = generateResolveXML('Test', 2, [makeComment({ timestamp: 10.0 })], 24);
     expect(xml).toContain('<?xml version="1.0"');
@@ -44,7 +50,7 @@ describe('generateResolveXML', () => {
     // frames = floor(10.0 * 24) = 240
     expect(xml).toContain('<in>240</in>');
     expect(xml).toContain('<out>240</out>');
-    expect(xml).toContain('<name>u1</name>');
+    expect(xml).toContain('<name>Andrey</name>'); // T-373: имя = authorName
     assertWellFormedXml(xml);
   });
 
@@ -82,12 +88,20 @@ describe('generateCSV', () => {
     expect(header).toBe('Timecode, Name, Description, Color');
   });
 
-  it('каждый маркер — строка с таймкодом HH:MM:SS и текстом в кавычках', () => {
-    const csv = generateCSV([makeComment({ timestamp: 75, text: 'Hello' })]);
+  it('каждый маркер — строка с покадровым таймкодом HH:MM:SS:FF и текстом в кавычках (T-373)', () => {
+    const csv = generateCSV([makeComment({ timestamp: 75, text: 'Hello' })], 24);
     const lines = csv.trim().split('\n');
     expect(lines).toHaveLength(2);
-    expect(lines[1]).toContain('00:01:15');
+    // 75 сек @24fps = ровно 00:01:15:00
+    expect(lines[1]).toContain('00:01:15:00');
     expect(lines[1]).toContain('"Hello"');
+  });
+
+  it('имя маркера — authorName, fallback userId (T-373)', () => {
+    const named = generateCSV([makeComment({ authorName: 'Режиссёр' })], 24);
+    expect(named).toContain('"Режиссёр"');
+    const anon = generateCSV([makeComment({ authorName: '' })], 24);
+    expect(anon).toContain('"u1"');
   });
 
   it('кавычки в тексте удваиваются', () => {
