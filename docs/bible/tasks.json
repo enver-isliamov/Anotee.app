@@ -2421,13 +2421,13 @@
   "area": "Безопасность",
   "t": "security",
   "priority": "P0",
-  "status": "open",
+  "status": "done",
   "owner": "AutoCoder",
   "model": "gemini-3.8-flash",
-  "updated": "2026-10-08 07:50",
+  "updated": "2026-10-11 20:39",
   "date": "2026-10-08",
-  "hash": "",
-  "note": "api/_access.js:canManageProject проверяет только owner_id и team.find. Для org-проектов team=[] (Dashboard.tsx:135), поэтому админ организации (не создатель) блокируется при изменении настроек, имени, блокировки и публичного доступа."
+  "hash": "c391e38",
+  "note": "api/_access.js:canManageProject проверяет только owner_id и team.find. Для org-проектов team=[] (Dashboard.tsx:135), поэтому админ организации (не создатель) блокируется при изменении настроек, имени, блокировки и публичного доступа. Сделано 2026-10-11: isOrgAdminMembership + opts.orgAdmin в canManageProject; PATCH и sync учитывают админа организации; unit-тесты."
  },
  {
   "id": "T-369",
@@ -2436,13 +2436,13 @@
   "area": "Плеер",
   "t": "fix",
   "priority": "P1",
-  "status": "open",
+  "status": "done",
   "owner": "AutoCoder",
   "model": "gemini-3.8-flash",
-  "updated": "2026-10-08 07:50",
+  "updated": "2026-10-11 20:39",
   "date": "2026-10-08",
-  "hash": "",
-  "note": "PublicViewer.tsx и api/data.js поддерживают только чтение (GET public_view). Гость/клиент по ссылке не может оставить комментарий — нет формы ввода в UI и нет эндпоинта action=public_comment на бэкенде."
+  "hash": "bbcd1f2",
+  "note": "PublicViewer.tsx и api/data.js поддерживают только чтение (GET public_view). Гость/клиент по ссылке не может оставить комментарий — нет формы ввода в UI и нет эндпоинта action=public_comment на бэкенде. Сделано 2026-10-11: action=public_comment (CAS+retry) + форма в PublicViewer (имя/текст/таймкод); e2e-шаг гостевого комментария."
  },
  {
   "id": "T-370",
