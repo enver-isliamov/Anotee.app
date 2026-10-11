@@ -129,6 +129,8 @@ export default async function handler(req, res) {
               console.error('public_view presign failed', presignErr);
               videoUrl = null;
           }
+          // T-369: форма гостевого комментария скрывается, если проект или версия заблокированы
+          const commentsLocked = !!projectData.isLocked || !!sharedVersion.isLocked;
           const publicComments = (sharedVersion.comments || []).map(c => ({ id: c.id, authorName: c.authorName, text: c.text, timestamp: c.timestamp, duration: c.duration, status: c.status, editKind: c.editKind, createdAt: c.createdAt }));
           return res.status(200).json({
               projectName: projectData.name,
@@ -136,7 +138,8 @@ export default async function handler(req, res) {
               versionNumber: sharedVersion.versionNumber,
               videoUrl,
               comments: publicComments,
-              isLocked: !!sharedVersion.isLocked
+              isLocked: !!sharedVersion.isLocked,
+              canComment: !commentsLocked
           });
       }
 
@@ -177,15 +180,19 @@ export default async function handler(req, res) {
           };
 
           for (let attempt = 0; attempt < 3; attempt++) {
+              // Codex P2 (ревью): у @vercel/postgres результат — { rows }, а не массив.
               const freshRows = attempt === 0
                   ? [{ data: projectData0 }]
-                  : await sql`SELECT data FROM projects WHERE id = ${rows[0].id}`;
+                  : (await sql`SELECT data FROM projects WHERE id = ${rows[0].id}`).rows;
+              if (!freshRows || freshRows.length === 0) return res.status(404).json({ error: 'Project not found' });
               const freshData = typeof freshRows[0].data === 'string' ? JSON.parse(freshRows[0].data) : freshRows[0].data;
               const currentVersion = freshData._version || 0;
               const fAsset = (freshData.assets || []).find(a => a.id === share.assetId);
               if (!fAsset) return res.status(404).json({ error: 'Asset not found' });
               const fVersion = (fAsset.versions || []).find(v => v.id === share.versionId);
               if (!fVersion) return res.status(404).json({ error: 'Shared version not found or deleted' });
+              // Codex P1 (ревью): уважаем блокировки — как авторизованный плеер (Player: project.isLocked || version.isLocked)
+              if (freshData.isLocked || fVersion.isLocked) return res.status(403).json({ error: 'Comments are locked' });
               if (!Array.isArray(fVersion.comments)) fVersion.comments = [];
               fVersion.comments.push(comment);
               freshData._version = currentVersion + 1;

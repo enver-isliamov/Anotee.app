@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clapperboard, MessageSquare, Loader2, ShieldCheck, AlertTriangle, Send } from 'lucide-react';
 
 /**
@@ -11,7 +12,7 @@ import { Clapperboard, MessageSquare, Loader2, ShieldCheck, AlertTriangle, Send 
 interface PublicComment { id: string; authorName?: string; text: string; timestamp: number; duration?: number; status: string; editKind?: string; }
 interface PublicPayload {
   projectName: string; assetTitle: string; versionNumber: number;
-  videoUrl: string | null; comments: PublicComment[]; isLocked?: boolean;
+  videoUrl: string | null; comments: PublicComment[]; isLocked?: boolean; canComment?: boolean;
 }
 
 const formatTs = (s: number) => {
@@ -23,6 +24,7 @@ const formatTs = (s: number) => {
 };
 
 export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = ({ token, isMockMode }) => {
+  const { t } = useTranslation();
   const [payload, setPayload] = useState<PublicPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
     setSendingComment(true);
     setSendError(null);
     const ts = videoRef.current && Number.isFinite(videoRef.current.currentTime) ? videoRef.current.currentTime : 0;
-    const authorName = guestName.trim() || 'Гость';
+    const authorName = guestName.trim() || t('public.comment.guest');
     try {
       if (isMockMode) {
         // demo/e2e: без сети — комментарий добавляется локально
@@ -63,7 +65,7 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
       try { localStorage.setItem('anotee_guest_name', guestName.trim()); } catch { /* ignore */ }
       setCommentText('');
     } catch (e: any) {
-      setSendError(e?.message || 'Не удалось отправить');
+      setSendError(e?.message || t('public.comment.error'));
     } finally {
       setSendingComment(false);
     }
@@ -84,6 +86,7 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
             videoUrl: null,
             comments: [{ id: 'g1', authorName: 'Andrey (Creator)', text: 'The color grading here feels too cold', timestamp: 45, status: 'OPEN' }],
             isLocked: false,
+            canComment: true,
           });
           setLoading(false);
         }, 100);
@@ -162,6 +165,11 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
             </div>
             <div className="w-full max-w-3xl" data-testid="public-comments">
               <div className="flex items-center gap-2 mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400"><MessageSquare size={14} /> Комментарии ({payload.comments.length})</div>
+              {payload.canComment === false ? (
+                <div className="mt-2 mb-3 flex items-center gap-2 text-xs text-zinc-500" data-testid="guest-comment-locked">
+                  <ShieldCheck size={14} className="text-zinc-600" /> {t('public.comment.locked')}
+                </div>
+              ) : (
               <div className="mt-2 mb-3 flex flex-col gap-2" data-testid="guest-comment-form">
                 <div className="flex gap-2">
                   <input
@@ -169,8 +177,8 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
                     maxLength={60}
-                    placeholder="Ваше имя"
-                    className="w-32 shrink-0 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50"
+                    placeholder={t('public.comment.name')}
+                    className="w-32 shrink-0 h-10 bg-zinc-900 border border-zinc-800 rounded-lg px-3 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50"
                   />
                   <input
                     data-testid="guest-comment-text"
@@ -178,20 +186,21 @@ export const PublicViewer: React.FC<{ token: string; isMockMode?: boolean }> = (
                     onChange={(e) => setCommentText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void handleSend(); }}
                     maxLength={2000}
-                    placeholder="Комментарий к текущему моменту видео…"
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50"
+                    placeholder={t('public.comment.text')}
+                    className="flex-1 h-10 bg-zinc-900 border border-zinc-800 rounded-lg px-3 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50"
                   />
                   <button
                     data-testid="guest-comment-send"
                     onClick={() => void handleSend()}
                     disabled={!commentText.trim() || sendingComment}
-                    className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold disabled:opacity-50 flex items-center gap-1"
+                    className="shrink-0 h-10 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold disabled:opacity-50 flex items-center gap-1"
                   >
-                    {sendingComment ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Отправить
+                    {sendingComment ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} {t('public.comment.send')}
                   </button>
                 </div>
                 {sendError && <p className="text-[10px] text-red-400">{sendError}</p>}
               </div>
+              )}
               <div className="space-y-2">
                 {payload.comments.length === 0 && <p className="text-xs text-zinc-500">Пока комментариев нет.</p>}
                 {payload.comments.map((c) => (
