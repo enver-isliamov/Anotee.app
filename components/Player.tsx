@@ -1366,7 +1366,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       let content = ''; let mime = 'text/plain'; let ext = ''; 
       if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } 
-      else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } 
+      else if (format === 'csv') { content = generateCSV(comments, videoFps); mime = 'text/csv'; ext = 'csv'; } 
       else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } 
       
       downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); 
