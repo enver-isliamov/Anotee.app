@@ -19,5 +19,12 @@ test.describe('T-21: гостевой публичный просмотр', () =
     // Навигации по проекту нет: ни дашборда, ни переходов в другие разделы
     await expect(page.getByTestId('public-viewer-error')).toHaveCount(0);
     await expect(page.locator('button:has-text("New Project")')).toHaveCount(0);
+
+    // T-369: гость может оставить комментарий (в mock-режиме — локально, без сети)
+    await page.getByTestId('guest-comment-name').fill('Клиент');
+    await page.getByTestId('guest-comment-text').fill('Поправьте титры на этом моменте');
+    await page.getByTestId('guest-comment-send').click();
+    await expect(page.getByText('Поправьте титры на этом моменте')).toBeVisible();
+    await expect(page.getByText('Клиент')).toBeVisible();
   });
 });
