@@ -334,24 +334,27 @@
 - Проверка: tsc 0 · unit 114 · целевые e2e 7 · полный e2e 57 (шаг «гость оставляет комментарий» в public-view.spec) · build 0.
 - Codex-ревью (11.10): lock проектов/версий (P1), retry .rows (P2), i18n формы (P2), 40px тач-таргеты (P2) — исправлено (be58eca); frames-замечание отклонено (контракт: timestamp комментариев в секундах).
 
-### T-370 P1 `todo` Плеер: любой участник организации получает статус isManager (права блокировки и удаления)
+### T-370 P1 `done` (a69b7f9) Плеер: любой участник организации получает статус isManager (права блокировки и удаления)
 - Проблема: `components/Player.tsx:436` — `const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);`. Любой рядовой участник организации (включая роль Viewer) получает права менеджера: видит кнопки блокировки версии, массового закрытия комментариев и удаления версий.
 - Цель: проверять статус администратора/владельца организации (`isOrgAdmin` / `isAdmin`) перед присвоением `isManager`.
 - Acceptance: рядовой участник организации без прав админа не видит управляющих кнопок менеджера в плеере.
+- Проверка: tsc 0 · unit 116 · полный e2e 57; правило как в Dashboard (isOrgAdmin по memberships).
 
 ### T-371 P1 `done` Дашборд: кнопка доната не передавала Content-Type и planType в /api/payment?action=init
 - Проблема: `components/Dashboard.tsx:156-160` — `handlePayment` вызывал `fetch('/api/payment?action=init')` без `Content-Type: application/json` и без тела `{ planType: 'donation' }`.
 - Решение: исправлено в `Dashboard.tsx` — отправляются правильные заголовки, тело и открывается `confirmationUrl` через `window.open` / fallback.
 
-### T-372 P1 `todo` Загрузка S3: при сбое presign (PUT <=64MB) выдаётся ложная ошибка «Drive not connected»
+### T-372 P1 `done` (b652ca9) Загрузка S3: при сбое presign (PUT <=64MB) выдаётся ложная ошибка «Drive not connected»
 - Проблема: `hooks/useUploadManager.ts:269-293` — при ошибке `/api/storage?action=presign` блок `if (presignRes.ok)` просто пропускается, и управление проваливается в ветку Google Drive, выдавая пользователю обманчивое сообщение «Storage Error: S3 not configured for this project, and Drive not connected.».
 - Цель: если `!presignRes.ok`, выбрасывать ошибку с реальным описанием ответа S3 presign.
 - Acceptance: при ошибке конфигурации S3 пользователь видит реальную причину отказа, а не ложный сброс на Drive.
+- Проверка: tsc 0 · целевые e2e 5 (upload) · полный e2e 57 · build 0.
 
-### T-373 P1 `todo` Экспорт NLE: имя маркера в DaVinci XML и Premiere CSV выводит userId вместо authorName
+### T-373 P1 `done` (422e6e8) Экспорт NLE: имя маркера в DaVinci XML и Premiere CSV выводит userId вместо authorName
 - Проблема: `services/exportService.ts:68, 92` — в экспорте выводится `c.userId` (Clerk ID) вместо `c.authorName || c.userId`. В таймлайне NLE вместо имени автора видна строка ID. Также в `generateCSV` таймкод выводится через `substr` без кадров.
 - Цель: выводить `c.authorName || c.userId`; таймкод в CSV формировать покадрово (HH:MM:SS:FF) с учетом FPS.
 - Acceptance: DaVinci XML и Premiere CSV содержат человекочитаемые имена авторов маркеров и точный таймкод.
+- Проверка: tsc 0 · unit 116 (имена + покадровый CSV покрыты тестами) · полный e2e 57 · build 0.
 
 ### T-374 P2 `done` (982e6d2) Плеер: модалка удаления комментария использует текст подтверждения «Удалить файл?»
 - Проблема: `components/Player.tsx:970` — `handleDeleteComment` вызывает `confirm(t('pv.delete_asset_confirm'))`, что показывает диалог «Удалить файл?» вместо подтверждения удаления комментария.
