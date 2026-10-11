@@ -14,6 +14,7 @@ import { FeatureErrorBoundary } from './FeatureErrorBoundary';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
+import { isOrgAdmin } from '../services/userUtils';
 import { useSubscription } from '../hooks/useSubscription';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { isFeatureEnabled } from '../services/entitlements';
@@ -428,12 +429,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           clearTimeout(idleTimer);
       };
   }, []);
-  const { organization } = useOrganization();
+  const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
   const { plan } = useSubscription(); // Use generic plan
   const { config } = useAppConfig();
   const { getToken } = useAuth(); // Needed for Presigned URLs
 
-  const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);
+  // T-370: права менеджера — владелец проекта или АДМИН организации (не любой участник).
+  const isOrgAdminHere = !!organization?.id && project.orgId === organization.id && isOrgAdmin(currentUser.id, memberships?.data || []);
+  const isManager = project.ownerId === currentUser.id || isOrgAdminHere;
   const isOwner = project.ownerId === currentUser.id;
 
   const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.versions.length - 1);
