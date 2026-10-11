@@ -28,14 +28,16 @@ export function areKeysInProject(keys, projectId) {
  * T-06: может ли пользователь менять настройки проекта.
  * Владелец (по id/userId/email) или участник с ролью manager/owner/admin.
  */
-export function canManageProject(user, projectRow) {
+export function canManageProject(user, projectRow, opts = {}) {
     if (!user || !projectRow) return false;
     const owner = projectRow.owner_id;
     if (owner && (owner === user.id || owner === user.userId || owner === user.email)) return true;
+    // T-368: администратор организации — управляет org-проектом (team может быть пустым).
+    const orgAdmin = Boolean(opts && opts.orgAdmin === true);
     const team = (projectRow.data && projectRow.data.team) || [];
-    if (!Array.isArray(team)) return false;
+    if (!Array.isArray(team)) return orgAdmin;
     const me = team.find((m) => m && (m.id === user.id || m.id === user.userId || m.email === user.email));
-    if (!me) return false;
+    if (!me) return orgAdmin;
     const role = String(me.role || '').toLowerCase();
     return role === 'manager' || role === 'owner' || role === 'admin';
 }

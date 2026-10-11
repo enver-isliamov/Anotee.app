@@ -90,3 +90,19 @@ describe('touchesStructuralFields / stripStructuralChanges', () => {
     expect(safe.comments).toEqual([1, 2]);
   });
 });
+
+describe('canManageProject + org admin (T-368)', () => {
+  it('админ организации управляет org-проектом при пустом team', () => {
+    const row = { owner_id: 'other', org_id: 'org_1', data: { team: [] } };
+    expect(canManageProject({ id: 'u1' }, row)).toBe(false);
+    expect(canManageProject({ id: 'u1' }, row, { orgAdmin: true })).toBe(true);
+  });
+  it('orgAdmin не даёт прав вне org-проектов (team без участника, но флаг честно выставлен вызывающим)', () => {
+    const row = { owner_id: 'other', data: { team: [{ id: 'u2', role: 'viewer' }] } };
+    expect(canManageProject({ id: 'u1' }, row, { orgAdmin: false })).toBe(false);
+  });
+  it('роль viewer в team остаётся запретом даже с флагом', () => {
+    const row = { owner_id: 'other', data: { team: [{ id: 'u1', role: 'viewer' }] } };
+    expect(canManageProject({ id: 'u1' }, row, { orgAdmin: true })).toBe(false);
+  });
+});
