@@ -5,10 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build-bible.cjs && vite build && node scripts/build-sw.cjs",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check:external": "node scripts/check-external.mjs",
+    "lint": "eslint . --max-warnings 0",
     "i18n:extract": "i18next",
-    "i18n:check": "i18next --fail-on-update"
+    "i18n:check": "i18next --fail-on-update",
+    "audit": "node scripts/audit.cjs",
+    "verify": "npm run lint && npm run test && npm run audit",
+    "test:e2e:offline": "playwright test --config=playwright.offline.config.ts",
+    "bible:build": "node scripts/build-bible.cjs",
+    "bible:add": "node scripts/bible-add.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
@@ -19,23 +29,31 @@
     "@huggingface/transformers": "^3.0.0",
     "@vercel/blob": "^0.22.1",
     "@vercel/postgres": "^0.10.0",
+    "i18next": "^23.10.0",
+    "i18next-browser-languagedetector": "^7.2.0",
+    "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "lucide-react": "^0.469.0",
-    "uuid": "^9.0.1",
-    "i18next": "^23.10.0",
     "react-i18next": "^14.1.0",
-    "i18next-browser-languagedetector": "^7.2.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.4.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.3.0",
-    "vite": "^5.0.0",
     "autoprefixer": "^10.4.16",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "i18next-parser": "^9.0.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
-    "i18next-parser": "^9.0.0"
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vitest": "^4.1.11"
   }
 }

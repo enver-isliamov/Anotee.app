@@ -1,19 +1,25 @@
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Dashboard } from './components/Dashboard';
-import { ProjectView } from './components/ProjectView';
-import { Player } from './components/Player';
 import { Login } from './components/Login';
-import { Profile } from './components/Profile';
-import { AdminPanel } from './components/AdminPanel';
-import { TestRunner } from './components/TestRunner'; // Import the new component
-import { WorkflowPage, AboutPage, PricingPage, AiFeaturesPage } from './components/StaticPages';
-import { RoadmapPage } from './components/Roadmap/RoadmapPage';
-import { LegalPage } from './components/LegalPages';
-import { LiveDemo } from './components/LiveDemo';
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const TestRunner = lazy(() => import('./components/TestRunner').then(m => ({ default: m.TestRunner })));
+const PublicViewer = lazy(() => import('./components/PublicViewer').then(m => ({ default: m.PublicViewer })));
+const WorkflowPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.WorkflowPage })));
+const AboutPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.AboutPage })));
+const PricingPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.PricingPage })));
+const AiFeaturesPage = lazy(() => import('./components/StaticPages').then(m => ({ default: m.AiFeaturesPage })));
+const RoadmapPage = lazy(() => import('./components/Roadmap/RoadmapPage').then(m => ({ default: m.RoadmapPage })));
+const LegalPage = lazy(() => import('./components/LegalPages').then(m => ({ default: m.LegalPage })));
+const LiveDemo = lazy(() => import('./components/LiveDemo').then(m => ({ default: m.LiveDemo })));
+// T-11: тяжёлые экраны — в ленивые чанки (Player ~143 KB, Profile ~77 KB, ProjectView ~53 KB)
+const Player = lazy(() => import('./components/Player').then(m => ({ default: m.Player })));
+const ProjectView = lazy(() => import('./components/ProjectView').then(m => ({ default: m.ProjectView })));
+const Profile = lazy(() => import('./components/Profile').then(m => ({ default: m.Profile })));
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from './types';
 import { generateId } from './services/utils';
+import { generateInitialsAvatar } from './services/avatarUtils';
 import { LanguageProvider, LanguageCloudSync } from './services/i18n';
 import { ThemeProvider, ThemeCloudSync } from './services/theme';
 import { MainLayout } from './components/MainLayout';
@@ -24,15 +30,23 @@ import { Loader2, UploadCloud, X, CheckCircle, AlertCircle, RefreshCw, PartyPopp
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { useUploadManager } from './hooks/useUploadManager';
+import { setToastHandler } from './services/toastBus';
+import { registerServiceWorker } from './services/swRegister';
+import { OfflineBanner } from './components/OfflineBanner';
 import { DriveProvider, useDrive } from './services/driveContext';
 import { OnboardingWidget } from './components/OnboardingWidget';
 import useSWR, { mutate } from 'swr';
+
+const LazyFallback = () => (
+  <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500" size={28} /></div>
+);
 
 type ViewState = 
   | { type: 'DASHBOARD' }
   | { type: 'PROJECT_VIEW', projectId: string, restrictedAssetId?: string }
   | { type: 'PLAYER', assetId: string, projectId: string, restrictedAssetId?: string }
   | { type: 'PROFILE' }
+  | { type: 'SETTINGS' }
   | { type: 'ADMIN' }
   | { type: 'ROADMAP' }
   | { type: 'WORKFLOW' }
@@ -49,8 +63,8 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
     if (tasks.length === 0) return null;
 
     return (
-        <div className="fixed bottom-4 right-4 z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300">
-            <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700">
+        <div className="fixed top-32 right-4 z-[9998] w-80 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 duration-300" data-testid="upload-widget">
+            <div className="bg-zinc-800/80 px-4 py-2 flex justify-between items-center border-b border-zinc-700">
                 <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
                     <UploadCloud size={14} /> Uploads ({tasks.length})
                 </span>
@@ -67,12 +81,10 @@ const UploadWidget: React.FC<{ tasks: UploadTask[], onClose: (id: string) => voi
                                 {task.status === 'done' && <CheckCircle size={14} className="text-green-500" />}
                                 {task.status === 'error' && <AlertCircle size={14} className="text-red-500" />}
                                 {task.status === 'uploading' && <span className="text-[10px] font-mono font-bold text-indigo-500">{task.progress}%</span>}
-                                {(task.status === 'done' || task.status === 'error') && (
-                                    <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
-                                        <X size={12} />
-                                    </button>
-                                )}
-                            </div>
+                                <button onClick={() => onClose(task.id)} className="ml-2 text-zinc-400 hover:text-zinc-200 p-1" title={task.status === 'uploading' ? 'Прервать загрузку' : 'Закрыть'}>
+                                    <X size={12} />
+                                </button>
+                                </div>
                         </div>
                         {task.status === 'uploading' && (
                             <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1 mt-1 overflow-hidden">
@@ -133,12 +145,15 @@ interface AppLayoutProps {
     userObj?: any;
 }
 
+function usePageVisibility() { const [v, setV] = React.useState(typeof document === 'undefined' ? true : !document.hidden); React.useEffect(() => { const h = () => setV(!document.hidden); document.addEventListener('visibilitychange', h); return () => document.removeEventListener('visibilitychange', h); }, []); return v; }
 const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, getToken, signOut, mockSignIn, authMode, organization, userObj }) => {
   const isMockMode = authMode === 'mock';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [view, setView] = useState<ViewState>({ type: 'DASHBOARD' });
   const [isSyncing, setIsSyncing] = useState(false);
+  // T-158: применить доступное обновление приложения (Service Worker)
+  const [swUpdate, setSwUpdate] = useState<null | (() => void)>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   
@@ -185,7 +200,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   // Smart Polling Logic: 
   // - If Player is ACTIVE (playing/interacting): Poll every 15s
   // - If Player is IDLE or Dashboard: Poll every 5 minutes (300s) to save resources
-  const pollingInterval = isPlayerActive ? 15000 : 300000;
+  const isPageVisible = usePageVisibility();
+  const pollingInterval = isPlayerActive && isPageVisible ? 45000 : 1800000; // T-48: экономия Vercel Edge Requests (75% лимита)
 
   const { data: serverProjects, mutate: mutateProjects } = useSWR(getKey, fetcher, {
       refreshInterval: pollingInterval, 
@@ -196,6 +212,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
   });
 
   // Sync SWR Data to Local State (Preserving Blob URLs)
+  useEffect(() => {
+    // T-158: сама регистрация SW — в index.tsx; здесь только ловим событие «доступно обновление»
+    const handler = () => {
+      navigator.serviceWorker?.getRegistration().then((reg) => {
+        reg?.addEventListener('updatefound', () => {
+          const inst = reg.installing;
+          inst?.addEventListener('statechange', () => {
+            if (inst.state === 'installed' && navigator.serviceWorker.controller) {
+              setSwUpdate(() => () => { inst.postMessage({ type: 'SKIP_WAITING' }); window.location.reload(); });
+            }
+          });
+        });
+      }).catch(() => {});
+    };
+    handler();
+  }, []);
+
   useEffect(() => {
       if (serverProjects && Array.isArray(serverProjects)) {
           if (Date.now() - lastLocalUpdateRef.current < 2000) return;
@@ -240,6 +273,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
     const id = generateId();
     setToasts(prev => [...prev, { id, message, type }]);
   };
+  React.useEffect(() => { setToastHandler((m, t) => notify(m, (t as any) || 'info')); }, [notify]);
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -298,6 +332,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             setView({ type: 'WORKFLOW' });
         } else if (path === '/ai') {
             setView({ type: 'AI_FEATURES' });
+        } else if (path === '/settings') {
+            setView({ type: 'SETTINGS' });
         } else if (path === '/profile') {
             setView({ type: 'PROFILE' });
         } else if (path === '/demo') {
@@ -344,7 +380,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         setCurrentUser({
             id: clerkUser.id,
             name: clerkUser.fullName || clerkUser.firstName || 'User',
-            avatar: clerkUser.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dev',
+            avatar: clerkUser.imageUrl || generateInitialsAvatar(clerkUser.fullName || clerkUser.id || 'Dev'),
             email: clerkUser.primaryEmailAddress?.emailAddress,
             isAdmin: role === 'admin' || role === 'superadmin'
         });
@@ -394,10 +430,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           setIsSyncing(true);
           const updates = await api.syncProjects(projectsData, currentUser, token);
           if (updates && updates.length > 0) {
+              // T-05: сервер сообщает о конфликтах версий — принимаем серверные данные вместо локальных
+              const conflicts = updates.filter((u: any) => u && u.status === 'conflict' && u.server);
               setProjects(current => current.map(p => {
+                  const conflict = conflicts.find((u: any) => u.id === p.id);
+                  if (conflict) return { ...conflict.server };
                   const update = updates.find((u: any) => u.id === p.id);
-                  return update ? { ...p, _version: update._version } : p;
+                  return update && update._version ? { ...p, _version: update._version } : p;
               }));
+              if (conflicts.length > 0) {
+                  notify('Version conflict: server data applied', 'warning');
+              }
               mutateProjects();
           }
       } catch (e: any) {
@@ -481,6 +524,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'ABOUT': path = '/about'; break;
           case 'PRICING': path = '/pricing'; break;
           case 'PROFILE': path = '/profile'; break;
+          case 'SETTINGS': path = '/settings'; break;
           case 'ADMIN': path = '/admin'; break; 
           case 'AI_FEATURES': path = '/ai'; break;
           case 'LIVE_DEMO': path = '/demo'; break;
@@ -498,6 +542,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
           case 'ABOUT': setView({ type: 'ABOUT' }); break;
           case 'PRICING': setView({ type: 'PRICING' }); break;
           case 'PROFILE': setView({ type: 'PROFILE' }); break;
+          case 'SETTINGS': setView({ type: 'SETTINGS' }); break;
           case 'ADMIN': setView({ type: 'ADMIN' }); break; 
           case 'AI_FEATURES': setView({ type: 'AI_FEATURES' }); break;
           case 'LIVE_DEMO': setView({ type: 'LIVE_DEMO' }); break;
@@ -625,8 +670,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
         </div>
   );
 
-  if (view.type === 'LIVE_DEMO') return <LiveDemo onBack={() => handleNavigate('DASHBOARD')} />;
-  if (view.type === 'TEST_RUNNER') return <TestRunner onBack={() => handleNavigate('DASHBOARD')} />; // New Render
+  if (view.type === 'LIVE_DEMO') return <Suspense fallback={<LazyFallback />}><LiveDemo onBack={() => handleNavigate('DASHBOARD')} /></Suspense>;
+  if (view.type === 'TEST_RUNNER' && window.location.hostname !== 'anotee.com') return <Suspense fallback={<LazyFallback />}><TestRunner onBack={() => handleNavigate('DASHBOARD')} /></Suspense>;
 
   const currentAsset = (view.type === 'PLAYER' && currentProject) ? currentProject.assets.find(a => a.id === view.assetId) : null;
 
@@ -634,15 +679,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       if (['ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type)) {
           return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
-                <MainLayout currentUser={null} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}>
-                    {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => setIsAuthModalOpen(true)} />}
+                <MainLayout currentUser={null} currentView={view.type} onNavigate={handleNavigate} onBack={handleBackToDashboard}><Suspense fallback={<LazyFallback />}>
+                    {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => {}} />}
                     {view.type === 'WORKFLOW' && <WorkflowPage />}
                     {view.type === 'ABOUT' && <AboutPage />}
                     {view.type === 'PRICING' && <PricingPage />}
                     {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
                     {view.type === 'TERMS' && <LegalPage type="TERMS" />}
                     {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
-                </MainLayout>
+                </Suspense></MainLayout>
+                <OfflineBanner updateAvailable={Boolean(swUpdate)} onApplyUpdate={() => swUpdate && swUpdate()} />
                 <ToastContainer toasts={toasts} removeToast={removeToast} />
             </div>
           );
@@ -650,9 +696,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
       return <><Login onLogin={() => {}} onNavigate={handleNavigate} />{isMockMode && <div className="fixed bottom-0 w-full bg-yellow-500 text-black text-center text-xs font-bold">PREVIEW MODE</div>}</>;
   }
 
-  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></div>;
+  if (view.type === 'ADMIN') return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"><Suspense fallback={<LazyFallback />}><AdminPanel onBack={handleBackToDashboard} onNavigate={handleNavigate} /></Suspense></div>;
 
-  const isPlatformView = ['DASHBOARD', 'PROFILE', 'ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
+  const isPlatformView = ['DASHBOARD', 'PROFILE', 'SETTINGS', 'ROADMAP', 'WORKFLOW', 'ABOUT', 'PRICING', 'AI_FEATURES', 'TERMS', 'PRIVACY'].includes(view.type);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
@@ -664,7 +710,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 onNavigate={handleNavigate} 
                 onBack={handleBackToDashboard}
                 onStartTour={handleStartTour}
-            >
+            ><Suspense fallback={<LazyFallback />}>
                 {view.type === 'DASHBOARD' && (
                 <Dashboard 
                     projects={projects} 
@@ -680,19 +726,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                     setCreateModalOpen={setCreateModalOpen}
                 />
                 )}
-                {view.type === 'PROFILE' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} />}
-                {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => setIsAuthModalOpen(true)} />}
+                {view.type === 'PROFILE' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} initialSection="profile" />}
+        {view.type === 'SETTINGS' && <Profile currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} initialSection="settings" />}
+                {view.type === 'ROADMAP' && <RoadmapPage currentUser={currentUser} onLoginRequest={() => {}} />}
                 {view.type === 'WORKFLOW' && <WorkflowPage />}
                 {view.type === 'ABOUT' && <AboutPage />}
                 {view.type === 'PRICING' && <PricingPage />}
                 {view.type === 'AI_FEATURES' && <AiFeaturesPage />}
                 {view.type === 'TERMS' && <LegalPage type="TERMS" />}
                 {view.type === 'PRIVACY' && <LegalPage type="PRIVACY" />}
-            </MainLayout>
+            </Suspense></MainLayout>
         )}
 
         {view.type === 'PROJECT_VIEW' && currentProject && (
           <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
             <ProjectView 
                 project={currentProject} 
                 currentUser={currentUser}
@@ -707,10 +755,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 cancelUpload={cancelUpload}
                 onStartTour={handleStartTour} // PASSED PROP
             />
+            </Suspense>
           </ErrorBoundary>
         )}
         {view.type === 'PLAYER' && currentProject && currentAsset && (
           <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
             <Player 
                 asset={currentAsset} 
                 project={currentProject}
@@ -722,13 +772,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
                 notify={notify}
                 isMockMode={isMockMode}
                 setIsPlayerActive={setIsPlayerActive} // Pass Smart Polling Control
+          uploadTasks={uploadTasks}
+          cancelUpload={cancelUpload}
+                onOpenStorageSettings={() => handleNavigate('SETTINGS')}
             />
+            </Suspense>
           </ErrorBoundary>
         )}
         
-        {view.type !== 'PROJECT_VIEW' && (
-            <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
-        )}
+{view.type !== 'PROJECT_VIEW' && !isPlayerActive && (
+  <UploadWidget tasks={uploadTasks} onClose={removeUploadTask} />
+)}
         
         {tourTargetId && (
             <OnboardingWidget 
@@ -744,7 +798,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ clerkUser, isLoaded, isSignedIn, 
             />
         )}
 
-        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <OfflineBanner updateAvailable={Boolean(swUpdate)} onApplyUpdate={() => swUpdate && swUpdate()} />
+                <ToastContainer toasts={toasts} removeToast={removeToast} />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {isMockMode && <div className="fixed bottom-0 w-full bg-yellow-500/90 text-black text-center text-xs font-bold pointer-events-none z-[100]">PREVIEW MODE</div>}
       </main>
@@ -760,6 +815,15 @@ const AuthWrapper: React.FC = () => {
 };
 
 const App: React.FC = () => {
+    // T-21: гостевые ссылки /v/<token> — просмотр одной версии без регистрации.
+    // Рендерим PublicViewer БЕЗ AppLayout: никаких других разделов проекта недоступно.
+    const publicToken = typeof window !== 'undefined' && window.location.pathname.startsWith('/v/') ? window.location.pathname.split('/')[2] : null;
+    if (publicToken) {
+        const guestEnv = (import.meta as any).env || {};
+        const guestKey = guestEnv.VITE_CLERK_PUBLISHABLE_KEY;
+        const guestMock = !guestKey || guestKey.includes('placeholder') || guestKey.includes('YOUR_') || guestKey.length < 20;
+        return <ErrorBoundary><Suspense fallback={<LazyFallback />}>{guestMock ? <LanguageProvider><PublicViewer token={publicToken} isMockMode /></LanguageProvider> : <ClerkProvider publishableKey={guestKey}><LanguageProvider><PublicViewer token={publicToken} /></LanguageProvider></ClerkProvider>}</Suspense></ErrorBoundary>;
+    }
     const env = (import.meta as any).env || {};
     const clerkPubKey = env.VITE_CLERK_PUBLISHABLE_KEY;
     const isMockMode = !clerkPubKey || 
@@ -769,7 +833,10 @@ const App: React.FC = () => {
         clerkPubKey.length < 20;
 
     if (isMockMode) {
-        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'mock-user', fullName: 'Mock User', imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mock', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={true} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
+        // T-173: e2e может смоделировать неавторизованного пользователя в mock-режиме
+        // (в проде эта ветка не выполняется: она требует отсутствия VITE_CLERK_PUBLISHABLE_KEY).
+        const e2eGuest = typeof window !== 'undefined' && !!window.localStorage.getItem('anotee_e2e_guest');
+        return <ErrorBoundary><LanguageProvider><ThemeProvider><DriveProvider isMockMode={true}><AppLayout clerkUser={{ id: 'u1', fullName: 'Andrey (Creator)', imageUrl: '/img/avatar-mock.svg', primaryEmailAddress: { emailAddress: 'mock@example.com' } }} isLoaded={true} isSignedIn={!e2eGuest} getToken={async () => 'mock-token'} signOut={async () => window.location.reload()} mockSignIn={() => {}} authMode="mock" /></DriveProvider></ThemeProvider></LanguageProvider></ErrorBoundary>;
     }
     return <ErrorBoundary><ClerkProvider publishableKey={clerkPubKey}><LanguageProvider><ThemeProvider><LanguageCloudSync /><ThemeCloudSync /><DriveProvider isMockMode={false}><AuthWrapper /></DriveProvider></ThemeProvider></LanguageProvider></ClerkProvider></ErrorBoundary>;
 };

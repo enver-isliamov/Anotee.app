@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /panel
+Disallow: /admin
+Disallow: /test
+Disallow: /v/
+
+Sitemap: https://anotee.com/sitemap.xml

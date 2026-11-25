@@ -1,0 +1,86 @@
+import { test, expect } from '@playwright/test';
+import { resetMockData } from './support';
+
+// T-133: новый поток подключения хранилища (мастер в 3 шага удалён)
+test('хранилище: без мастера, есть подключение по токену и ссылки-инструкции', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetMockData(page);
+  await page.goto('/');
+  await page.waitForTimeout(1200);
+  const profileBtn = page.locator('[data-testid="tour-profile-btn"], [title*="рофил"], [title*="Profile"]');
+  if (await profileBtn.count()) { await profileBtn.first().click(); } else { await page.goto('/profile'); }
+  await page.waitForTimeout(1000);
+
+  // T-169: хранилище живёт в разделе «Настройки»
+  await page.goto('/settings');
+  await page.waitForTimeout(1200);
+
+  // мастера больше нет
+  await expect(page.getByTestId('wizard-open')).toHaveCount(0);
+  await expect(page.getByTestId('wizard-overlay')).toHaveCount(0);
+
+  // карточки провайдеров и ручная настройка (T-328: автозаполнение удалено по просьбе владельца)
+  await expect(page.getByTestId('provider-card-cloudflare')).toBeVisible();
+  await page.getByTestId('provider-card-cloudflare').click();
+  await page.waitForTimeout(600);
+  // автозаполнения больше нет
+  await expect(page.getByTestId('cf-token-open')).toHaveCount(0);
+  await expect(page.getByTestId('cf-token-modal')).toHaveCount(0);
+  // инструкция «Как получить ключи» доступна в панели и содержит нужные шаги
+  await expect(page.getByTestId('provider-help')).toBeVisible();
+  await page.getByTestId('provider-help').click();
+  await page.waitForTimeout(400);
+  const helpText = await page.getByTestId('provider-help-steps').innerText();
+  expect(helpText).toMatch(/Create Account API token/);
+  expect(helpText).toMatch(/Success/);
+  // поля ручного ввода на месте
+  await expect(page.locator('input[value][placeholder], input').first()).toBeVisible();
+});
+
+test('«Профиль» и «Настройки» — разные страницы, навигация из шапки', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetMockData(page);
+
+  // страница профиля: аккаунт и подписка; хранилища нет; переключателя вкладок нет
+  await page.goto('/profile');
+  await page.waitForTimeout(1200);
+  expect(await page.evaluate(() => location.pathname)).toBe('/profile');
+  await expect(page.locator('#profile-block')).toBeVisible();
+  await expect(page.getByTestId('subscription-block')).toBeVisible();
+  await expect(page.locator('#storage-block')).toBeHidden();
+  await expect(page.getByTestId('section-settings')).toHaveCount(0);
+  await expect(page.getByTestId('section-profile')).toHaveCount(0);
+
+  // шестерёнка в шапке открывает отдельную страницу настроек
+  await page.getByTestId('header-settings').click();
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => location.pathname), 'шестерёнка не привела на /settings').toBe('/settings');
+  await expect(page.locator('#storage-block')).toBeVisible();
+  await expect(page.locator('#profile-block')).toBeHidden();
+
+  // аватар в шапке возвращает в профиль
+  await page.getByTestId('header-profile-avatar').click();
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => location.pathname), 'аватар не привёл на /profile').toBe('/profile');
+  await expect(page.locator('#profile-block')).toBeVisible();
+});
+
+test('хранилище: у провайдеров есть свои ссылки-инструкции', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetMockData(page);
+  await page.goto('/profile');
+  await page.waitForTimeout(1200);
+  // T-169: ссылки-инструкции живут в разделе «Настройки»
+  await page.goto('/settings');
+  await page.waitForTimeout(1200);
+
+  for (const pid of ['yandex', 'cloudflare', 'selectel']) {
+    const card = page.getByTestId('provider-card-' + pid);
+    if (await card.count()) {
+      await card.click();
+      await page.waitForTimeout(700);
+      const links = await page.locator('a[target="_blank"]').evaluateAll((els) => els.map((e) => e.getAttribute('href') || ''));
+      expect(links.length, pid + ': нет ссылок-инструкций').toBeGreaterThan(0);
+    }
+  }
+});

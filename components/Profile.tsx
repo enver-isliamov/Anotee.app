@@ -1,7 +1,8 @@
-
+﻿
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { toast } from '../services/toastBus';
 import { User, S3Config } from '../types';
-import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { Crown, Database, Check, AlertCircle, Shield, ArrowUpCircle, Heart, Zap, Loader2, HardDrive, Server, Globe, Key, Cloud, CheckCircle2, RefreshCw, HelpCircle, X, ExternalLink, AlertTriangle, Wand2, Edit2, LayoutTemplate, LogOut, Power, Settings, Eye, EyeOff, Lock, Unlock , Wrench } from 'lucide-react';
 import { RoadmapBlock } from './RoadmapBlock';
 import { useLanguage } from '../services/i18n';
 import { useAuth, useUser } from '@clerk/clerk-react';
@@ -15,10 +16,17 @@ interface ProfileProps {
   currentUser: User;
   onLogout: () => void;
   onNavigate?: (page: string) => void;
+  initialSection?: 'profile' | 'settings';
 }
 
 // Added 'google' to generic type for UI handling
 type ExtendedProvider = S3Config['provider'] | 'google';
+
+/** T-316: из ссылки https://<accountId>.r2.cloudflarestorage.com вытаскиваем Account ID. */
+const parseR2Endpoint = (value: string): string | null => {
+    const m = String(value || '').match(/^https?:\/\/([a-f0-9]{32})\.r2\.cloudflarestorage\.com\/?/i);
+    return m ? m[1] : null;
+};
 
 const S3_PRESETS: Record<string, Partial<S3Config>> = {
     yandex: {
@@ -45,7 +53,12 @@ const S3_PRESETS: Record<string, Partial<S3Config>> = {
         provider: 'custom', 
         endpoint: '',
         region: ''
-    }
+    },
+    custom: {
+        provider: 'custom',
+        endpoint: '',
+        region: ''
+    },
 };
 
 const CORS_CONFIG_JSON = `[
@@ -61,39 +74,41 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     yandex: {
         title: 'Yandex Object Storage',
         steps: [
-            'Создайте Бакет в консоли Object Storage.',
-            'Перейдите в раздел "Сервисные аккауты" (в меню слева).',
-            'Создайте новый аккаунт и ВАЖНО: добавьте ему роль "storage.editor" (Редактор хранилища).',
-            'Нажмите на созданный аккаунт -> "Создать новый ключ" -> "Создать статический ключ доступа".',
-            'Скопируйте "Идентификатор ключа" (Access Key) и "Секретный ключ" (Secret Key).'
+            'В консоли Yandex Cloud откройте каталог → сервис Object Storage → создайте бакет.',
+            'Слева выберите «Сервисные аккаунты» → «Создать сервисный аккаунт».',
+            'Обязательно выдайте роль storage.editor — без неё загрузка не заработает.',
+            'Откройте сервисный аккаунт → «Создать новый ключ» → «Создать статический ключ доступа».',
+            'Скопируйте «Идентификатор ключа» и «Секретный ключ» в поля ниже; Endpoint и регион уже подставлены.',
+            'Документация: yandex.cloud/ru/docs/storage'
         ],
-        link: 'https://console.cloud.yandex.ru/',
+        link: 'https://console.yandex.cloud/',
         linkText: 'Открыть консоль Yandex',
         warning: 'Если не выдать роль storage.editor, загрузка работать не будет!'
     },
     cloudflare: {
         title: 'Cloudflare R2',
         steps: [
-            '1. Зайдите в R2 Overview. Справа "Account Details" -> Скопируйте "Account ID".',
-            '2. Ваш Endpoint должен выглядеть так: https://<AccountID>.r2.cloudflarestorage.com (БЕЗ имени бакета!).',
-            '3. Справа нажмите "Manage R2 API Tokens" -> "Create API token".',
-            '4. Permissions: выберите "Admin Read & Write".',
-            '5. Нажмите "Create". Скопируйте "Access Key ID" и "Secret Access Key".'
+            '1. Откройте R2 → Manage API Tokens (кнопка ниже) и нажмите зелёную «Create Account API token».',
+            '2. В правах выберите «Admin Read & Write» (Object Read & Write) — этого достаточно для загрузки и раздачи файлов.',
+            '3. После создания откроется страница Success: там сразу видны Access Key ID и Secret Access Key (Secret показывается один раз!).',
+            '4. Скопируйте оба значения в поля ниже: Access Key ID → «Access Key ID», Secret Access Key → «Secret Access Key».',
+            '5. Account ID — в правом сайдбаре R2 («Account Details»); если вставить ссылку вида https://<Account ID>.r2.cloudflarestorage.com в поле Endpoint, приложение определит Account ID автоматически.'
         ],
-        link: 'https://dash.cloudflare.com/?to=/:account/r2',
-        linkText: 'Открыть Cloudflare R2',
-        warning: 'В поле Endpoint вставляйте URL аккаунта, а не бакета. Бакет указывается отдельно.'
+        link: 'https://dash.cloudflare.com/?to=/:account/r2/api-tokens',
+        linkText: 'Открыть R2 → Manage API Tokens',
+        warning: 'Access Key ID и Secret Access Key — это пара из токена R2 (страница Success). Сам API-токен нужен только для автозаполнения Account ID и Endpoint.'
     },
     selectel: {
         title: 'Selectel Storage',
         steps: [
-            'Создайте контейнер (бакет) в разделе "Облачное хранилище".',
-            'Перейдите в раздел "Управление доступом" -> "Пользователи".',
-            'Создайте пользователя с ролью "Администратор облачного хранилища".',
-            'Имя пользователя — это Access Key. Пароль пользователя — это Secret Key.',
-            'Endpoint всегда: https://s3.storage.selcloud.ru'
+            'В панели Selectel откройте «Объектное хранилище» → создайте контейнер (или используйте существующий).',
+            'Перейдите в «Пользователи» (управление доступом к хранилищу).',
+            'Создайте пользователя с ролью «Администратор объектного хранилища».',
+            'Имя пользователя = Access Key ID, пароль = Secret Access Key.',
+            'Endpoint уже подставлен: https://s3.storage.selcloud.ru (регион ru-1).',
+            'Документация: docs.selectel.ru/s3/'
         ],
-        link: 'https://my.selectel.ru/storage',
+        link: 'https://my.selectel.ru/',
         linkText: 'Открыть Selectel'
     },
     aws: {
@@ -110,8 +125,10 @@ const PROVIDER_GUIDES: Record<string, { title: string, steps: string[], link: st
     }
 };
 
-export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout }) => {
+export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLogout, initialSection = 'profile' }) => {
   const { t } = useLanguage();
+  // T-212: «Профиль» и «Настройки» — РАЗНЫЕ страницы (/profile и /settings), а не вкладки.
+  const section: 'profile' | 'settings' = initialSection;
   const { getToken } = useAuth();
   const { plan, expiresAt, checkStatus, isPro, isLifetime } = useSubscription();
   const { user } = useUser();
@@ -141,7 +158,28 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const [isSavingS3, setIsSavingS3] = useState(false);
   const [s3Saved, setS3Saved] = useState(false);
   const [isS3Loading, setIsS3Loading] = useState(true);
-  
+    const [noConfigFound, setNoConfigFound] = useState(false);
+  // T-14x: сетевой обрыв (VPN/интернет) не должен выглядеть как «хранилище пропало»
+  const [configNetError, setConfigNetError] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const configRetryRef = useRef(0);
+  const [secretBroken, setSecretBroken] = useState(false);
+  const handleResetConfig = async () => {
+    if (!confirm('Сбросить конфигурацию хранилища? Сохранённые ключи для аккаунта будут удалены, после чего введите их заново.')) return;
+    try { const token = await getToken(); await fetch('/api/storage?action=reset_config', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); setNoConfigFound(true); setSecretBroken(false); setS3Form((pr: any) => ({ ...pr, secretAccessKey: '', accessKeyId: '' })); setTestResult({ success: false, message: 'Конфиг сброшен — введите ключи заново и нажмите Test.' }); toast('Конфигурация хранилища сброшена', 'success'); } catch (e: any) { toast(e?.message || 'Не удалось сбросить', 'error'); }
+  };
+  const [configOwner, setConfigOwner] = useState('');
+    const [storagePrefs, setStoragePrefs] = useState<{ activeProvider: string | null; disabled: string[] }>({ activeProvider: null, disabled: [] });
+    const [configuredProviders, setConfiguredProviders] = useState<string[]>([]); // T-93: настроенные S3-провайдеры (с сервера)
+
+  const saveStoragePrefs = async (activeProvider: string, disabled: string[], auditAction: string) => {
+    try {
+      const token = await getToken();
+      await fetch('/api/storage?action=storage_prefs', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ activeProvider, disabled, auditAction }) });
+    } catch { /* prefs не критичны */ }
+  }; // 0=off 1=cf 2=keys 3=auto
+    
   // Sensitive Data Visibility Toggles
   const [showAccessKey, setShowAccessKey] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
@@ -155,12 +193,12 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   });
   
   const [isTestingS3, setIsTestingS3] = useState(false);
+  const [isApplyingCors, setIsApplyingCors] = useState(false);
   const [isConfiguringCors, setIsConfiguringCors] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   
   // Helpers
   const [showCorsHelp, setShowCorsHelp] = useState(false);
-  const [showProviderHelp, setShowProviderHelp] = useState(false);
   const [showCnameHelp, setShowCnameHelp] = useState(false);
 
   const [migrationStatus, setMigrationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -184,10 +222,29 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       const loadS3Config = async () => {
           try {
               const token = await getToken();
-              const res = await fetch('/api/storage?action=config', {
-                  headers: { 'Authorization': `Bearer ${token}` }
+              if ((s3Form.secretAccessKey || '') === '********' && noConfigFound) {
+        toast('Очистите поле «Secret Access Key» и введите ключ заново — в базе для этого аккаунта ещё нет сохранённого конфига.');
+        return;
+      }
+      // T-360: токен Clerk может быть ещё не готов в момент монтирования (гонка) — ретраим 401,
+      // иначе активным оставался дефолтный google и «подключение не запоминалось» после перезагрузки.
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+              const t = (await getToken()) || token;
+              res = await fetch('/api/storage?action=config', {
+                  headers: { 'Authorization': `Bearer ${t}` }
               });
-              if (res.ok) {
+              if (res.status !== 401) break;
+          } catch {
+              // T-14x: сетевой обрыв — ретраим, состояние хранилища не сбрасываем
+              res = null;
+          }
+          if (attempt < 3) {
+              await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
+      }
+      if (res && res.ok) {
                   const data = await res.json();
                   if (data) {
                       const loadedConfig = {
@@ -200,7 +257,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                           publicUrl: data.publicUrl || ''
                       };
                       
-                      // Set Active Provider
+                      setConfigOwner(data.configOwner || user?.id || '');
+        setSecretBroken(!!data.secretIsMask);
+        setConfiguredProviders(Array.isArray((data as any).configured) ? (data as any).configured : []);
+        try { const token = await getToken(); const pr = await fetch('/api/storage?action=storage_prefs', { headers: { 'Authorization': `Bearer ${token}` } }); const pd = await pr.json(); if (pd.success && pd.activeProvider) { setStoragePrefs({ activeProvider: pd.activeProvider, disabled: pd.disabled || [] }); if (S3_PRESETS[pd.activeProvider]) setSelectedTab(pd.activeProvider); } } catch { /* prefs опциональны */ }
+        // Set Active Provider
                       if (data.provider && data.endpoint) {
                           setActiveProvider(data.provider);
                           setSelectedTab(data.provider);
@@ -213,7 +274,28 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                       }
                   } else {
                       setActiveProvider('google');
-                      setSelectedTab('google');
+                      setSelectedTab('google'); setNoConfigFound(true); setConfiguredProviders([]);
+                  }
+              }
+              if (res && res.ok) {
+                  setConfigNetError(false);
+                  configRetryRef.current = 0;
+                  setConfigLoaded(true);
+              } else if (res && res.status === 401) {
+                  // после ретраев всё ещё 401 — повторим загрузку чуть позже, НЕ сбрасывая на google
+                  console.warn('storage config: 401 after retries, will retry');
+                  setTimeout(() => { void loadS3Config(); }, 2500);
+              } else {
+                  // T-14x: сеть недоступна или сервер не ответил (5xx) — показываем понятный статус
+                  // и повторяем в фоне (до 12 раз), не подменяя активное хранилище «Google».
+                  const status = res ? res.status : 0;
+                  if (!res || status >= 500) {
+                      console.warn('storage config: network/server error, will retry');
+                      setConfigNetError(true);
+                      if (configRetryRef.current < 12) {
+                          configRetryRef.current += 1;
+                          setTimeout(() => { void loadS3Config(); }, 5000);
+                      }
                   }
               }
           } catch (e) {
@@ -223,7 +305,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           }
       };
       loadS3Config();
-  }, [getToken]);
+  }, [getToken, retryTick]);
 
   // Tab Switching Logic with Caching
   const handleTabSwitch = (newTab: ExtendedProvider) => {
@@ -251,7 +333,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               // If we switch to a tab we haven't visited yet:
               
               // Load preset defaults
-              const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'];
+              const preset = S3_PRESETS[newTab] || S3_PRESETS['custom'] || {};
               setS3Form({
                   provider: newTab as any,
                   bucket: '',
@@ -278,13 +360,49 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       }
   };
 
+
+  // T-93: переключение активного хранилища одним кликом (без повторного ввода ключей)
+    const handleSwitchProvider = async (pid: ExtendedProvider) => {
+        if (activeProvider === pid) { setSelectedTab(pid); return; }
+        try {
+            const token = await getToken();
+            const res = await fetch('/api/storage?action=switch_provider', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: pid }) });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                setActiveProvider(pid); setSelectedTab(pid);
+                toast(`Активное хранилище: ${pid === 'google' ? 'Google Drive' : (S3_PRESETS[pid]?.provider || pid)}`);
+                // подтянуть конфиг активного провайдера в форму
+                const cfg = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (cfg.ok) { const d = await cfg.json(); if (d && d.provider === pid && d.endpoint) { setS3Form({ provider: d.provider, bucket: d.bucket, endpoint: d.endpoint, region: d.region, accessKeyId: d.accessKeyId, secretAccessKey: d.secretAccessKey, publicUrl: d.publicUrl || '' }); setNoConfigFound(false); } }
+            } else { toast(data.error || 'Не удалось переключить хранилище'); }
+        } catch (e: any) { toast(e?.message || 'Сбой сети'); }
+    };
+
+
+
+
+    const handleMigrateStorage = async () => {
+    if (!confirm('Починить источники видео: версии с Google Drive получат корректный тип storage. Продолжить?')) return;
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/storage?action=migrateStorage', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok && data.success) toast(`Готово: исправлено версий — ${data.fixed}. Иконки источников теперь корректны.`);
+      else toast(data.error || 'Не удалось выполнить миграцию');
+    } catch (e: any) { toast(e?.message || 'Сбой сети'); }
+  };
   const handleSaveAndActivate = async () => {
       if (selectedTab === 'google') {
-          alert("Для активации Google Drive убедитесь, что он подключен (кнопка выше). Настройки S3 не будут использоваться.");
+          toast("Для активации Google Drive убедитесь, что он подключен (кнопка выше). Настройки S3 не будут использоваться.");
           setActiveProvider('google'); 
           return;
       }
 
+      // T-179: не отправляем конфиг без Access Key ID — иначе сервер отвечает 400 «Missing required fields: accessKeyId»
+      if (selectedTab === 'cloudflare' && !String(s3Form.accessKeyId || '').trim()) {
+          toast('Заполните Access Key ID — создайте пару ключей в R2 → Manage API Tokens (Create Account API token) и вставьте оба значения', 'error');
+          return;
+      }
       setIsSavingS3(true);
       try {
           const token = await getToken();
@@ -294,12 +412,28 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                   'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json'
               },
-              body: JSON.stringify(s3Form)
+              body: JSON.stringify({ ...s3Form, activate: true })
           });
 
-          if (!res.ok) throw new Error("Failed to save");
-          
+          const savedInfo = await res.json().catch(() => ({}));
+          if (!res.ok) { throw new Error((savedInfo && savedInfo.error) || "Failed to save"); }
+          // T-355: сервер честно сообщает, что записалось (per-provider / legacy / ошибки)
+          if (savedInfo && savedInfo.saved) {
+              const sv = savedInfo.saved;
+              if (!sv.perProvider) {
+                  toast('Сохранено в резервную конфигурацию хранилища' + (sv.err ? ' (причина: ' + String(sv.err).slice(0, 120) + ')' : ''), 'warning');
+              }
+              if (sv.cors === 'failed') {
+                  toast('Подключено, но CORS на бакете не применился автоматически (у ключа может не быть права s3:PutBucketCORS). Нажмите «Применить CORS» или вставьте JSON из «Обслуживание и справка».', 'warning');
+              }
+              console.log('STORAGE-SAVED', JSON.stringify(sv));
+          }
+
           setS3Saved(true);
+
+          // T-357: активация теперь атомарна — выполняется сервером в самом action=config (activate: true),
+          // отдельный вызов switch_provider больше не нужен (он и давал 400 в консоли).
+
           // Update active provider state
           setActiveProvider(selectedTab);
           
@@ -307,15 +441,40 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           setInputCache(prev => ({ ...prev, [selectedTab]: s3Form }));
           
           setTimeout(() => setS3Saved(false), 3000);
-      } catch (e) {
-          alert("Ошибка сохранения настроек. Проверьте соединение.");
+      } catch (e: any) {
+          toast(/Secret Key/.test(e?.message || "") ? (e.message + " — очистите поле «Секретный ключ» и введите ключ заново.") : (e?.message || "Ошибка сохранения настроек. Проверьте соединение."));
+          throw e; // T-39: caller knows about failure
       } finally {
           setIsSavingS3(false);
       }
   };
 
+  // T-355: применить CORS на бакете (нужен для браузерных операций: транскрибация, декодирование аудио)
+  const handleApplyCors = async () => {
+      setIsApplyingCors(true);
+      try {
+          const token = await getToken();
+          const res = await fetch('/api/storage?action=configure_cors', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              body: JSON.stringify({}),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+              toast('CORS применён — загрузка и транскрибация работают из браузера.');
+          } else {
+              toast(data.error || 'Не удалось применить CORS — скопируйте JSON из «Обслуживание и справка» и вставьте в настройки CORS вашего провайдера.', 'warning');
+          }
+      } catch (e: any) {
+          toast(e?.message || 'Не удалось применить CORS', 'error');
+      } finally {
+          setIsApplyingCors(false);
+      }
+  };
+
   const handleTestConnection = async () => {
-      await handleSaveAndActivate(); 
+      try { await handleSaveAndActivate(); } catch { return; }
+
       setIsTestingS3(true);
       setTestResult(null);
       try {
@@ -327,8 +486,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           const data = await res.json();
           if (res.ok && data.success) {
               setTestResult({ success: true, message: `Успешно! Доступ к бакету '${data.bucket}' есть.` });
+          setNoConfigFound(false); setSecretBroken(false);
           } else {
-              setTestResult({ success: false, message: data.error || "Ошибка соединения" });
+              setTestResult({ success: false, message: (data.error || "Ошибка соединения") + (data.debug ? ' · ' + JSON.stringify(data.debug) : '') });
           }
       } catch (e: any) {
           setTestResult({ success: false, message: e.message || "Сбой сети" });
@@ -337,8 +497,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
       }
   };
 
-  const handleAutoCors = async () => {
-      await handleSaveAndActivate(); 
+  const handleAutoCors = async (): Promise<boolean> => {
+      try { await handleSaveAndActivate(); } catch { return false; }
+
       setIsConfiguringCors(true);
       setTestResult(null);
       try {
@@ -354,11 +515,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           const data = await res.json();
           if (res.ok && data.success) {
               setTestResult({ success: true, message: "CORS успешно настроен! Загрузка должна работать." });
+              return true;
           } else {
               setTestResult({ success: false, message: data.error || "Не удалось настроить CORS." });
+              return false;
           }
       } catch (e) {
           setTestResult({ success: false, message: "Сбой сети при настройке CORS." });
+          return false;
       } finally {
           setIsConfiguringCors(false);
       }
@@ -393,9 +557,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (res.ok) { await checkStatus(); alert("Автопродление отключено."); } 
-          else { alert("Не удалось отключить."); }
-      } catch (e) { alert("Ошибка сети"); } finally { setIsCanceling(false); }
+          if (res.ok) { await checkStatus(); toast("Автопродление отключено."); } 
+          else { toast("Не удалось отключить."); }
+      } catch (e) { toast("Ошибка сети"); } finally { setIsCanceling(false); }
   };
 
   const handleDonate = async () => {
@@ -414,26 +578,27 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
           if (res.ok && data.confirmationUrl) {
               window.open(data.confirmationUrl, '_blank') || (window.location.href = data.confirmationUrl);
           } else {
-              alert(data.error || "Ошибка инициализации платежа. Укажите ссылку на донат в Админке (раздел 'Платежи').");
+              toast(data.error || "Ошибка инициализации платежа. Укажите ссылку на донат в Админке (раздел 'Платежи').");
           }
-      } catch (e) { alert("Network error"); } finally { setIsDonating(false); }
+      } catch (e) { toast("Network error"); } finally { setIsDonating(false); }
   };
 
   const copyToClipboard = (text: string) => {
       navigator.clipboard.writeText(text);
-      alert("Скопировано!");
+      toast("Скопировано!");
   };
 
   const hasMigrated = (currentUser as any).unsafeMetadata?.migrated === true;
   const currentProviderGuide = PROVIDER_GUIDES[s3Form.provider] || PROVIDER_GUIDES['aws'];
 
-  const ProviderCard = ({ id, label, icon, color }: { id: ExtendedProvider, label: string, icon: any, color: string }) => {
+  const ProviderCard = ({ id, label, icon, color, configured, onSwitch }: { id: ExtendedProvider, label: string, icon: any, color: string, configured?: boolean, onSwitch?: () => void }) => {
       const isActive = activeProvider === id;
       const isSelected = selectedTab === id;
       return (
           <button
+              data-testid={'provider-card-' + id}
               onClick={() => handleTabSwitch(id)}
-              className={`relative p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group w-full h-[90px] justify-center
+              className={`relative p-2 sm:p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1.5 sm:gap-2 group w-full h-[74px] sm:h-[90px] justify-center
                   ${isSelected ? `border-indigo-500 bg-zinc-800 shadow-lg scale-[1.02] z-10` : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 opacity-80 hover:opacity-100'}
               `}
           >
@@ -449,6 +614,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
               <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
                   {label}
               </span>
+              {/* T-93: статус и одно-клик переключение активного */}
+              <span className={`text-[10px] ${isActive ? 'text-green-500 font-bold' : (configured ? 'text-zinc-400' : 'text-zinc-600')}`}>{isActive ? '● активно' : (configured ? 'настроено' : 'не настроено')}</span>
+              {!isActive && configured && onSwitch && (
+                  <span
+                      role="radio"
+                      aria-checked={false}
+                      title={t('settings.make_active')}
+                      onClick={(e) => { e.stopPropagation(); onSwitch(); }}
+                      className="mt-0.5 w-full text-center text-[10px] font-bold text-emerald-500 border border-emerald-500/30 rounded-lg py-0.5 hover:bg-emerald-500/10 transition-colors"
+                  >сделать активным</span>
+              )}
           </button>
       );
   };
@@ -493,14 +669,41 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
   const planBadgeClass = getPlanBadgeClass(plan);
 
   return (
-        <div className="w-full mx-auto space-y-8 py-8 animate-in fade-in duration-500 pb-24 px-4 md:px-0">
+        <div className="w-full mx-auto space-y-8 py-6 sm:py-8 animate-in fade-in duration-500 pb-24 md:px-0">
+            {/* T-222: навигация между «Профилем» и «Настройками» — иконки в шапке (аватар / шестерёнка) */}
+
+            {/* T-164: карточка аккаунта (личные данные, организация, план) */}
+            <div id="profile-block" className={'scroll-mt-24 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 '+ ((section === 'profile') ? '' : ' hidden')}>
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center text-xl font-bold text-zinc-300">{(user?.firstName || user?.username || currentUser?.name || 'A').slice(0, 1).toUpperCase()}</div>
+                    <div className="min-w-0">
+                        <div className="text-base font-bold text-white truncate">{user?.fullName || user?.username || currentUser?.name || 'Пользователь'}</div>
+                        <div className="text-xs text-zinc-500 truncate">{user?.primaryEmailAddress?.emailAddress || (currentUser as any)?.email || '—'}</div>
+                    </div>
+                </div>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-2xl bg-zinc-950 border border-zinc-800 px-3 py-2">
+                        <div className="text-zinc-500 mb-0.5">Тариф</div>
+                        <div className="font-bold text-zinc-200">{isLifetime ? 'Навсегда' : isPro ? 'Pro' : 'Бесплатный'}{expiresAt ? ' · до ' + new Date(expiresAt).toLocaleDateString() : ''}</div>
+                    </div>
+                    <div className="rounded-2xl bg-zinc-950 border border-zinc-800 px-3 py-2">
+                        <div className="text-zinc-500 mb-0.5">Организация</div>
+                        <div className="font-bold text-zinc-200 truncate">{user?.primaryEmailAddress?.emailAddress?.split('@')[1] || 'Личный аккаунт'}</div>
+                    </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    <button onClick={() => onNavigate && onNavigate('PRICING')} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-3 py-2 text-xs font-bold text-white">Управлять подпиской</button>
+                    <button onClick={onLogout} className="rounded-xl border border-zinc-700 hover:border-zinc-500 px-3 py-2 text-xs font-bold text-zinc-300">Выйти</button>
+                </div>
+            </div>
+
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                  <div>
                      <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
-                        {t('profile.title')}
+                        {section === 'settings' ? 'Настройки' : t('profile.title')}
                      </h2>
-                     <p className="text-zinc-400 text-sm mt-1">Управление подпиской и хранилищем.</p>
+                     <p className="text-zinc-400 text-sm mt-1">{section === 'settings' ? 'Хранилище, подключения и сервисные действия.' : 'Ваш аккаунт: данные, тариф и организация.'}</p>
                  </div>
                  <div className="flex items-center gap-2">
                      {isAdmin && onNavigate && (
@@ -519,7 +722,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 {/* COLUMN 1: SETTINGS */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* Subscription */}
-                    <div className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro || isLifetime ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'}`}>
+                    <div data-testid="subscription-block" className={`bg-zinc-900 border rounded-3xl p-6 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[140px] ${isPro || isLifetime ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-indigo-500/10' : 'border-zinc-800'} ${(section === 'profile') ? '' : ' hidden'}`}>
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><div className="w-64 h-64 bg-indigo-500 rounded-full blur-[100px]"></div></div>
                         <div>
                             <div className="flex justify-between items-center mb-2 relative z-10">
@@ -538,29 +741,50 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                     </div>
 
                     {/* STORAGE CONFIGURATION */}
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 relative">
-                        <div className="flex items-center gap-3 mb-6">
+                    <div id="storage-block" className={'bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 relative scroll-mt-24 '+ ((section === 'settings') ? '' : ' hidden')}>
+                        <div className="flex items-center gap-3 mb-4 sm:mb-6">
                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-300"><Database size={20} /></div>
                             <div>
                                 <h3 className="text-lg font-bold text-white">Провайдер Хранилища</h3>
-                                <p className="text-xs text-zinc-500">Выберите, куда загружать исходники видео.</p>
+                                <p className="text-xs text-zinc-500">Одно место для всех загрузок: выберите хранилище и подключите его. Сейчас активно: <b className="text-zinc-300">{activeProvider === 'google' ? 'Google Drive' : (S3_PRESETS[activeProvider]?.provider || activeProvider)}</b>.</p>
                             </div>
                         </div>
 
+                        {/* T-93: мастер подключения — всегда доступен (Codex-урок: триггер в всегда-рендерящихся блоках) */}
+
                         {isS3Loading ? (
                             <div className="flex justify-center p-8"><Loader2 className="animate-spin text-zinc-500" /></div>
+                        ) : (configNetError && !configLoaded) ? (
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-xs text-amber-200 leading-relaxed" data-testid="storage-net-error">
+                                <b>Не удалось загрузить настройки хранилища — похоже, пропала сеть.</b>{' '}
+                                Подключение не сброшено: как только связь вернётся, настройки подтянутся автоматически. Если вы в РФ, для Cloudflare R2 может потребоваться VPN.
+                                <button
+                                    onClick={() => { configRetryRef.current = 0; setConfigNetError(false); setIsS3Loading(true); setRetryTick(t => t + 1); }}
+                                    className="ml-2 underline font-bold"
+                                    data-testid="storage-net-retry"
+                                >Повторить</button>
+                            </div>
                         ) : (
                             <div className="space-y-6 animate-in fade-in">
+  {secretBroken && (
+        <div className="mb-3 border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950 rounded-lg p-3 text-xs text-red-700 dark:text-red-300">В сохранённой конфигурации обнаружен повреждённый секрет (маска вместо ключа). Нажмите «Сбросить конфиг», затем введите Access Key ID и Secret Access Key заново.</div>
+        )}
+        {noConfigFound && !(testResult && testResult.success) && (
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200 leading-relaxed" data-testid="no-config-banner">
+          <b>Хранилище для этого аккаунта ещё не настроено.</b> Заполните поля ниже (ключи от вашего R2/S3), нажмите «Сохранить», затем «Проверить соединение» — Test также применит CORS к бакету.
+      </div>
+  
+  )}
                                 
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                    <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} color="bg-green-600" />
-                                    <ProviderCard id="yandex" label="Yandex" icon="Y" color="bg-red-500" />
-                                    <ProviderCard id="cloudflare" label="R2" icon="C" color="bg-orange-500" />
-                                    <ProviderCard id="selectel" label="Selectel" icon="S" color="bg-blue-500" />
-                                    <ProviderCard id="custom" label="Custom" icon="?" color="bg-zinc-600" />
+                                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-2.5">
+                                    <ProviderCard id="google" label="Google" icon={<HardDrive size={16} />} configured={activeProvider === 'google'} onSwitch={() => handleSwitchProvider('google' as ExtendedProvider)} color="bg-green-600" />
+                                    <ProviderCard id="yandex" label="Yandex" configured={configuredProviders.includes('yandex')} onSwitch={() => handleSwitchProvider('yandex' as ExtendedProvider)} icon="Y" color="bg-red-500" />
+                                    <ProviderCard id="cloudflare" label="R2" configured={configuredProviders.includes('cloudflare')} onSwitch={() => handleSwitchProvider('cloudflare' as ExtendedProvider)} icon="C" color="bg-orange-500" />
+                                    <ProviderCard id="selectel" label="Selectel" configured={configuredProviders.includes('selectel')} onSwitch={() => handleSwitchProvider('selectel' as ExtendedProvider)} icon="S" color="bg-blue-500" />
+                                    <ProviderCard id="custom" label="Custom" configured={configuredProviders.includes('custom')} onSwitch={() => handleSwitchProvider('custom' as ExtendedProvider)} icon="?" color="bg-zinc-600" />
                                 </div>
 
-                                <div className="bg-zinc-950/50 p-5 rounded-xl border border-zinc-800/50 min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
+                                <div className="bg-zinc-950/50 p-3.5 sm:p-5 rounded-xl border border-zinc-800/50 min-h-[180px] sm:min-h-[220px] animate-in fade-in slide-in-from-top-1 duration-200">
                                     
                                     {selectedTab === 'google' && (
                                         <div className="flex flex-col items-center justify-center h-full py-4 text-center space-y-4">
@@ -572,6 +796,9 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 <p className="text-xs text-zinc-500 max-w-xs mx-auto mt-1">
                                                     Храните файлы на личном диске. Бесплатно и безопасно. 
                                                     {activeProvider !== 'google' && " (Сейчас не активно)"}
+                                                </p>
+                                                <p className="text-[10px] text-zinc-600 max-w-sm mx-auto mt-1.5">
+                                                    Файлы не копируются на наши серверы: Anotee подключается к вашему Google Drive через OAuth и работает с ним напрямую.
                                                 </p>
                                             </div>
                                             
@@ -593,22 +820,55 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                     {selectedTab !== 'google' && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             
-                                            <div className="col-span-2 flex justify-between items-center border-b border-zinc-800 pb-2 mb-2">
+                                            <div className="col-span-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 border-b border-zinc-800 pb-2 mb-2">
                                                 <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                                                     {selectedTab === 'cloudflare' ? <Zap size={12} className="text-orange-500"/> : <Settings size={12}/>}
                                                     Настройка {S3_PRESETS[selectedTab]?.provider || 'Custom'}
                                                 </h4>
-                                                <button onClick={() => setShowProviderHelp(true)} className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors">
-                                                    <HelpCircle size={10} /> Инструкция по получению ключей
-                                                </button>
+                                                <a data-testid="provider-external-link" href={PROVIDER_GUIDES[selectedTab]?.link || 'https://developers.cloudflare.com/r2/'} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-500 hover:text-emerald-400 flex items-center gap-1 mr-3">{PROVIDER_GUIDES[selectedTab]?.linkText || 'Открыть раздел провайдера'} <ExternalLink size={10} /></a>
+                                                <details className="group/help w-full md:w-auto" data-testid="provider-help">
+                                                    <summary className="text-[10px] text-indigo-400 hover:text-white flex items-center gap-1 transition-colors cursor-pointer list-none">
+                                                        <HelpCircle size={10} /> Как получить ключи
+                                                    </summary>
+                                                    <div className="mt-3 space-y-2 text-xs text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3" data-testid="provider-help-steps">
+                                                        {(PROVIDER_GUIDES[selectedTab]?.steps || []).map((step, idx) => (
+                                                            <div key={idx} className="flex gap-2 leading-relaxed">
+                                                                <span className="shrink-0 w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-500 text-[9px] font-bold flex items-center justify-center mt-0.5">{idx + 1}</span>
+                                                                <span>{step.replace(/^\d+\.\s*/, '')}</span>
+                                                            </div>
+                                                        ))}
+                                                        {PROVIDER_GUIDES[selectedTab]?.warning && (
+                                                            <p className="text-amber-600 dark:text-amber-400 pt-1 border-t border-zinc-200 dark:border-zinc-800">{PROVIDER_GUIDES[selectedTab].warning}</p>
+                                                        )}
+                                                    </div>
+                                                </details>
                                             </div>
+
+                                            {selectedTab === 'custom' && (
+                                                <div className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 space-y-1.5 text-[11px] text-zinc-400" data-testid="custom-s3-hint">
+                                                    <div className="font-bold text-zinc-200">Для S3-совместимых сервисов</div>
+                                                    <div>Подходит для AWS S3, Wasabi, Backblaze B2 (S3 API), MinIO, VK Cloud и других.</div>
+                                                    <div><b>Access Key ID / Secret</b> — в разделе «API Keys» / «Access keys» вашего провайдера (пример: AWS → IAM → Security credentials).</div>
+                                                    <div><b>Endpoint</b> — из документации провайдера, например https://s3.us-east-1.amazonaws.com</div>
+                                                    <div>Регион: как указано у провайдера (для AWS — us-east-1 и т.п., для S3-совместимых часто auto).</div>
+                                                </div>
+                                            )}
+
 
                                             {/* ENDPOINT */}
                                             <div className="col-span-2">
                                                 <LockedInput 
                                                     label="Endpoint URL"
                                                     value={s3Form.endpoint}
-                                                    onChange={(e: any) => setS3Form(p => ({...p, endpoint: e.target.value}))}
+                                                    onChange={(e: any) => {
+                                                        const v = e.target.value;
+                                                        setS3Form((p: any) => ({ ...p, endpoint: v }));
+                                                        // T-316: если вставили ссылку R2 — определяем Account ID и подсказываем про пару ключей
+                                                        const acc = parseR2Endpoint(v);
+                                                        if (acc) {
+                                                            toast('Account ID определён: ' + acc + '. Создайте пару ключей (R2 → Manage API Tokens → Create Account API token) и вставьте Access Key ID и Secret.');
+                                                        }
+                                                    }}
                                                     isEditing={editingFields.endpoint}
                                                     onToggleEdit={() => toggleEdit('endpoint')}
                                                     icon={<Globe size={14} />}
@@ -617,6 +877,11 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                 {selectedTab === 'cloudflare' && (
                                                     <p className="text-[9px] text-zinc-500 mt-1 pl-2">
                                                         Пример: <code>https://&lt;ACCOUNT_ID&gt;.r2.cloudflarestorage.com</code> (без бакета!)
+                                                    </p>
+                                                )}
+                                                {selectedTab === 'cloudflare' && (
+                                                    <p className="text-[9px] text-zinc-500 mt-1 pl-2" data-testid="cf-endpoint-hint">
+                                                        Можно вставить готовую ссылку вида <b>https://&lt;AccountID&gt;.r2.cloudflarestorage.com</b> — Account ID определится автоматически; останется вставить Access Key ID и Secret.
                                                     </p>
                                                 )}
                                             </div>
@@ -650,7 +915,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             {/* ACCESS KEY */}
                                             <div className="col-span-2">
                                                 <LockedInput 
-                                                    label="Access Key ID"
+                                                    label="Access Key ID (из R2 → Manage API Tokens → Success)"
                                                     value={s3Form.accessKeyId}
                                                     onChange={(e: any) => setS3Form(p => ({...p, accessKeyId: e.target.value}))}
                                                     isEditing={editingFields.accessKey}
@@ -665,7 +930,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                                             {/* Secret Key (Smart UI - Keep existing logic as it's distinct) */}
                                             <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key</label>
+                                                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1.5">Secret Access Key <span className="text-zinc-400 normal-case font-normal">(второе значение со страницы Success)</span></label>
                                                 <div className="relative group">
                                                     <Key size={14} className="absolute left-3 top-3 text-zinc-600" />
                                                     
@@ -673,13 +938,14 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                         // SAVED STATE
                                                         <div className="flex items-center">
                                                             <input 
-                                                                type="password"
+                                                                type="text"
+                                                                readOnly
                                                                 disabled
-                                                                value="........................"
+                                                                value="••••••••••••  (секрет сохранён — не меняйте без необходимости)"
                                                                 className="w-full bg-zinc-900/50 border border-green-900/30 rounded-lg pl-9 pr-20 py-2.5 text-sm text-green-500 font-mono cursor-not-allowed opacity-70"
                                                             />
                                                             <div className="absolute right-2 top-2 flex items-center gap-2">
-                                                                <span className="text-[10px] text-green-600 font-bold uppercase bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/50">Saved</span>
+                                                                <span className="text-[10px] text-green-600 font-bold uppercase bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/50">сохранён</span>
                                                                 <button 
                                                                     onClick={() => setS3Form(p => ({...p, secretAccessKey: ''}))}
                                                                     className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
@@ -692,12 +958,13 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                                     ) : (
                                                         // EDITING STATE
                                                         <>
-                                                            <input 
+                                                            <input
+                                                            autoComplete="new-password" 
                                                                 type={showSecretKey ? "text" : "password"}
                                                                 value={s3Form.secretAccessKey} 
                                                                 onChange={(e) => setS3Form(p => ({...p, secretAccessKey: e.target.value}))}
                                                                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-10 py-2.5 text-sm text-zinc-200 focus:border-indigo-500 outline-none font-mono placeholder-zinc-700" 
-                                                                placeholder="Enter New Secret Key"
+                                                                placeholder={t('settings.new_secret_placeholder')}
                                                             />
                                                             <button onClick={() => setShowSecretKey(!showSecretKey)} className="absolute right-3 top-2.5 text-zinc-600 hover:text-white">
                                                                 {showSecretKey ? <EyeOff size={14} /> : <Eye size={14} />} 
@@ -718,22 +985,31 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             {/* Action Buttons */}
                                             <div className="col-span-2 pt-4 border-t border-zinc-800 flex justify-between gap-3 flex-wrap items-center">
                                                 <div className="flex gap-3">
-                                                    <button onClick={() => setShowCorsHelp(true)} className="text-[10px] text-zinc-500 hover:text-zinc-300 underline">CORS Config</button>
-                                                    <button onClick={handleAutoCors} disabled={isConfiguringCors} className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"><Wand2 size={10}/> Auto-Fix CORS</button>
+                                                    
+        
                                                 </div>
 
-                                                <div className="flex gap-2">
+                                                <div className="flex flex-col sm:flex-row gap-2">
                                                     <button 
                                                         onClick={handleTestConnection}
                                                         disabled={isSavingS3 || isTestingS3}
-                                                        className="px-4 py-2 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+                                                        className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
                                                     >
                                                         {isTestingS3 ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Проверить
                                                     </button>
                                                     <button 
+                                                        onClick={handleApplyCors}
+                                                        disabled={isSavingS3 || isTestingS3 || isApplyingCors}
+                                                        data-testid="storage-cors-btn"
+                                                        className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                                                    >
+                                                        {isApplyingCors ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />} Применить CORS
+                                                    </button>
+                                                    <button 
                                                         onClick={handleSaveAndActivate}
+                                                        data-testid="storage-save-btn"
                                                         disabled={isSavingS3 || isTestingS3}
-                                                        className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
+                                                        className={`w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
                                                             activeProvider === selectedTab 
                                                                 ? 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700' 
                                                                 : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
@@ -746,6 +1022,26 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                                             </div>
                                         </div>
                                     )}
+                                    {/* T-93: сервисные действия — больше не перемешаны с формой и карточками */}
+                                    <details className="col-span-2 mt-4 group/maintenance" data-testid="storage-service-actions">
+    <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none flex items-center gap-1.5">
+        <Wrench size={12} /> Обслуживание и справка
+    </summary>
+    <div className="mt-3 flex flex-col gap-2 text-xs">
+        <button onClick={handleMigrateStorage} className="py-2.5 px-3 rounded-xl bg-zinc-800/60 text-zinc-300 border border-zinc-700/60 hover:bg-zinc-800 text-left transition-colors">
+            <b>Исправить источники у старых проектов</b>
+            <span className="block text-[10px] text-zinc-500 mt-0.5">Google Drive ⇄ S3: версии с неверным типом хранилища получат корректный</span>
+        </button>
+        <button onClick={() => setShowCorsHelp(true)} className="py-2.5 px-3 rounded-xl bg-zinc-800/60 text-zinc-300 border border-zinc-700/60 hover:bg-zinc-800 text-left transition-colors">
+            <b>Показать JSON для CORS бакета</b>
+            <span className="block text-[10px] text-zinc-500 mt-0.5">Скопируйте и вставьте в настройки CORS вашего провайдера, если браузер блокирует файлы</span>
+        </button>
+        <button onClick={handleResetConfig} data-testid="reset-config" className="py-2.5 px-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 text-left transition-colors">
+            <b>Удалить настройки хранилища</b>
+            <span className="block text-[10px] text-red-400/70 mt-0.5">Сохранённые ключи будут удалены — понадобится ввести их заново</span>
+        </button>
+    </div>
+</details>
                                 </div>
                             </div>
                         )}
@@ -753,7 +1049,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                     {/* WHITE LABEL / CDN BLOCK */}
                     {selectedTab !== 'google' && canUseWhiteLabel && (
-                        <div className="relative group overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/50 via-fuchsia-500/50 to-indigo-500/50 shadow-2xl">
+                        <div className={'relative group overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/50 via-fuchsia-500/50 to-indigo-500/50 shadow-2xl '+ ((section === 'settings') ? '' : ' hidden')}>
                             <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 opacity-10 blur-xl group-hover:opacity-20 transition-opacity duration-500"></div>
                             
                             <div className="relative bg-zinc-950 rounded-[23px] p-6 h-full overflow-hidden">
@@ -832,7 +1128,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 {/* COLUMN 2: EXTRAS */}
                 <div className="space-y-6">
                     {/* Support Block */}
-                    <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-pink-500/20 rounded-3xl p-6 relative overflow-hidden">
+                    <div className={'bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-pink-500/20 rounded-3xl p-6 relative overflow-hidden '+ ((section === 'profile') ? '' : ' hidden')}>
                         <div className="flex items-center gap-3 mb-4">
                             <div className="p-2 bg-pink-500/20 rounded-lg text-pink-400">
                                 <Heart size={20} fill="currentColor" />
@@ -854,7 +1150,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
 
                     {/* Migration Tool */}
                     {!hasMigrated && (
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                        <div className={'bg-zinc-900 border border-zinc-800 rounded-3xl p-6 '+ ((section === 'settings') ? '' : ' hidden')}>
                             <div className="flex items-center gap-3 mb-3">
                                 <Database size={18} className="text-indigo-400" />
                                 <h3 className="font-bold text-zinc-300 text-sm">Восстановление данных</h3>
@@ -891,36 +1187,10 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onNavigate, onLog
                 </div>
             )}
 
-            {/* HELP MODALS (Unchanged logic, just ensure render) */}
-            {showProviderHelp && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                        <button onClick={() => setShowProviderHelp(false)} className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
-                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">{currentProviderGuide.title}</h2>
-                        <p className="text-xs text-zinc-500 mb-4">Инструкция по получению ключей доступа</p>
-                        {currentProviderGuide.warning && (
-                            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
-                                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                                <p className="font-medium">{currentProviderGuide.warning}</p>
-                            </div>
-                        )}
-                        <div className="space-y-3 mb-6">
-                            {currentProviderGuide.steps.map((step, idx) => (
-                                <div key={idx} className="flex gap-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                                    <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold shrink-0 text-zinc-500 border border-zinc-200 dark:border-zinc-700">{idx + 1}</div>
-                                    <p>{step}</p>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                            <a href={currentProviderGuide.link} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-bold">
-                                {currentProviderGuide.linkText} <ExternalLink size={12} />
-                            </a>
-                            <button onClick={() => setShowProviderHelp(false)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-700 dark:text-zinc-300">Закрыть</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+{/* HELP MODALS (Unchanged logic, just ensure render) */}
+
+{/* T-92: блок «Хранилища» вынесен из help-модалки — рендерится всегда */}
+        
 
             {showCorsHelp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">

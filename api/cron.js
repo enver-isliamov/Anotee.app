@@ -1,5 +1,6 @@
 
 import { getClerkClient } from './_auth.js';
+import { logInfo, logDebug } from './_log.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
             }
         }
 
-        console.log(`Found ${renewals.length} users for renewal`);
+        logDebug('CRON', `Found ${renewals.length} users for renewal`);
 
         const results = [];
         const authString = Buffer.from(`${shopId}:${secretKey}`).toString('base64');

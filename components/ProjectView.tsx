@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectAsset, User, StorageType, UploadTask } from '../types';
 import { ChevronLeft, Upload, Clock, Loader2, Copy, Check, X, Clapperboard, ChevronRight, Link as LinkIcon, Trash2, UserPlus, Info, History, Lock, Cloud, HardDrive, AlertTriangle, Shield, Eye, FileVideo, Unlock, Globe, Building2, User as UserIcon, Settings, AlertCircle, Plus, Server, Crown, EyeOff, CircleHelp } from 'lucide-react';
 import { generateId } from '../services/utils';
+import { generateInitialsAvatar } from '../services/avatarUtils';
 import { ToastType } from './Toast';
 import { LanguageSelector } from './LanguageSelector';
 import { useLanguage } from '../services/i18n';
@@ -90,6 +91,24 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   const [driveQuota, setDriveQuota] = useState<DriveQuota | null>(null);
   const [isS3Configured, setIsS3Configured] = useState(false);
   const [loadingStorage, setLoadingStorage] = useState(false);
+
+  // T-326: раньше isS3Configured никогда не выставлялся — из-за этого загрузки всегда
+  // уходили в Google Drive (когда он подключён), даже если активно S3-хранилище.
+  useEffect(() => {
+      let alive = true;
+      (async () => {
+          try {
+              const token = await getToken();
+              // T-359: без токена запрос не отправляем (иначе «Bearer null» → ошибки в консоли)
+              if (!token) { if (alive) setIsS3Configured(false); return; }
+              const res = await fetch('/api/storage?action=config', { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' });
+              if (!res.ok) { if (alive) setIsS3Configured(false); return; }
+              const cfg = await res.json().catch(() => null);
+              if (alive) setIsS3Configured(!!cfg && !!cfg.provider && cfg.provider !== 'google');
+          } catch { if (alive) setIsS3Configured(false); }
+      })();
+      return () => { alive = false; };
+  }, []);
   
   // Share / Team View State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -162,7 +181,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
           notify("No storage connected. Please connect Google Drive or configure S3.", "error");
           return;
       }
-      onUploadAsset(e.target.files[0], project.id, true);
+      onUploadAsset(e.target.files[0], project.id, !isS3Configured && isDriveReady); // T-65: провайдер по конфигурации, не жёстко Drive
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -174,7 +193,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
             return;
         }
         // Phase XXX: Pass targetAssetId (uploadingVersionFor) to handleUploadAsset
-        onUploadAsset(e.target.files[0], project.id, true, uploadingVersionFor);
+        onUploadAsset(e.target.files[0], project.id, !isS3Configured && isDriveReady, uploadingVersionFor);
     }
     setUploadingVersionFor(null);
     if (versionInputRef.current) versionInputRef.current.value = '';
@@ -318,7 +337,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
       const newMember: User = {
           id: inviteEmail, 
           name: inviteEmail.split('@')[0],
-          avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${inviteEmail}`
+          avatar: generateInitialsAvatar(inviteEmail)
       };
 
       const currentTeam = project.team || [];
@@ -418,7 +437,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
               if (files.length > 0) notify("Only video files supported", "warning");
               return;
           }
-          onUploadAsset(videoFiles[0], project.id, true);
+          onUploadAsset(videoFiles[0], project.id, !isS3Configured && isDriveReady);
       };
 
       const handleClick = () => {
@@ -518,8 +537,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 relative">
-      <header className="h-14 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
+    <div className="flex flex-col h-[100dvh] bg-zinc-950 relative overflow-hidden">
+      <header className="safe-top sticky top-0 h-auto md:h-14 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur flex items-center justify-between px-2 md:px-4 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-hidden flex-1">
           <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-white shrink-0 p-1 mr-1">
               <img src={logo} alt="Back" className="w-8 h-8 shrink-0 hover:opacity-80 transition-opacity" />
@@ -639,7 +658,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                 )}
             </div>
 
-            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            <div id="tour-assets-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4 items-stretch">
                 {/* NEW INLINE UPLOAD TILE - Always First */}
                 <UploadZoneTile />
 
@@ -653,14 +672,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                     <div 
                         key={asset.id}
                         onClick={() => onSelectAsset(asset)}
-                        className={`group cursor-pointer bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 transition-all shadow-sm relative hover:border-indigo-500/50`}
+                        className={`group cursor-pointer bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 transition-all shadow-sm relative flex flex-col h-full hover:border-zinc-700`}
                     >
-                        <div className="aspect-video bg-zinc-950 relative overflow-hidden">
+                        <div className="aspect-video w-full bg-zinc-950 relative overflow-hidden shrink-0">
                         <img 
                             src={asset.thumbnail} 
                             alt={asset.title} 
-                            className={`w-full h-full object-cover transition-transform duration-500 opacity-80 ${isLocal ? '' : 'group-hover:scale-105 group-hover:opacity-100'}`}
-                            onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80'; }}
+                            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 ${isLocal ? 'opacity-80' : 'opacity-90 group-hover:scale-[1.03] group-hover:opacity-100'}`}
+                            onError={(e) => { (e.target as HTMLImageElement).src = '/img/thumbnail-fallback.jpg'; }}
                         />
                         {isDrive && <div className="absolute top-2 left-2 z-10 bg-black/60 text-green-400 p-1 rounded backdrop-blur-sm"><HardDrive size={10} /></div>}
                         {isS3 && <div className="absolute top-2 left-2 z-10 bg-black/60 text-indigo-400 p-1 rounded backdrop-blur-sm"><Server size={10} /></div>}
@@ -676,9 +695,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             </div>
                         )}
 
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                        <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10 flex gap-1">
                             {isLocal && (
-                                <button 
+                                <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         if (confirm("Отменить загрузку?")) {
@@ -686,16 +705,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                             if (task) cancelUpload(task.id);
                                         }
                                     }}
-                                    className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                    className="p-2.5 md:p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md backdrop-blur-sm transition-colors"
                                     title="Cancel Upload"
                                 >
                                     <X size={12} />
                                 </button>
                             )}
                             {!isLocked && canSharePublicLink && !isLocal && (
-                                <button 
+                                <button
                                     onClick={(e) => handleShareAsset(e, asset)}
-                                    className="p-1.5 bg-black/60 hover:bg-orange-500 text-white rounded-md backdrop-blur-sm transition-colors"
+                                    className="p-2.5 md:p-1.5 bg-black/60 hover:bg-orange-500 text-white rounded-md backdrop-blur-sm transition-colors"
                                     title="Copy Review Link (Restricted Access)"
                                 >
                                     <LinkIcon size={12} />
@@ -704,11 +723,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                             {canEditProject && !isLocked && !isLocal && (
                                 <>
                                     {isProjectOwner && isDrive && lastVer.googleDriveId && (
-                                        <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
+                                        <button onClick={(e) => handleFixPermissions(e, lastVer.googleDriveId!)} className="p-2.5 md:p-1.5 bg-black/60 hover:bg-yellow-500 text-white rounded-md"><Unlock size={12} /></button>
                                     )}
-                                    <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
+                                    <button onClick={(e) => handleAddVersionClick(e, asset.id)} className="p-2.5 md:p-1.5 bg-black/60 hover:bg-blue-500 text-white rounded-md"><History size={12} /></button>
                                     {canDeleteAssets && (
-                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModalState({ isOpen: true, asset: asset }); }} className="p-2.5 md:p-1.5 bg-black/60 hover:bg-red-500 text-white rounded-md"><Trash2 size={12} /></button>
                                     )}
                                 </>
                             )}
@@ -917,7 +936,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, 
                                     <div><div className="text-sm text-zinc-200 font-medium">{member.name}</div><div className="text-[10px] text-zinc-500">{getDisplayRole(member)}</div></div>
                                 </div>
                                 {isProjectOwner && member.id !== currentUser.id && (
-                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 size={14} /></button>
+                                    <button onClick={() => handleRemoveUser(member.id)} className="text-zinc-600 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-2.5 md:p-1"><Trash2 size={14} /></button>
                                 )}
                             </div>
                         ))}

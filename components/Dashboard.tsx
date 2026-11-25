@@ -62,6 +62,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [shareTab, setShareTab] = useState<'invite' | 'public'>('public'); // Default to Public Link
   const [isCopied, setIsCopied] = useState(false);
   const [isTogglingAccess, setIsTogglingAccess] = useState(false);
+  // T-21: гостевая ссылка на конкретную версию (просмотр без регистрации)
+  const [shareVersionPick, setShareVersionPick] = useState<{ assetId: string; versionId: string }>({ assetId: '', versionId: '' });
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [guestLink, setGuestLink] = useState<string | null>(null);
 
   // Deletion State
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -130,7 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       updatedAt: 'Just now',
       team: activeOrgId ? [] : [currentUser],
       ownerId: currentUser.id,
-      orgId: activeOrgId || null, 
+      orgId: activeOrgId ?? undefined,
       assets: [],
       isLocked: false,
       publicAccess: 'none'
@@ -151,12 +155,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
           const token = await getToken();
           const res = await fetch('/api/payment?action=init', {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` }
+              headers: { 
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ planType: 'donation' })
           });
           const data = await res.json();
           
           if (res.ok && data.confirmationUrl) {
-              window.location.href = data.confirmationUrl;
+              window.open(data.confirmationUrl, '_blank') || (window.location.href = data.confirmationUrl);
+              setIsBuying(false);
           } else {
               notify("Payment failed: " + (data.error || "Unknown"), "error");
               setIsBuying(false);
@@ -233,6 +242,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       setSharingProject(project);
       setShareTab('public'); // Default to the safer/easier option
+        setShareVersionPick({ assetId: project.assets[0]?.id || '', versionId: project.assets[0]?.versions[project.assets[0].versions.length - 1]?.id || '' });
+        setGuestLink(project.publicShare ? `${window.location.origin}/v/${project.publicShare.token}` : null);
   };
 
   const togglePublicAccess = async () => {
@@ -273,6 +284,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
       notify(t('common.link_copied'), "success");
+  };
+  // T-21: генерация гостевой ссылки на конкретную версию (токен хранится в project.publicShare)
+  const handleGenerateGuestLink = async () => {
+      if (!sharingProject) return;
+          // n1: строгая валидация выбора — без тихой подмены первой версией
+          const asset = sharingProject.assets.find(a => a.id === shareVersionPick.assetId);
+          if (!asset) { notify('Select an asset to share', 'error'); setIsGeneratingLink(false); return; }
+      if (!asset) { notify('No assets to share', 'error'); return; }
+          const version = asset.versions.find(v => v.id === shareVersionPick.versionId);
+          if (!version) { notify('Select a version to share', 'error'); setIsGeneratingLink(false); return; }
+      if (!version) { notify('No versions to share', 'error'); return; }
+      setIsGeneratingLink(true);
+      try {
+          // m2: только CSPRNG — без Math.random-фолбэка
+          const token = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+          const publicShare = { token, assetId: asset.id, versionId: version.id, createdAt: new Date().toISOString() };
+          if (!isMockMode) {
+              await api.patchProject(sharingProject.id, { publicShare }, sharingProject._version || 0);
+          }
+          onEditProject(sharingProject.id, { publicShare });
+          setGuestLink(`${window.location.origin}/v/${token}`);
+          notify(t('dash.share.link_created'), 'success');
+      } catch (e) {
+          notify('Failed to create link', 'error');
+      } finally {
+          setIsGeneratingLink(false);
+      }
+  };
+  const handleRevokeGuestLink = async () => {
+      if (!sharingProject) return;
+      try {
+          if (!isMockMode) {
+              await api.patchProject(sharingProject.id, { publicShare: null }, sharingProject._version || 0);
+          }
+          onEditProject(sharingProject.id, { publicShare: null });
+          setGuestLink(null);
+          notify(t('dash.share.link_revoked'), 'info');
+      } catch (e) { notify('Failed to revoke link', 'error'); }
+  };
+  const handleCopyGuestLink = () => {
+      if (guestLink) { navigator.clipboard.writeText(guestLink); notify(t('common.link_copied'), 'success'); }
   };
 
   const handleDeleteClick = async (e: React.MouseEvent, project: Project) => {
@@ -441,32 +493,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 )}
                                 
                                 {canManage ? (
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
+                                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                        <button
                                             onClick={(e) => handleToggleLock(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${project.isLocked ? 'text-red-400' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
+                                            className={`p-2.5 md:p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${project.isLocked ? 'text-red-400' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
                                             title={project.isLocked ? t('common.unlock') : t('common.lock')}
                                         >
                                             {project.isLocked ? <Lock size={14} /> : <Unlock size={14} />}
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={(e) => handleOpenEdit(e, project)}
-                                            className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                                            className="p-2.5 md:p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
                                             title={t('common.edit')}
                                         >
                                             <Edit2 size={14} />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={(e) => handleShareClick(e, project)}
-                                            className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProject || project.isLocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                            className={`p-2.5 md:p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!canShareProject || project.isLocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
                                             title={!canShareProject ? "Locked" : t('common.share')}
                                             disabled={!canShareProject}
                                         >
                                             <Share2 size={14} />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={(e) => handleDeleteClick(e, project)}
-                                            className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded"
+                                            className="p-2.5 md:p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded"
                                             title={t('common.delete')}
                                         >
                                             <Trash2 size={14} />
@@ -734,6 +786,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 </div>
                             </div>
                         )}
+                        {/* T-21: гостевая ссылка на конкретную версию — просмотр без регистрации */}
+                        <div className="bg-indigo-900/10 border border-indigo-500/20 rounded-lg p-3 space-y-2" data-testid="guest-link-section">
+                            <div className="text-[10px] text-indigo-300 uppercase font-bold">{t('dash.share.version_link')}</div>
+                            <p className="text-[10px] text-indigo-200/70 leading-relaxed">{t('dash.share.guest_hint')}</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <select value={shareVersionPick.assetId} onChange={(e) => { const a = sharingProject.assets.find(x => x.id === e.target.value); setShareVersionPick({ assetId: e.target.value, versionId: a?.versions[a.versions.length - 1]?.id || '' }); }} className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none min-w-0">
+                                    {sharingProject.assets.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                                </select>
+                                <select value={shareVersionPick.versionId} onChange={(e) => setShareVersionPick(p => ({ ...p, versionId: e.target.value }))} className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-300 outline-none min-w-0">
+                                    {(sharingProject.assets.find(a => a.id === shareVersionPick.assetId) || sharingProject.assets[0])?.versions.map(v => <option key={v.id} value={v.id}>v{v.versionNumber} · {v.filename || 'Version'}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleGenerateGuestLink} disabled={isGeneratingLink} className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-bold transition-all">{isGeneratingLink ? '…' : t('dash.share.generate')}</button>
+                                {guestLink && <button onClick={handleCopyGuestLink} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1"><Copy size={12} /> {t('common.copy')}</button>}
+                                {guestLink && <button onClick={handleRevokeGuestLink} className="text-red-400 hover:text-red-300 px-2 py-1.5 text-xs font-bold">{t('dash.share.revoke')}</button>}
+                            </div>
+                            {guestLink && <input readOnly value={guestLink} data-testid="guest-link-value" className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-[10px] text-indigo-300 font-mono outline-none" />}
+                        </div>
                     </div>
                 )}
 

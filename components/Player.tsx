@@ -1,17 +1,28 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Project, ProjectAsset, Comment, CommentStatus, User, AppConfig } from '../types';
-import { Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server } from 'lucide-react';
+import { ArrowLeftRight, Play, Pause, ChevronLeft, Send, CheckCircle, Search, Mic, MicOff, Trash2, Pencil, Save, X as XIcon, Layers, FileVideo, Upload, CheckSquare, Flag, Columns, Monitor, RotateCcw, RotateCw, Maximize, Minimize, MapPin, Gauge, GripVertical, Download, FileJson, FileSpreadsheet, FileText, MoreHorizontal, Film, AlertTriangle, Cloud, CloudOff, Loader2, HardDrive, Lock, Unlock, Clapperboard, EllipsisVertical, Captions, ChevronRight, CornerUpLeft, SplitSquareHorizontal, ChevronDown, FileAudio, Sparkles, MessageSquare, List, Link, History, Bot, Wand2, Settings2, ShieldAlert, Server , Wrench } from 'lucide-react';
 import { generateEDL, generateCSV, generateResolveXML, downloadFile } from '../services/exportService';
 import { generateId, stringToColor, formatTimecode } from '../services/utils';
 import { ToastType } from './Toast';
 import { useLanguage } from '../services/i18n';
 import { extractAudioFromUrl } from '../services/audioUtils';
+import { findDeletionComment, isWordDeleted, findDeletionsInRange, rangeDeletionText } from '../services/transcriptUtils';
+import { loadTranscript, loadTranscriptWithIdb, saveTranscript, clearTranscript } from '../services/transcriptStore';
+import { transcribeWithEngine, isEngineAvailable, type TranscribeEngineId } from '../services/transcriptionEngines';
+import { subscribeTranscription, startTranscription, isTranscriptionRunning } from '../services/transcriptionRunner';
+import { FeatureErrorBoundary } from './FeatureErrorBoundary';
 import { GoogleDriveService } from '../services/googleDrive';
 import { api } from '../services/apiClient';
 import { useOrganization, useAuth } from '@clerk/clerk-react';
+import { isOrgAdmin } from '../services/userUtils';
 import { useSubscription } from '../hooks/useSubscription';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { isFeatureEnabled } from '../services/entitlements';
+
+// Кастомное зеркало Whisper-модели (РФ-устойчивость): Vite подставляет значение
+// VITE_WHISPER_MODEL_BASE_URL на этапе сборки. Пусто/не задано → поле не передаётся
+// в воркер и модель грузится с huggingface.co как раньше (docs/RF-RESILIENCE.md).
+const WHISPER_MODEL_BASE_URL = (import.meta.env.VITE_WHISPER_MODEL_BASE_URL || '').trim();
 
 interface PlayerProps {
   asset: ProjectAsset;
@@ -24,10 +35,23 @@ interface PlayerProps {
   notify: (msg: string, type: ToastType) => void;
   isDemo?: boolean;
   isMockMode?: boolean;
-  setIsPlayerActive?: (active: boolean) => void; // Smart Polling Control
+  setIsPlayerActive?: (active: boolean) => void;
+  uploadTasks?: any[];
+  cancelUpload?: (id: string) => void; // Smart Polling Control
+  onOpenStorageSettings?: () => void; // T-32: «Проверить настройки S3» → страница настроек BYOS
 }
 
 const VALID_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
+
+// T-07: язык распознавания речи = язык интерфейса (i18n-код → BCP-47)
+const SPEECH_RECOGNITION_LANGS: Record<string, string> = {
+    en: 'en-US',
+    ru: 'ru-RU',
+    es: 'es-ES',
+    pt: 'pt-BR',
+    ja: 'ja-JP',
+    ko: 'ko-KR',
+};
 
 const TRANSCRIBE_LANGUAGES = [
     { code: 'auto', label: 'Auto-Detect' },
@@ -42,14 +66,31 @@ const TRANSCRIBE_LANGUAGES = [
 ];
 
 const TRANSCRIBE_MODELS = [
-    { id: 'Xenova/whisper-tiny', label: 'Fast (Tiny)' },
-    { id: 'Xenova/whisper-base', label: 'Balanced (Base)' },
+    { id: 'onnx-community/whisper-tiny', label: 'Fast (Tiny)' },
+    { id: 'onnx-community/whisper-base', label: 'Balanced (Base)' },
+    { id: 'onnx-community/whisper-small', label: 'Precise (Small)' },
 ];
 
 interface TranscriptChunk {
     text: string;
-    timestamp: [number, number] | null; 
+    timestamp: [number, number] | null;
 }
+
+// T-18: чувствительность скраба по видео утверждена владельцем (docs/SETTINGS.md,
+// «Логика Скраббинга»): 5 пикселей = 1 кадр — точность таймкода до кадра при перемотке пальцем.
+const VIDEO_SCRUB_PX_PER_FRAME = 5;
+
+// T-18: безопасный pointer capture — на iOS системный жест может снять capture в любой
+// момент: releasePointerCapture без hasPointerCapture-проверки бросает DOMException,
+// setPointerCapture на уже неактивном pointer — NotFoundError
+const setPointerCaptureSafe = (el: HTMLElement | null, pointerId: number) => {
+    if (!el) return;
+    try { el.setPointerCapture(pointerId); } catch { /* pointer уже неактивен */ }
+};
+const releasePointerCaptureSafe = (el: HTMLElement | null, pointerId: number) => {
+    if (!el) return;
+    try { if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId); } catch { /* capture уже снят */ }
+};
 
 // --- OPTIMIZATION: Memoized Sidebar Component with Mobile Gestures ---
 const PlayerSidebar = React.memo(({ 
@@ -58,6 +99,7 @@ const PlayerSidebar = React.memo(({
     currentUser, currentTime, editingCommentId, selectedCommentId, 
     setSelectedCommentId, videoRef, setVideoError, setPreviousTime, setIsPlaying,
     startEditing, handleDeleteComment, handleResolveComment, editText, setEditText, cancelEdit, saveEdit,
+    wordUi, comments: allComments, transcribeEngine, changeTranscribeEngine,
     transcript, isTranscribing, transcribeProgress, transcribeLanguage, setTranscribeLanguage,
     transcribeModel, setTranscribeModel, handleTranscribe, loadingDrive, driveFileMissing, videoError,
     setTranscript, seekByFrame, videoFps, t
@@ -67,6 +109,7 @@ const PlayerSidebar = React.memo(({
     const [swipedCommentId, setSwipedCommentId] = useState<string | null>(null);
     const [swipeOffset, setSwipeOffset] = useState(0);
     const touchStartRef = useRef<{x: number, y: number} | null>(null);
+    const selDragRef = useRef(false); // T-26: drag-выделение слов
 
     const handleTouchStart = (e: React.TouchEvent, id: string) => {
         touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -114,6 +157,7 @@ const PlayerSidebar = React.memo(({
                         <MessageSquare size={14} /> {t('player.comments')}
                     </button>
                     <button 
+                        data-testid="transcript-tab"
                         onClick={() => setSidebarTab('transcript')}
                         className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-colors ${sidebarTab === 'transcript' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-zinc-800/50' : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}
                     >
@@ -123,6 +167,8 @@ const PlayerSidebar = React.memo(({
                 {sidebarTab === 'comments' && (
                     <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 sticky top-0 z-20">
                         <div className="flex items-center gap-3"><span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total: ({filteredComments.length})</span></div>
+
+
                         <div className="flex items-center gap-2">
                             {isManager && (<><button onClick={handleToggleLock} className={`p-1 rounded transition-colors ${version.isLocked ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} title={version.isLocked ? t('player.unlock_ver') : t('player.lock_ver')}>{version.isLocked ? <Lock size={14} /> : <Unlock size={14} />}</button><div className="relative"><button id="tour-export-btn" onClick={() => setShowExportMenu(!showExportMenu)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title={t('player.export.title')}><Download size={14} /></button>{showExportMenu && (<div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100"><button onClick={() => handleExport('xml')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><Film size={14} className="text-indigo-500 dark:text-indigo-400" />{t('player.export.xml')}</button><button onClick={() => handleExport('csv')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileSpreadsheet size={14} className="text-green-500 dark:text-green-400" />{t('player.export.csv')}</button><button onClick={() => handleExport('edl')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-black dark:hover:text-white text-left"><FileText size={14} className="text-orange-500 dark:text-orange-400" />{t('player.export.edl')}</button></div>)}{showExportMenu && (<div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>)}</div></>)}
                             {isManager && filteredComments.some((c: any) => c.status === CommentStatus.OPEN) && (<button onClick={handleBulkResolve} className="flex items-center gap-1 text-[9px] font-bold bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-900/50 hover:bg-green-200 dark:hover:bg-green-900/40 px-2 py-0.5 rounded transition-colors uppercase"><CheckSquare size={10} />{t('player.resolve_all')}</button>)}
@@ -163,7 +209,7 @@ const PlayerSidebar = React.memo(({
                                         {!canR && !isE && (<div className={`w-1.5 h-1.5 rounded-full mx-1 ${comment.status==='resolved'?'bg-green-500':'bg-yellow-500'}`} />)}
                                     </div>
                                 </div>
-                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-xs leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}`}>{comment.text}</p>)}
+                                {isE ? (<div className="mt-2" onClick={e => e.stopPropagation()}><textarea className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded p-2 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 outline-none mb-2" value={editText} onChange={e => setEditText(e.target.value)} rows={3} autoFocus /><div className="flex justify-end gap-2"><button onClick={cancelEdit} className="px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">{t('cancel')}</button><button onClick={() => saveEdit(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] flex items-center gap-1"><Save size={10} /> {t('save')}</button></div></div>) : (<p className={`text-zinc-700 dark:text-zinc-300 mb-0.5 whitespace-pre-wrap text-[13px] leading-relaxed ${comment.status === CommentStatus.RESOLVED ? 'line-through opacity-50' : ''}${(comment as any).editKind === 'delete' ? ' line-through text-red-500 dark:text-red-400' : ''}`}>{(comment as any).editKind === 'delete' && (<span className="inline-block mr-1 px-1 rounded bg-red-500/10 text-red-500 text-[9px] font-bold uppercase align-middle">{t('player.transcript.delete')}</span>)}{comment.text}</p>)}
                             </div>
                         </div>);
                     })}
@@ -178,14 +224,48 @@ const PlayerSidebar = React.memo(({
                                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed max-w-[240px]">Use Client-Side AI to convert speech to text locally.</p>
                                     </div>
                                     <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                        <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">{t('player.transcribe.engine')}</label><div className="relative"><select value={transcribeEngine} onChange={(e) => { changeTranscribeEngine(e.target.value as TranscribeEngineId); }} data-testid="engine-select" className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">
+                                            <option value="whisper">{t('player.transcribe.engine_whisper')}</option>
+                                            <option value="whisper-webgpu" disabled={!isEngineAvailable('whisper-webgpu')}>{t('player.transcribe.engine_webgpu')}{!isEngineAvailable('whisper-webgpu') ? ' — n/a' : ''}</option>
+                                            <option value="vosk" disabled={!isEngineAvailable('vosk')}>{t('player.transcribe.engine_vosk')}{!isEngineAvailable('vosk') ? ' — n/a' : ''}</option>
+                                        </select><ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
+                                        {!isEngineAvailable('vosk') && (<p className="text-[9px] text-zinc-400 leading-relaxed">{t('player.transcribe.vosk_unavailable')}</p>)}
                                         <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Language</label><div className="relative"><select value={transcribeLanguage} onChange={(e) => setTranscribeLanguage(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_LANGUAGES.map(lang => (<option key={lang.code} value={lang.code}>{lang.label}</option>))}</select><ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
-                                        <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Model Quality</label><div className="relative"><select value={transcribeModel} onChange={(e) => setTranscribeModel(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_MODELS.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}</select><Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div></div>
+                                        {transcribeEngine.startsWith('whisper') && (
+                                        <div className="space-y-1"><label className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1">Model Quality</label><div className="relative"><select value={transcribeModel} onChange={(e) => setTranscribeModel(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs appearance-none outline-none focus:border-indigo-500">{TRANSCRIBE_MODELS.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}</select><Settings2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" /></div><p className="text-[9px] text-zinc-400 leading-relaxed mt-1">{t('player.transcribe.model_hint')}</p></div>
+                                        )}
                                         <button onClick={handleTranscribe} disabled={loadingDrive || driveFileMissing || videoError} className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"><Wand2 size={14} /> Generate Transcript</button>
                                     </div>
                                 </div>
                             )}
                             {isTranscribing && (<div className="flex flex-col items-center justify-center h-64 px-8 text-center"><Loader2 size={32} className="animate-spin text-indigo-500 mb-4" /><div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 mb-2 overflow-hidden"><div className="bg-indigo-500 h-full transition-all duration-300 ease-out" style={{ width: `${transcribeProgress?.progress || 0}%` }} /></div><p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">{transcribeProgress?.status === 'downloading' ? `Loading Model (${Math.round(transcribeProgress.progress)}%)` : 'Processing Audio...'}</p></div>)}
-                            {transcript && transcript.length > 0 && (<div className="flex-1 overflow-y-auto p-2 space-y-1"><div className="px-2 py-1 text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-200 dark:border-zinc-800/50 mb-2 flex justify-between"><span>Result</span><button onClick={() => setTranscript(null)} className="hover:text-red-500 transition-colors">Clear</button></div>{transcript.map((chunk: TranscriptChunk, i: number) => { const isActive = chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]; return (<div key={i} onClick={() => chunk.timestamp && seekByFrame((chunk.timestamp[0] - currentTime) * videoFps)} className={`p-2 rounded-lg text-xs cursor-pointer transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500 pl-2' : ''}`}><div className="flex gap-2"><span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5">{chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : '--:--'}</span><p className={`text-zinc-700 dark:text-zinc-300 leading-relaxed ${isActive ? 'font-medium text-zinc-900 dark:text-white' : ''}`}>{chunk.text}</p></div></div>); })}</div>)}
+                            {transcript && transcript.length > 0 && (
+                                <div className="flex-1 overflow-y-auto">
+                                    <div className="px-4 py-2.5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/50 sticky top-0 bg-white dark:bg-zinc-900 z-10">
+                                        <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Transcript</span>
+                                        <span className="flex items-center gap-3">
+                                            {isTranscribing && <span className="text-[10px] text-indigo-400 font-bold">{transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span>}
+                                            <button onClick={() => { if (window.confirm(t('player.transcript.clear_confirm'))) { setTranscript(null); if (version) clearTranscript(version.id); } }} className="text-zinc-400 hover:text-red-500 transition-colors p-1" title="Очистить транскрипт"><Trash2 size={11} /></button>
+                                        </span>
+                                    </div>
+                                    <div className="px-4 py-3 text-[15px] leading-loose [touch-action:pan-y] select-none" data-testid="transcript-words"
+                                        onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } const wIdx = Number(t.dataset.idx); wordUi.onTap((transcript ?? [])[wIdx], wIdx); }}
+                                        onPointerMove={(e) => { if (!selDragRef.current) return; const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null; const t = el?.closest('[data-idx]') as HTMLElement | null; if (t?.dataset.idx !== undefined) wordUi.onExtend(Number(t.dataset.idx)); }}
+                                        onPointerUp={() => { selDragRef.current = false; }}
+                                        onPointerCancel={() => { selDragRef.current = false; }}
+                                    >
+                                        {transcript.map((chunk: TranscriptChunk, i: number) => {
+                                            const activeW = (transcript ?? [])[i]?.timestamp && currentTime >= (transcript ?? [])[i].timestamp[0] && currentTime <= (transcript ?? [])[i].timestamp[1];
+  const deleted = wordUi.isDeletedAt(i);
+                                            const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
+                                            const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
+                                            return (
+                                                <span key={i} data-idx={i} data-testid="transcript-word" title={chunk.timestamp ? formatTimecode(chunk.timestamp[0], videoFps) : undefined} className={`transition-colors mr-[0.3em] ${activeW ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : ''} ${isActive ? 'text-indigo-300 font-semibold' : ''} ${deleted ? 'line-through text-red-500/80' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-zinc-800 dark:text-zinc-200'}`}>{chunk.text.trim()}{" "}</span>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -199,18 +279,21 @@ const FloatingControls = React.memo(({
     initialPos, onPositionChange, isLocked, t, 
     handleQuickMarker, seek, handleSetInPoint, handleSetOutPoint, 
     markerInPoint, markerOutPoint, clearMarkers,
-    startListening, isListening, toggleListening, isFullscreen // Add props for voice
+    openVoiceModal, isListening, toggleListening, isPTTActive, pttText, onMicPointerDown, onMicPointerUp // T-19: push-to-talk (зажать-говорить-отпустить)
 }: any) => {
     // Clamp initial position to be safe
     const getSafePos = (p: {x: number, y: number}) => {
         const padding = 16;
+        // T-207: панель не должна перекрывать шапку плеера (safe-area + строка управления) —
+        // иначе она закрывает кнопки шапки и мешает тапам.
+        const header = 72;
         const width = 300; // Approx width
         const height = 60; // Approx height
         const maxX = window.innerWidth - width - padding;
         const maxY = window.innerHeight - height - padding;
         return {
             x: Math.min(Math.max(padding, p.x), maxX), // Clamp X (left to right)
-            y: Math.min(Math.max(padding, p.y), maxY)  // Clamp Y (top to bottom)
+            y: Math.min(Math.max(header, p.y), maxY)   // Clamp Y (под шапкой, до низа)
         };
     };
 
@@ -288,13 +371,24 @@ const FloatingControls = React.memo(({
                 <div className="flex items-center gap-1 w-auto justify-center">
                     <button onClick={handleSetInPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerInPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.in')}>IN</button>
                     <button onClick={handleSetOutPoint} className={`flex-none text-xs font-bold px-3 py-2 md:py-1.5 rounded-lg transition-all border border-transparent ${markerOutPoint !== null ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-100 dark:bg-zinc-800 md:bg-transparent'}`} title={t('player.marker.out')}>OUT</button>
+                    {/* T-19: push-to-talk — зажми и говори; короткий тап открывает VoiceModal */}
+                    <button
+                        onPointerDown={(e) => { e.preventDefault(); onMicPointerDown(); }}
+                        onPointerUp={(e) => { e.preventDefault(); onMicPointerUp(); }}
+                        onPointerCancel={() => { onMicPointerUp(); }}
+                        onLostPointerCapture={() => { onMicPointerUp(); }}
+                        onContextMenu={(e) => e.preventDefault()}
+                        className={`ml-1 w-10 h-10 md:w-auto md:h-auto flex items-center justify-center p-2 md:p-1.5 rounded-lg transition-colors touch-none select-none ${isPTTActive ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`}
+                        title={t('player.voice.ptt_hint')}
+                    ><Mic size={16} /></button>
+                    {isPTTActive && (
+                        <div data-testid="ptt-pill" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-max max-w-[260px] bg-black/75 backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2 shadow-xl pointer-events-none z-[10000]">
+                            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"></span><span className="text-[10px] font-bold uppercase tracking-wider text-red-300 shrink-0">REC</span></div>
+                            <div className="text-xs text-white mt-1 break-words line-clamp-2 min-h-[16px]">{pttText || '…'}</div>
+                        </div>
+                    )}
                     {(markerInPoint !== null || markerOutPoint !== null) && (
-                        <>
-                            {isFullscreen && (
-                                <button onClick={toggleListening} className={`ml-1 p-2 md:p-1.5 rounded-lg transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white'}`} title="Voice Comment"><Mic size={16} /></button>
-                            )}
-                            <button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>
-                        </>
+                        <button onClick={clearMarkers} className="ml-1 p-2 md:p-1.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 transition-colors"><XIcon size={16} /></button>
                     )}
                 </div>
             </div>
@@ -303,8 +397,8 @@ const FloatingControls = React.memo(({
 });
 
 // ... (Rest of file unchanged, just export Player) ...
-export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive }) => {
-  const { t } = useLanguage();
+export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onBack, users, onUpdateProject, isSyncing, notify, isDemo = false, isMockMode = false, setIsPlayerActive, uploadTasks, cancelUpload, onOpenStorageSettings }) => {
+  const { t, language } = useLanguage();
   
   // Smart Polling: Activate on Mount, Deactivate on Unmount
   useEffect(() => {
@@ -335,12 +429,14 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
           clearTimeout(idleTimer);
       };
   }, []);
-  const { organization } = useOrganization();
+  const { organization, memberships } = useOrganization({ memberships: { infinite: true } });
   const { plan } = useSubscription(); // Use generic plan
   const { config } = useAppConfig();
   const { getToken } = useAuth(); // Needed for Presigned URLs
 
-  const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);
+  // T-370: права менеджера — владелец проекта или АДМИН организации (не любой участник).
+  const isOrgAdminHere = !!organization?.id && project.orgId === organization.id && isOrgAdmin(currentUser.id, memberships?.data || []);
+  const isManager = project.ownerId === currentUser.id || isOrgAdminHere;
   const isOwner = project.ownerId === currentUser.id;
 
   const [currentVersionIdx, setCurrentVersionIdx] = useState(asset.versions.length - 1);
@@ -353,6 +449,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const isLocked = project.isLocked || version?.isLocked || false;
   
   const [showMobileViewMenu, setShowMobileViewMenu] = useState(false);
+  const [showMobileMore, setShowMobileMore] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -370,10 +467,15 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   // ... (Other states remain the same) ...
   const [isScrubbing, setIsScrubbing] = useState(false);
-  const isDragRef = useRef(false); 
-  
+  // T-18: ref-объект вместо boolean — храним pointerId, чтобы второй палец не перезаписывал скраб
+  const isDragRef = useRef<{ active: boolean, pointerId: number | null }>({ active: false, pointerId: null });
+
   const [isVideoScrubbing, setIsVideoScrubbing] = useState(false);
-  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false });
+  // T-18: pointerId — игнор чужих пальцев (мультитач)
+  const videoScrubRef = useRef<{ startX: number, startTime: number, isDragging: boolean, isPressed: boolean, pointerId: number | null }>({ startX: 0, startTime: 0, isDragging: false, isPressed: false, pointerId: null });
+  // T-23: диагностика ошибки S3 + перезагрузка версии (retry)
+  const [s3ErrorDetail, setS3ErrorDetail] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const [controlsPos, setControlsPos] = useState(() => {
     try {
@@ -410,12 +512,22 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  // T-07: состояние диктовки — финальные результаты накапливаем, interim подставляем временно.
+  // Всё считается в refs ВНЕ setState-updater (updater обязан быть чистым: React вызывает его повторно),
+  // ручной ввод отслеживаем в onChange (программная установка value onChange не вызывает).
+  const manualBaseRef = useRef('');       // база: текст пользователя на момент старта/ручных правок
+  const finalTranscriptRef = useRef('');  // накопленные финальные результаты
+  const pendingInterimRef = useRef('');   // текущий незавершённый interim
+  const lastDictatedRef = useRef<string | null>(null); // последняя строка, выставленная диктовкой
 
   const [transcript, setTranscript] = useState<TranscriptChunk[] | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState<{status: string, progress: number} | null>(null);
-  const [transcribeLanguage, setTranscribeLanguage] = useState<string>('auto');
-  const [transcribeModel, setTranscribeModel] = useState<string>('Xenova/whisper-tiny');
+  const [transcribeEngine, setTranscribeEngine] = useState<TranscribeEngineId>(() => (localStorage.getItem('anotee_transcribe_engine') as TranscribeEngineId) || 'whisper');
+  const [transcribeLanguage, setTranscribeLanguage] = useState<string>(language === 'ru' ? 'ru' : 'auto'); // T-32: для русского UI — русский по умолчанию
+  const changeTranscribeEngine = (id: TranscribeEngineId) => { setTranscribeEngine(id); try { localStorage.setItem('anotee_transcribe_engine', id); } catch { /* ignore */ } };
+  // T-354: для русского интерфейса дефолт — Base (точнее для русского, чем Tiny)
+  const [transcribeModel, setTranscribeModel] = useState<string>(language === 'ru' ? 'onnx-community/whisper-base' : 'onnx-community/whisper-tiny');
   const workerRef = useRef<Worker | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -434,36 +546,90 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
               workerRef.current.terminate();
               workerRef.current = null;
           }
+          // T-07: при размонтировании останавливаем распознавание (onend-безопасно)
+          if (recognitionRef.current) {
+              try {
+                  recognitionRef.current.onend = null;
+                  recognitionRef.current.stop();
+              } catch { /* уже остановлено */ }
+              recognitionRef.current = null;
+          }
       };
   }, []);
+
+  // T-08: window.innerWidth в рендере запрещён (AGENTS.md §5) — только state + resize-листенер
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => window.innerWidth > 768);
+  useEffect(() => {
+      const handleViewportResize = () => setIsDesktopViewport(window.innerWidth > 768);
+      window.addEventListener('resize', handleViewportResize);
+      return () => window.removeEventListener('resize', handleViewportResize);
+  }, []);
+
+  // T-357: одноразовый автоповтор транскрибации после авто-применения CORS
+  const corsRetryRef = useRef(false);
 
   // ... (Other event listeners for resize etc) ...
 
   const handleTranscribe = async () => {
-    if (isTranscribing) return;
+    const st = (window as any).__anoteeTranscriptionState;
+    if (st?.isTranscribing) { notify(t('player.transcribe.pill'), "info"); return; }
+    const fakeActive = typeof window !== 'undefined' && !!(window as any).__anoteeFakeTranscribe;
     const sourceUrl = localFileSrc || driveUrl || version.url;
-    if (!sourceUrl) { notify("No video source available", "error"); return; }
+    if (!sourceUrl && !fakeActive) { notify("No video source available", "error"); return; }
     setIsTranscribing(true); setTranscript([]); setTranscribeProgress({ status: 'init', progress: 0 });
     try {
-        if (!workerRef.current) {
-             workerRef.current = new Worker(new URL('../services/transcriptionWorker.ts', import.meta.url), { type: 'module' });
-             workerRef.current.onmessage = (event) => {
-                const { type, data, result, error } = event.data;
-                if (type === 'download') {
-                    if (data.status === 'progress') setTranscribeProgress({ status: 'downloading', progress: data.progress || 0 });
-                    else if (data.status === 'done') setTranscribeProgress({ status: 'processing', progress: 0 });
-                } else if (type === 'complete') {
-                    if (result && Array.isArray(result.chunks)) { setTranscript(result.chunks); notify("Transcription complete", "success"); }
-                    setIsTranscribing(false); setTranscribeProgress(null);
-                } else if (type === 'error') { console.error("Worker Error:", error); notify(`Transcription Failed: ${error}`, "error"); setIsTranscribing(false); setTranscribeProgress(null); }
-             };
+        let audioData: Float32Array;
+        if (fakeActive) {
+            audioData = new Float32Array(16000);
+        } else {
+            const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
+            audioData = await extractAudioFromUrl(sourceUrl, isProxy);
         }
-        notify("Extracting audio...", "info");
-        const isProxy = sourceUrl.includes('drive.google.com') && !localFileSrc;
-        const audioData = await extractAudioFromUrl(sourceUrl, isProxy);
-        notify(`Starting AI Model...`, "info");
-        workerRef.current.postMessage({ type: 'transcribe', audio: audioData, language: transcribeLanguage, model: transcribeModel });
-    } catch (e: any) { console.error("Transcribe Error:", e); notify(e.message || "Failed to start", "error"); setIsTranscribing(false); setTranscribeProgress(null); }
+        // T-37: раннер-синглтон — воркер переживает уход со страницы
+        startTranscription(version?.id || "", {
+            audio: audioData,
+            language: transcribeLanguage,
+            model: transcribeModel,
+            wordTimestamps: true,
+            modelBaseUrl: (import.meta as any).env?.VITE_WHISPER_MODEL_BASE_URL,
+            engine: transcribeEngine,
+        });
+        corsRetryRef.current = false; // успешный старт — сбрасываем флаг автоповтора CORS
+    } catch (e: any) {
+        console.error("Transcribe Error:", e);
+        const emsg = String(e?.message || '');
+        if (/AUDIO_FETCH_BLOCKED|Failed to fetch|CORS/i.test(emsg)) {
+            // T-357: похоже на CORS бакета — один раз пробуем применить настройку CORS
+            // автоматически и повторить транскрибацию (обычно это и есть настоящий фикс).
+            if (!corsRetryRef.current) {
+                corsRetryRef.current = true;
+                setIsTranscribing(false); setTranscribeProgress(null);
+                notify('Не удалось скачать видео из хранилища — применяю настройку CORS и повторяю…', "info");
+                try {
+                    const token = await getToken();
+                    const r = await fetch('/api/storage?action=configure_cors', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        body: JSON.stringify({ projectId: project?.id }),
+                    });
+                    if (r.ok) {
+                        notify('CORS применён — повторяю транскрибацию.', "success");
+                        await new Promise((res) => setTimeout(res, 600));
+                        await handleTranscribe();
+                        return;
+                    }
+                } catch { /* покажем инструкцию ниже */ }
+                notify(t('player.transcribe.err_fetch'), "error");
+                return;
+            }
+            // T-354: не смогли скачать видео для аудио-дорожки (CORS бакета/сеть) —
+            // показываем понятную инструкцию вместо «Failed to fetch».
+            notify(t('player.transcribe.err_fetch'), "error");
+        } else {
+            notify(e?.message || "Failed to start", "error");
+        }
+        setIsTranscribing(false); setTranscribeProgress(null);
+    }
   };
 
   const seekByFrame = (frames: number) => {
@@ -520,8 +686,20 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       versionToUpdate.comments = newComments; 
       updatedVersions[currentVersionIdx] = versionToUpdate; 
       const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); 
-      onUpdateProject({ ...project, assets: updatedAssets }); 
-      if (!isDemo && currentUser) await api.comment(project.id, asset.id, version.id, action, payload, currentUser); 
+      // T-13: комментарии пишутся ТОЛЬКО через comment-endpoint (инкрементально).
+      // Полный sync проекта отсюда убран: он дублировал запись (POST /api/data + action=comment
+      // → дубликаты комментариев при гонке/retry).
+      onUpdateProject({ ...project, assets: updatedAssets }, true); 
+      if (!isDemo && currentUser) {
+            try {
+                await api.comment(project.id, asset.id, version.id, action, payload, currentUser);
+            } catch (err: any) {
+                if (String(err?.message || '').includes('409') || String(err?.message || '').includes('Conflict')) {
+                    await new Promise(r => setTimeout(r, 400));
+                    try { await api.comment(project.id, asset.id, version.id, action, payload, currentUser); } catch (e2: any) { notify(t('common.error'), 'error'); }
+                } else { notify(t('common.error'), 'error'); }
+            }
+        } 
   };
 
   useEffect(() => { 
@@ -530,11 +708,17 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
   const handleRemoveDeadVersion = async () => { if (!confirm("Remove version?")) return; const uV = asset.versions.filter(v => v.id !== version.id); if (uV.length === 0) { onBack(); return; } let newIdx = Math.min(currentVersionIdx, uV.length - 1); if (newIdx < 0) newIdx = 0; const uA = project.assets.map(a => a.id === asset.id ? { ...a, versions: uV, currentVersionIndex: newIdx } : a); setDriveUrl(null); setDriveFileMissing(false); setDrivePermissionError(false); setVideoError(false); setDriveUrlRetried(false); setLoadingDrive(true); setCurrentVersionIdx(newIdx); onUpdateProject({ ...project, assets: uA }); notify("Version removed", "info"); };
 
+  // T-18: getToken из useAuth() — нестабильная ссылка (в mock-шиме clerkShim.ts создаёт новую
+  // на каждый рендер): в deps эффекта версии она перезапускала эффект на каждом рендере →
+  // `currentTime = 0; load()` отматывал видео назад во время скраба/плейбека. Токен читаем через ref.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
+
   // DRIVE & S3 LOADING (UPDATED)
   useEffect(() => {
     setIsPlaying(false); setCurrentTime(0); setSelectedCommentId(null); setEditingCommentId(null); setMarkerInPoint(null); setMarkerOutPoint(null);
     setVideoError(false); setDriveFileMissing(false); setDrivePermissionError(false); setDriveUrlRetried(false); setDriveUrl(null); setLoadingDrive(false);
-    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); setTranscript(null);
+    setShowVoiceModal(false); setIsFpsDetected(false); setIsVerticalVideo(false); const cached = loadTranscript(version?.id || ''); setTranscript(cached); if (!cached && version?.id) { void loadTranscriptWithIdb(version.id).then((fromIdb) => { if (fromIdb) setTranscript(fromIdb); }); }
 
     const checkRemoteStatus = async () => {
         if (!isMockMode) {
@@ -542,7 +726,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             if (version?.storageType === 's3' && version.s3Key) {
                 setLoadingDrive(true);
                 try {
-                    const token = await getToken();
+                    const token = await getTokenRef.current();
                     // Get Presigned GET URL
                     // UPDATED API PATH
                     const presignRes = await fetch('/api/storage?action=presign', {
@@ -570,10 +754,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     } else {
                         const err = await presignRes.json();
                         console.error("S3 Sign Failed", err);
-                        throw new Error(err.error || "Failed to sign S3 URL");
+                        throw Object.assign(new Error(err.error || "Failed to sign S3 URL"), { status: presignRes.status });
                     }
                 } catch (e) {
                     console.error("S3 Load Error", e);
+                    const st = (e as any)?.status; setS3ErrorDetail(st === 401 ? 'auth' : (st === 403 || st === 404) ? 'config' : 'network');
                     setVideoError(true);
                 } finally {
                     setLoadingDrive(false);
@@ -612,7 +797,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
     };
     checkRemoteStatus();
     if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; videoRef.current.load(); }
-  }, [version?.id, isMockMode, isOwner, getToken]); 
+  }, [version?.id, isMockMode, isOwner]);
 
   // ... (Rest of Player Handlers, Render logic unchanged) ...
   // Player Handlers
@@ -669,7 +854,8 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const handleTimeUpdate = () => { if (!isScrubbing && !isVideoScrubbing && videoRef.current) { setCurrentTime(videoRef.current.currentTime); if (viewMode === 'side-by-side' && compareVideoRef.current) { if (Math.abs(compareVideoRef.current.currentTime - videoRef.current.currentTime) > 0.1) { compareVideoRef.current.currentTime = videoRef.current.currentTime; } } } };
   
   const handleFixPermissions = async () => { if (!version.googleDriveId) return; notify("Attempting to make file public...", "info"); const success = await GoogleDriveService.makeFilePublic(version.googleDriveId); if (success) { notify("Permissions fixed! Refreshing...", "success"); setVideoError(false); setDrivePermissionError(false); setDriveUrlRetried(false); const streamUrl = await GoogleDriveService.getAuthenticatedStreamUrl(version.googleDriveId); setDriveUrl(`${streamUrl}&t=${Date.now()}`); } else { notify("Failed to fix permissions. Check Drive settings.", "error"); } };
-  const handleVideoError = async () => { 
+  const handleVideoError = async () => {
+    if (localFileSrc && localFileSrc.startsWith('blob:')) { setLocalFileSrc(null); setLocalFileName(null); } 
       if (loadingDrive) return; 
       if (!isMockMode && version.storageType === 'drive' && version.googleDriveId) { 
           if (!driveUrlRetried) { setDriveUrlRetried(true); const fallbackUrl = `https://drive.google.com/uc?export=download&id=${version.googleDriveId}&t=${Date.now()}`; setDriveUrl(fallbackUrl); return; } 
@@ -680,14 +866,69 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   };
   
   // ... (Timeline scrubbing, video scrubbing, fullscreen, etc unchanged) ...
-  const handleTimelinePointerDown = (e: React.PointerEvent) => { isDragRef.current = true; setIsScrubbing(true); if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); } updateScrubPosition(e); (e.target as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleTimelinePointerMove = (e: React.PointerEvent) => { if (isDragRef.current) { updateScrubPosition(e); } };
+  // T-18: pointerId-guard на всех стадиях — Move/Up/Cancel чужого пальца не завершают скраб
+  const handleTimelinePointerDown = (e: React.PointerEvent) => {
+      if (isDragRef.current.active) return; // мультитач: второй палец не перехватывает скраб
+      isDragRef.current = { active: true, pointerId: e.pointerId };
+      setIsScrubbing(true);
+      if (isPlaying) { setIsPlaying(false); videoRef.current?.pause(); }
+      updateScrubPosition(e);
+      setPointerCaptureSafe(e.target as HTMLElement, e.pointerId);
+  };
+  const handleTimelinePointerMove = (e: React.PointerEvent) => { if (isDragRef.current.active && isDragRef.current.pointerId === e.pointerId) { updateScrubPosition(e); } };
   const updateScrubPosition = (e: React.PointerEvent) => { if (!timelineRef.current || !videoRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const percentage = x / rect.width; const newTime = percentage * duration; setCurrentTime(newTime); videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handleTimelinePointerUp = (e: React.PointerEvent) => { isDragRef.current = false; setIsScrubbing(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); };
+  // T-18: единый safeEnd для pointerup/pointercancel/lostpointercapture (iOS-системный жест
+  // обрывает pointer-сессию — без cancel-обработчиков плеер зависал в режиме скраба)
+  const handleTimelinePointerUp = (e: React.PointerEvent) => {
+      if (!isDragRef.current.active || isDragRef.current.pointerId !== e.pointerId) return;
+      isDragRef.current = { active: false, pointerId: null };
+      setIsScrubbing(false);
+      releasePointerCaptureSafe(e.target as HTMLElement, e.pointerId);
+  };
 
-  const handleVideoDragStart = (e: React.PointerEvent) => { e.preventDefault(); videoScrubRef.current = { startX: e.clientX, startTime: currentTime, isDragging: false, isPressed: true }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
-  const handleVideoDragMove = (e: React.PointerEvent) => { if (!videoScrubRef.current.isPressed) return; const { startX, startTime, isDragging } = videoScrubRef.current; if (!isDragging) { if (Math.abs(e.clientX - startX) > 10) { videoScrubRef.current.isDragging = true; setIsVideoScrubbing(true); if (isPlaying) togglePlay(); } else { return; } } const deltaX = e.clientX - startX; const pixelsPerFrame = 5; const framesMoved = deltaX / pixelsPerFrame; const timeChange = framesMoved * (1 / videoFps); const newTime = Math.max(0, Math.min(duration, startTime + timeChange)); setCurrentTime(newTime); if(videoRef.current) videoRef.current.currentTime = newTime; if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime; };
-  const handleVideoDragEnd = (e: React.PointerEvent) => { if (videoScrubRef.current.isPressed && !videoScrubRef.current.isDragging) { togglePlay(); } setIsVideoScrubbing(false); videoScrubRef.current.isDragging = false; videoScrubRef.current.isPressed = false; (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); };
+  // T-18: мультитач — пока первый палец скрабит, pointerdown второго игнорируем;
+  // ширина оверлея кэшируется на pointerdown (getBoundingClientRect на каждый move — layout thrashing)
+  const handleVideoDragStart = (e: React.PointerEvent) => {
+      if (videoScrubRef.current.isPressed) return;
+      e.preventDefault();
+      videoScrubRef.current = { startX: e.clientX, startTime: currentTime, isDragging: false, isPressed: true, pointerId: e.pointerId };
+      setPointerCaptureSafe(e.currentTarget as HTMLElement, e.pointerId);
+  };
+  const handleVideoDragMove = (e: React.PointerEvent) => {
+      const scrub = videoScrubRef.current;
+      if (!scrub.isPressed || scrub.pointerId !== e.pointerId) return; // чужой палец игнорируем
+      if (!scrub.isDragging) {
+          if (Math.abs(e.clientX - scrub.startX) > 10) {
+              scrub.isDragging = true;
+              setIsVideoScrubbing(true);
+              if (isPlaying) togglePlay();
+          } else {
+              return;
+          }
+      }
+      // T-18: кадровая точность утверждена владельцем (SETTINGS.md): 5px = 1 кадр.
+      // duration=0/Infinity/NaN → скраб не двигаем.
+      const scrubDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+      if (scrubDuration <= 0) return;
+      const framesMoved = Math.round((e.clientX - scrub.startX) / VIDEO_SCRUB_PX_PER_FRAME);
+      const newTime = Math.max(0, Math.min(scrubDuration, scrub.startTime + framesMoved / videoFps));
+      setCurrentTime(newTime);
+      if (videoRef.current) videoRef.current.currentTime = newTime;
+      if (compareVideoRef.current) compareVideoRef.current.currentTime = newTime;
+  };
+  // T-18: safeEnd — тот же обработчик для pointerup, pointercancel и lostpointercapture
+  // (повторный вызов идемпотентен; release только при hasPointerCapture — без проверки
+  // повторный end после cancel бросал DOMException)
+  const handleVideoDragEnd = (e: React.PointerEvent) => {
+      const scrub = videoScrubRef.current;
+      if (scrub.pointerId !== null && scrub.pointerId !== e.pointerId) return; // чужой палец игнорируем
+      if (scrub.isPressed && !scrub.isDragging) togglePlay();
+      setIsVideoScrubbing(false);
+      scrub.isDragging = false;
+      scrub.isPressed = false;
+      scrub.pointerId = null;
+      releasePointerCaptureSafe(e.currentTarget as HTMLElement, e.pointerId);
+  };
 
   const toggleFullScreen = () => { 
       const container = playerContainerRef.current as any;
@@ -726,35 +967,392 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
   const cycleFps = (e: React.MouseEvent) => { e.stopPropagation(); const idx = VALID_FPS.indexOf(videoFps); setVideoFps(idx === -1 ? 24 : VALID_FPS[(idx + 1) % VALID_FPS.length]); setIsFpsDetected(false); };
   // Drag handlers moved to FloatingControls component
   const seek = (delta: number) => { if (videoRef.current) { const t = Math.min(Math.max(videoRef.current.currentTime + delta, 0), duration); videoRef.current.currentTime = t; setCurrentTime(t); } };
-  const handleAddComment = () => { if (!newCommentText.trim()) return; const cId = generateId(); syncCommentAction('create', { id: cId, text: newCommentText, timestamp: markerInPoint !== null ? markerInPoint : currentTime, duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : undefined, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
-  const handleDeleteComment = (id: string) => { if (confirm(t('pv.delete_asset_confirm'))) syncCommentAction('delete', { id }); };
+  // T-19: создание комментария вынесено (text параметром) — push-to-talk коммитит без чтения свежего state (stale closure)
+  const createComment = (text: string, timestampOverride?: number, durationOverride?: number) => { const cId = generateId(); syncCommentAction('create', { id: cId, text, timestamp: markerInPoint !== null ? markerInPoint : (timestampOverride ?? currentTime), duration: markerOutPoint && markerInPoint ? markerOutPoint - markerInPoint : durationOverride, status: CommentStatus.OPEN, authorName: currentUser.name }); setNewCommentText(''); setMarkerInPoint(null); setMarkerOutPoint(null); setTimeout(() => { document.getElementById(`comment-${cId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); sidebarInputRef.current?.blur(); playerContainerRef.current?.focus(); };
+  const handleAddComment = () => { createComment(newCommentText); };
+  const handleDeleteComment = (id: string) => { if (confirm(t('player.comment.delete_confirm'))) syncCommentAction('delete', { id }); };
   const handleResolveComment = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const c = comments.find(c => c.id === id); if (c) syncCommentAction('update', { id, status: c.status === CommentStatus.OPEN ? CommentStatus.RESOLVED : CommentStatus.OPEN }); };
   const startEditing = (comment: Comment) => { setEditingCommentId(comment.id); setEditText(comment.text); };
   const cancelEdit = () => { setEditingCommentId(null); setEditText(''); };
   const saveEdit = (id: string) => { syncCommentAction('update', { id, text: editText }); setEditingCommentId(null); setEditText(''); };
   const handleBulkResolve = () => { comments.filter(c => c.status === CommentStatus.OPEN).forEach(c => syncCommentAction('update', { id: c.id, status: CommentStatus.RESOLVED })); };
   const handleToggleLock = () => { const updatedVersions = [...asset.versions]; const versionToUpdate = { ...updatedVersions[currentVersionIdx] }; versionToUpdate.isLocked = !versionToUpdate.isLocked; updatedVersions[currentVersionIdx] = versionToUpdate; const updatedAssets = project.assets.map(a => a.id === asset.id ? { ...a, versions: updatedVersions } : a); onUpdateProject({ ...project, assets: updatedAssets }); notify(versionToUpdate.isLocked ? t('player.lock_ver') : t('player.unlock_ver'), "info"); };
-  const startListening = () => { 
+  // T-07: ручной ввод в поле комментария во время слушания становится новой базой
+  // (onChange не срабатывает при программной установке value → диктовка не «перепутается» с печатью)
+  const handleCommentTextChange = (value: string) => {
+      if (lastDictatedRef.current === null || value !== lastDictatedRef.current) {
+          manualBaseRef.current = value;
+      }
+      setNewCommentText(value);
+  };
+  // T-07: выставляем текст диктовки: база + накопленные финалы + текущий interim
+  const applyDictation = () => {
+      const dictated = [finalTranscriptRef.current, pendingInterimRef.current].filter(Boolean).join(' ');
+      const next = [manualBaseRef.current, dictated].filter(Boolean).join(' ');
+      lastDictatedRef.current = next;
+      setNewCommentText(next);
+  };
+  const startListening = () => {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) { 
-          notify("Speech recognition not supported in this browser.", "error"); 
-          return; 
-      } 
-      recognitionRef.current = new SpeechRecognition(); 
-      recognitionRef.current.continuous = false; 
-      recognitionRef.current.interimResults = false; 
-      recognitionRef.current.lang = 'en-US'; 
-      recognitionRef.current.onstart = () => setIsListening(true); 
-      recognitionRef.current.onend = () => setIsListening(false); 
-      recognitionRef.current.onresult = (event: any) => { 
-          const t = event.results[0][0].transcript; 
-          setNewCommentText(prev => prev ? `${prev} ${t}` : t); 
-      }; 
-      recognitionRef.current.start(); 
+      if (!SpeechRecognition) {
+          notify(t('player.voice.unsupported'), "error");
+          return;
+      }
+      // Перезапуск: глушим предыдущую сессию, чтобы start() не бросил InvalidStateError
+      if (recognitionRef.current) {
+          try {
+              recognitionRef.current.onend = null;
+              recognitionRef.current.onresult = null;
+              recognitionRef.current.stop();
+          } catch { /* уже остановлено */ }
+          recognitionRef.current = null;
+      }
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      // T-07: язык распознавания = язык интерфейса
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || 'en-US';
+      // База диктовки: текст, который был в поле до старта
+      manualBaseRef.current = newCommentText;
+      finalTranscriptRef.current = '';
+      pendingInterimRef.current = '';
+      lastDictatedRef.current = newCommentText;
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => {
+          setIsListening(false);
+          // continuous=false: сессия завершена — дозакрепляем незавершённый interim как финальный
+          if (pendingInterimRef.current) {
+              const tail = pendingInterimRef.current.trim();
+              finalTranscriptRef.current = finalTranscriptRef.current ? `${finalTranscriptRef.current} ${tail}` : tail;
+              pendingInterimRef.current = '';
+              applyDictation();
+          }
+          if (recognitionRef.current === recognition) recognitionRef.current = null;
+      };
+      // T-07: понятный фидбек вместо молчаливого провала
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === 'not-allowed' || code === 'service-not-allowed') {
+              notify(t('player.voice.err_denied'), "error");
+          } else if (code === 'network') {
+              notify(t('player.voice.err_network'), "error");
+          } else if (code === 'no-speech') {
+              // Пользователь просто промолчал — не ошибка
+          } else {
+              notify(`${t('player.voice.err_generic')}${code}`, "error");
+          }
+          setIsListening(false);
+      };
+      recognition.onresult = (event: any) => {
+          let interim = '';
+          const startIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcript = result[0].transcript as string;
+              if (result.isFinal) {
+                  finalTranscriptRef.current = finalTranscriptRef.current ? `${finalTranscriptRef.current} ${transcript.trim()}` : transcript.trim();
+              } else {
+                  interim += transcript;
+              }
+          }
+          pendingInterimRef.current = interim;
+          applyDictation();
+      };
+      requestMicThenStart(recognition, () => setIsListening(false));
   };
   const toggleListening = () => { if (isListening) recognitionRef.current?.stop(); else startListening(); };
+  // T-07: открытие VoiceModal без клавиатуры (мобильные) — крупное поле + таймкод
+  const openVoiceModal = () => { setShowVoiceModal(true); startListening(); };
   const closeVoiceModal = (save: boolean) => { if (save) handleAddComment(); setShowVoiceModal(false); };
-  const handleQuickMarker = () => { setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
+  // T-26: выделение слова/фразы/диапазона + док действий (удалить · голос · печать)
+  const [showTxtOverlay, setShowTxtOverlay] = useState(false);
+  const [selRange, setSelRange] = useState<{ start: number; end: number } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMode, setSheetMode] = useState<'actions' | 'typing'>('actions');
+  const [typedText, setTypedText] = useState('');
+  const [sheetRecording, setSheetRecording] = useState(false);
+  const [sheetInterim, setSheetInterim] = useState('');
+  const sheetRecRef = useRef<any>(null);
+  const selDragRef = useRef(false);
+  const selStartTs = selRange ? ((transcript ?? [])[selRange.start]?.timestamp?.[0] ?? 0) : 0;
+  const selEndTs = selRange ? ((transcript ?? [])[selRange.end]?.timestamp?.[1] ?? selStartTs) : 0;
+  const selDuration = Math.max(0.05, selEndTs - selStartTs);
+  const selText = selRange ? rangeDeletionText(transcript ?? [], selRange.start, selRange.end) : '';
+  const rangeHasDeletion = selRange ? findDeletionsInRange(comments, selStartTs, selEndTs).length > 0 : false;
+  const beginSelection = (idx: number) => { setSelRange({ start: idx, end: idx }); setSheetOpen(true); setSheetMode('actions'); };
+  const extendSelection = (idx: number) => setSelRange((r) => (r ? { start: Math.min(r.start, idx), end: Math.max(r.end, idx) } : { start: idx, end: idx }));
+  const closeSelSheet = () => { setSheetOpen(false); setSheetMode('actions'); setTypedText(''); stopSheetRecording(); };
+  const markSelectionDeleted = () => {
+      if (!selRange) return;
+      findDeletionsInRange(comments, selStartTs, selEndTs).forEach((c) => syncCommentAction('delete', { id: c.id }));
+      const label = selRange.start === selRange.end ? t('player.transcript.delete') : t('player.transcript.delete_phrase');
+      syncCommentAction('create', { id: generateId(), text: `${label}: «${selText}»`, timestamp: selStartTs, duration: selDuration, status: CommentStatus.OPEN, authorName: currentUser.name, editKind: 'delete' as const });
+      closeSelSheet();
+  };
+  const restoreSelection = () => {
+      if (!selRange) return;
+      findDeletionsInRange(comments, selStartTs, selEndTs).forEach((c) => syncCommentAction('delete', { id: c.id }));
+      closeSelSheet();
+  };
+  // голосовая правка к выделению: зажал → говоришь (фразы добавляются к комментарию) → отпустил
+  const startSheetRecording = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { notify(t('player.voice.unsupported'), 'error'); return; }
+      if (recognitionRef.current) { try { recognitionRef.current.onend = null; recognitionRef.current.onresult = null; recognitionRef.current.stop(); } catch { /* уже остановлено */ } recognitionRef.current = null; setIsListening(false); }
+      cancelPTT();
+      const recognition = new SpeechRecognition();
+      sheetRecRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || 'en-US';
+      recognition.onstart = () => setSheetRecording(true);
+      recognition.onresult = (event: any) => {
+          let interim = '';
+          const startIndex = typeof event.resultIndex === 'number' ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const r = event.results[i];
+              if (r.isFinal) { const txt = r[0].transcript.trim(); if (txt) sheetDictatedRef.current = sheetDictatedRef.current ? `${sheetDictatedRef.current} ${txt}` : txt; }
+              else interim += r[0].transcript;
+          }
+          setSheetInterim([sheetDictatedRef.current, interim].filter(Boolean).join(' '));
+      };
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === 'not-allowed' || code === 'service-not-allowed') notify(t('player.voice.err_denied'), 'error');
+          else if (code === 'network') notify(t('player.voice.err_network'), 'error');
+      };
+      recognition.onend = () => { setSheetRecording(false); sheetRecRef.current = null; setSheetInterim(''); };
+      requestMicThenStart(recognition);
+  };
+  const stopSheetRecording = () => {
+      const rec = sheetRecRef.current;
+      sheetRecRef.current = null;
+      try { rec?.stop(); } catch { /* уже остановлено */ }
+      // отпускание = коммит: одна голосовая правка на выделенный диапазон
+      const dictated = sheetDictatedRef.current.trim();
+      if (dictated) createComment(dictated, selStartTs, selDuration);
+      sheetDictatedRef.current = '';
+      setSheetInterim('');
+      setSheetRecording(false);
+  };
+  const sheetDictatedRef = useRef('');
+  const sendTypedEdit = () => {
+      const text = typedText.trim(); if (!text) return;
+      createComment(text, selStartTs, selDuration);
+      setTypedText(''); setSheetMode('actions');
+  };
+  const isWordDeletedAt = (idx: number) => {
+      const w = (transcript ?? [])[idx];
+      return w?.timestamp ? isWordDeleted(comments, w) : false;
+  };
+  const handleWordTap = (word: { text: string; timestamp: [number, number] | null }, idx: number) => {
+      const t0 = word?.timestamp?.[0]; const v = videoRef?.current; if (v && typeof t0 === 'number' && Number.isFinite(t0)) v.currentTime = t0;
+      if (!word.timestamp) return;
+      // T-361: клик ВНУТРИ уже выделенного фрагмента НЕ сбрасывает выделение
+      // (раньше выделение фрагмента «слетало» до одного кликнутого слова).
+      setSelRange((r) => {
+          if (r && idx >= Math.min(r.start, r.end) && idx <= Math.max(r.start, r.end)) return r;
+          return { start: idx, end: idx };
+      });
+      setSheetOpen(true); setSheetMode('actions');
+  };
+  const wordUi = { onTap: handleWordTap, onExtend: extendSelection, isDeletedAt: isWordDeletedAt, selRange };
+  // T-37: подписка на синглтон транскрибации
+  const [showSubtitles, setShowSubtitles] = useState(false);
+  const [runnerState, setRunnerState] = useState<{ isTranscribing: boolean; versionId: string | null; progress: { status: string; progress: number } | null; chunks: { text: string; timestamp: [number, number] | null }[] | null; error: string | null }>({ isTranscribing: false, versionId: null, progress: null, chunks: null, error: null });
+  const lastRunnerErrRef = useRef<string | null>(null);
+  useEffect(() => { const e = runnerState.error; if (e && e !== lastRunnerErrRef.current) { lastRunnerErrRef.current = e; notify(e, 'error'); } }, [runnerState.error]);
+  useEffect(() => {
+      const unsub = subscribeTranscription((s) => {
+          setRunnerState({ isTranscribing: s.isTranscribing, versionId: s.versionId, progress: s.progress, chunks: s.chunks, error: s.error });
+          if (!s.isTranscribing && s.versionId === version?.id) { setTranscript(s.chunks); setIsTranscribing(false); setTranscribeProgress(null); }
+          if (s.isTranscribing && s.versionId === version?.id) setIsTranscribing(true);
+      });
+      return unsub;
+  }, []);
+  const rangeCount = (a: number, b: number) => Math.abs(b - a) + 1;
+  // T-23: учёт экранной клавиатуры — поднимаем бар комментариев над ней (мобильные)
+  const [kbLift, setKbLift] = useState(0);
+  useEffect(() => {
+      const vv = (window as any).visualViewport as VisualViewport | undefined;
+      if (!vv) return;
+      const update = () => {
+          const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          setKbLift(overlap > 120 ? Math.round(overlap) : 0);
+      };
+      vv.addEventListener('resize', update);
+      vv.addEventListener('scroll', update);
+      window.addEventListener('focusin', update);
+      window.addEventListener('focusout', update);
+      return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); window.removeEventListener('focusin', update); window.removeEventListener('focusout', update); };
+  }, []);
+  // T-19: push-to-talk — зажал mic в FloatingControls → говоришь (маленькая пилюля с живым текстом
+  // над контролами, НЕ перекрывая видео) → отпустил → комментарий на текущем таймкоде.
+  // Короткий тап (<400ms без диктовки) — прежний workflow: открыть VoiceModal.
+  const [isPTTActive, setIsPTTActive] = useState(false);
+  const [pttText, setPttText] = useState("");
+  const pttRecognitionRef = useRef<any>(null);
+  const pttBaseRef = useRef("");
+  const pttFinalRef = useRef("");
+  const pttInterimRef = useRef("");
+  const pttErrorRef = useRef(false);
+  const pttCancelRef = useRef(false);
+  const pttStartedAtRef = useRef(0);
+  const isPTTActiveRef = useRef(false);
+  // T-94: сначала системный запрос микрофона (гарантированный автозапрос), затем запуск распознавания
+  const requestMicThenStart = (rec: any, onFail?: () => void) => {
+      const md: any = (navigator as any).mediaDevices;
+      if (md && typeof md.getUserMedia === 'function') {
+          md.getUserMedia({ audio: true })
+              .then((st: MediaStream) => { try { st.getTracks().forEach((tr: any) => tr.stop()); } catch (e) {} try { rec.start(); } catch (e) { console.warn('SR start after mic failed', e); } })
+              .catch(() => { try { rec.start(); } catch (e) { console.warn('SR start denied', e); } if (onFail) onFail(); });
+      } else { try { rec.start(); } catch (e) { console.warn('SR start failed', e); } if (onFail) onFail(); }
+  };
+
+  const startPTT = () => {
+      if (isPTTActiveRef.current) return;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { notify(t("player.voice.unsupported"), "error"); return; }
+      // Глушим sidebar/VoiceModal-сессию, чтобы start() не бросил InvalidStateError
+      if (recognitionRef.current) {
+          try { recognitionRef.current.onend = null; recognitionRef.current.onresult = null; recognitionRef.current.stop(); } catch { /* уже остановлено */ }
+          recognitionRef.current = null;
+          setIsListening(false);
+      }
+      const recognition = new SpeechRecognition();
+      pttRecognitionRef.current = recognition;
+      pttBaseRef.current = newCommentText;
+      pttFinalRef.current = "";
+      pttErrorRef.current = false;
+      pttCancelRef.current = false;
+      pttStartedAtRef.current = Date.now();
+      setPttText("");
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      // T-19: язык распознавания = язык интерфейса (ru/en/es/pt/ja/ko) — не только английский
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || "en-US";
+      recognition.onstart = () => { isPTTActiveRef.current = true; setIsPTTActive(true); };
+      recognition.onresult = (event: any) => {
+          let interim = "";
+          const startIndex = typeof event.resultIndex === "number" ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcript = result[0].transcript as string;
+              if (result.isFinal) pttFinalRef.current = pttFinalRef.current ? `${pttFinalRef.current} ${transcript.trim()}` : transcript.trim();
+              else interim += transcript;
+          }
+          pttInterimRef.current = interim;
+          setPttText([pttFinalRef.current, interim].filter(Boolean).join(" "));
+      };
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === "not-allowed" || code === "service-not-allowed") notify(t("player.voice.err_denied"), "error");
+          else if (code === "network") notify(t("player.voice.err_network"), "error");
+          else if (code === "no-speech") { /* промолчал — не ошибка */ }
+          else { pttErrorRef.current = true; notify(`${t("player.voice.err_generic")}${code}`, "error"); }
+      };
+      recognition.onend = () => { finishPTTCommit(); };
+      requestMicThenStart(recognition);
+  };
+  const finishPTTCommit = () => {
+      if (!pttRecognitionRef.current) return; // идемпотентность: onend может прийти повторно
+      pttRecognitionRef.current = null;
+      isPTTActiveRef.current = false;
+      setIsPTTActive(false);
+      setPttText("");
+      if (pttCancelRef.current) { pttCancelRef.current = false; return; } // тап-отмена: модалка уже открыта
+      pttInterimRef.current = "";
+      const dictated = [pttFinalRef.current.trim(), pttInterimRef.current.trim()].filter(Boolean).join(" ");
+      const text = [pttBaseRef.current, dictated].filter(Boolean).join(" ").trim();
+      if (!dictated) {
+          if (!pttErrorRef.current) notify(t("player.voice.need_text"), "warning");
+          pttErrorRef.current = false;
+          return;
+      }
+      pttErrorRef.current = false;
+      // T-19 (ревью): живой таймкод из videoRef на момент отпускания — иначе stale closure от рендера на pointerdown
+      createComment(text, videoRef.current ? videoRef.current.currentTime : undefined);
+  };
+  const finishPTT = () => {
+      const elapsed = Date.now() - pttStartedAtRef.current;
+      if (elapsed < 400 && !pttFinalRef.current) {
+          // Короткий тап без диктовки — открыть VoiceModal (десктоп-workflow)
+          pttCancelRef.current = true;
+          try { pttRecognitionRef.current?.abort(); } catch { /* уже остановлено */ }
+          pttRecognitionRef.current = null;
+          isPTTActiveRef.current = false;
+          setIsPTTActive(false);
+          openVoiceModal();
+          return;
+      }
+      pttCancelRef.current = false;
+      try { pttRecognitionRef.current?.stop(); } catch { /* уже остановлено */ }
+  };
+  const cancelPTT = () => {
+      pttCancelRef.current = true;
+      try { pttRecognitionRef.current?.abort(); } catch { /* уже остановлено */ }
+      pttRecognitionRef.current = null;
+      isPTTActiveRef.current = false;
+      setIsPTTActive(false);
+      setPttText("");
+  };
+  // T-24: фоновая диктовка в фулскрине — каждая финальная фраза → комментарий на свой таймкод
+  const [isLiveDictating, setIsLiveDictating] = useState(false);
+  const [liveText, setLiveText] = useState("");
+  const liveRecognitionRef = useRef<any>(null);
+  const isLiveRef = useRef(false);
+  const startLiveDictation = () => {
+      if (isLiveRef.current) return;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) { notify(t("player.voice.unsupported"), "error"); return; }
+      if (recognitionRef.current) { try { recognitionRef.current.onend = null; recognitionRef.current.onresult = null; recognitionRef.current.stop(); } catch { /* уже остановлено */ } recognitionRef.current = null; setIsListening(false); }
+      cancelPTT();
+      const recognition = new SpeechRecognition();
+      liveRecognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = SPEECH_RECOGNITION_LANGS[language] || "en-US";
+      recognition.onstart = () => { isLiveRef.current = true; setIsLiveDictating(true); };
+      recognition.onresult = (event: any) => {
+          let interim = "";
+          const startIndex = typeof event.resultIndex === "number" ? event.resultIndex : 0;
+          for (let i = startIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const transcriptText = result[0].transcript as string;
+              if (result.isFinal) {
+                  const text = transcriptText.trim();
+                  if (text) createComment(text, videoRef.current ? videoRef.current.currentTime : undefined); // фоном: фраза → комментарий на текущий таймкод
+              } else interim += transcriptText;
+          }
+          setLiveText(interim);
+      };
+      recognition.onerror = (event: any) => {
+          const code = event?.error;
+          if (code === "not-allowed" || code === "service-not-allowed") notify(t("player.voice.err_denied"), "error");
+          else if (code === "network") notify(t("player.voice.err_network"), "error");
+          else if (code !== "no-speech") notify(`${t("player.voice.err_generic")}${code}`, "error");
+      };
+      recognition.onend = () => { isLiveRef.current = false; setIsLiveDictating(false); liveRecognitionRef.current = null; setLiveText(""); };
+      requestMicThenStart(recognition);
+  };
+  const stopLiveDictation = () => {
+      try { liveRecognitionRef.current?.stop(); } catch { /* уже остановлено */ }
+  };
+  // T-24: при размонтировании глушим фоновую диктовку
+  useEffect(() => {
+      return () => { if (liveRecognitionRef.current) { try { liveRecognitionRef.current.onend = null; liveRecognitionRef.current.abort(); } catch { /* уже остановлено */ } liveRecognitionRef.current = null; } };
+  }, []);
+  // T-19: при размонтировании глушим PTT-сессию
+  useEffect(() => {
+      return () => {
+          if (pttRecognitionRef.current) {
+              try { pttRecognitionRef.current.onend = null; pttRecognitionRef.current.abort(); } catch { /* уже остановлено */ }
+              pttRecognitionRef.current = null;
+          }
+      };
+  }, []);
+  const handleQuickMarker = () => { if (!newCommentText.trim()) { notify(t('player.voice.need_text'), "info"); return; } setMarkerInPoint(currentTime); setMarkerOutPoint(null); handleAddComment(); }; 
   const handleSetInPoint = () => { setMarkerInPoint(currentTime); notify("In Point Set", "info"); };
   const handleSetOutPoint = () => { if (markerInPoint !== null && currentTime > markerInPoint) { setMarkerOutPoint(currentTime); notify("Out Point Set", "info"); } else notify("Out point must be after In point", "error"); };
   const clearMarkers = () => { setMarkerInPoint(null); setMarkerOutPoint(null); };
@@ -771,7 +1369,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
 
       let content = ''; let mime = 'text/plain'; let ext = ''; 
       if (format === 'xml') { content = generateResolveXML(project.name, version.versionNumber, comments, videoFps); mime = 'application/xml'; ext = 'xml'; } 
-      else if (format === 'csv') { content = generateCSV(comments); mime = 'text/csv'; ext = 'csv'; } 
+      else if (format === 'csv') { content = generateCSV(comments, videoFps); mime = 'text/csv'; ext = 'csv'; } 
       else { content = generateEDL(project.name, version.versionNumber, comments, videoFps); mime = 'text/plain'; ext = 'edl'; } 
       
       downloadFile(`${project.name}_v${version.versionNumber}.${ext}`, content, mime); 
@@ -785,6 +1383,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       if (compareVersionIdx === idx) { setCompareVersionIdx(null); setViewMode('single'); } 
   };
 
+  const scrubActive = isScrubbing || isVideoScrubbing;
   const filteredComments = comments.filter(c => c.text.toLowerCase().includes(searchQuery.toLowerCase()));
   const activeOverlayComments = comments.filter(c => { const s = c.timestamp; const e = c.duration ? (s + c.duration) : (s + 4); return currentTime >= s && currentTime <= e; });
 
@@ -804,11 +1403,12 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
       <input type="file" accept=".mp4,.mov,.mkv,.webm,video/mp4,video/quicktime" style={{ display: 'none' }} ref={localFileRef} onChange={handleLocalFileSelect} onClick={(e) => (e.currentTarget.value = '')} />
 
       {!isFullscreen && (
-        <header className="h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
+           <FeatureErrorBoundary label="Player">
+        <header className="safe-top h-auto md:h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900 flex flex-row items-center justify-between px-2 md:px-4 shrink-0 z-50 relative backdrop-blur-md py-2 md:py-0 gap-2">
           {/* Header Content */}
           <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
             <button onClick={onBack} className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white transition-colors border border-zinc-200 dark:border-zinc-700 shrink-0" title={t('back')}><CornerUpLeft size={16} /></button>
-            {(!isSearchOpen || window.innerWidth > 768) && (
+            {(!isSearchOpen || isDesktopViewport) && (
               <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-zinc-900 dark:text-zinc-100 leading-tight flex-1 min-w-0">
                    <div className="flex items-center gap-2 max-w-full">
                        <div className="relative group/title min-w-0" id="tour-version-selector">
@@ -839,7 +1439,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                        <div className="hidden sm:block">{getSourceBadge()}</div>
                    </div>
                    
-                   <div className="flex items-center gap-2">
+                   <div className="hidden items-center gap-2">
                        {asset.versions.length > 1 && (
                             <div className="relative hidden md:block">
                                 <button onClick={() => setShowCompareMenu(!showCompareMenu)} className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border ${compareVersionIdx !== null ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent hover:border-zinc-300 dark:hover:border-zinc-600'}`}>{compareVersionIdx !== null ? `vs v${compareVersion?.versionNumber}` : 'Compare'} <ChevronDown size={10} /></button>
@@ -854,45 +1454,197 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
             )}
           </div>
           <div className="flex items-center gap-1 md:gap-3 shrink-0">
-             <div className={`flex items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
+<button onClick={() => setShowMobileMore(v => !v)} data-testid="mobile-more" title={t('player.more.title')} className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white"><EllipsisVertical size={20} /></button>
+<div className={`hidden items-center transition-all duration-300 ${isSearchOpen ? 'w-32 md:w-56 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2' : 'w-8 justify-end'}`}>
                 {isSearchOpen && (<input autoFocus className="w-full bg-transparent text-xs text-zinc-900 dark:text-white outline-none py-1.5" placeholder={t('dash.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onBlur={() => !searchQuery && setIsSearchOpen(false)} />)}
                 <button onClick={() => { if (isSearchOpen && searchQuery) setSearchQuery(''); else setIsSearchOpen(!isSearchOpen); }} className={`p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white ${isSearchOpen ? 'text-zinc-900 dark:text-white' : ''}`}>{isSearchOpen && searchQuery ? <XIcon size={16} /> : <Search size={18} />}</button>
              </div>
-             <div className="hidden md:block">
+             {showMobileMore && (
+<div className="md:hidden absolute top-full right-2 mt-1 z-[100] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl w-64 p-3 space-y-2">
+  <div className="flex items-center gap-2 text-[11px] font-bold text-zinc-500 uppercase tracking-wider"><Cloud size={12} /> {isSyncing ? t('player.syncing') : t('player.synced')}</div>
+  <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t('dash.search')} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-900 dark:text-white outline-none" />
+  <button onClick={() => { localFileRef.current?.click(); setShowMobileMore(false); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"><Upload size={14} /> {t('player.more.localfile')}</button>
+  {asset.versions.length > 1 && (
+    <button onClick={() => { setShowMobileMore(false); setShowMobileViewMenu(true); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800" data-testid="mobile-more-viewmode">{viewMode === 'side-by-side' ? t('player.more.viewmode.single') : t('player.more.viewmode.compare')}</button>
+  )}
+</div>
+)}
+{showMobileMore && <div className="fixed inset-0 z-[90] md:hidden" onClick={() => setShowMobileMore(false)} />}
+{/* T-08: переключатель вида доступен и на мобильных (ранее hidden md:block — единственная точка доступа к compare) */}
+             <div className="block">
                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
-                 <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="p-1.5 md:p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-50 min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}</div>
+                 {/* T-18: меню поднимается до z-[100] над backdrop z-[90] (образец — version selector) */}
+                 {viewMode === 'side-by-side' && compareVersion && (
+                     <button onClick={() => { const cur = currentVersionIdx; if (compareVersionIdx !== null) { handleSwitchVersion(compareVersionIdx); handleSelectCompareVersion(cur); } }} className="w-10 h-10 flex items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-white transition-colors" title={t('player.compare.swap')}><ArrowLeftRight size={18} /></button>
+                 )}
+                 <div className="relative"><button onClick={() => setShowMobileViewMenu(!showMobileViewMenu)} className="hidden md:flex md:w-auto md:h-auto flex items-center justify-center p-2 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">{viewMode === 'single' && <Monitor size={18} />}{viewMode === 'side-by-side' && <SplitSquareHorizontal size={18} />}</button>{showMobileViewMenu && (<div className="absolute top-full right-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl p-1 flex flex-col gap-1 z-[100] min-w-[120px]" onMouseLeave={() => setShowMobileViewMenu(false)}><button onClick={() => { setViewMode('single'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'single' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><Monitor size={14} /> Single</button><button onClick={() => { setViewMode('side-by-side'); setShowMobileViewMenu(false); }} className={`flex items-center gap-2 px-3 py-2 text-xs rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 ${viewMode === 'side-by-side' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-600 dark:text-zinc-400'}`}><SplitSquareHorizontal size={14} /> Split (Compare)</button></div>)}{showMobileViewMenu && <div className="fixed inset-0 z-[90]" onClick={() => setShowMobileViewMenu(false)}></div>}</div>
              </div>
           </div>
         </header>
+           </FeatureErrorBoundary>
+      )}
+
+      {/* T-18: корневой backdrop — header с backdrop-blur-md становится containing block для
+          fixed-потомков (как у version selector'а — его backdrop клипуется до header), поэтому
+          полноэкранное закрытие даёт этот слой: z-40 — над видео (z-30), под header (z-50) */}
+      {!isFullscreen && showMobileViewMenu && (
+        <div data-testid="mobile-view-menu-backdrop" className="fixed inset-0 z-40" onClick={() => setShowMobileViewMenu(false)}></div>
       )}
 
       {/* Body */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
-        <div ref={playerContainerRef} className={`flex-1 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
+        <div ref={playerContainerRef} className={`flex-1 min-h-0 flex flex-col bg-black lg:border-r border-zinc-800 group/fullscreen overflow-hidden transition-all duration-300 outline-none ${isFullscreen ? 'fixed inset-0 z-[100] w-screen h-screen' : 'relative'}`} tabIndex={-1}>
           {/* ... Video container ... */}
-          <div className="flex-1 relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
+          <div className="flex-1 min-h-0 relative w-full flex items-center justify-center bg-zinc-950 overflow-hidden group/player">
+{isTranscribing && (<div data-testid="transcribe-pill" className="absolute top-2 left-2 z-40 flex items-center gap-1.5 bg-indigo-600/80 backdrop-blur-sm rounded-full px-2.5 py-1 pointer-events-none"><Wand2 size={12} className="text-white animate-pulse" /><span className="text-[10px] font-bold text-white whitespace-nowrap">{t('player.transcribe.pill')} {transcribeProgress?.status === 'downloading' ? `${Math.round(transcribeProgress.progress || 0)}%` : '…'}</span></div>)}
              
+      {selRange !== null && sheetOpen && transcript && transcript[selRange.start] && (
+          <div className="fixed bottom-0 left-0 right-0 z-[120] bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 rounded-t-2xl shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }} data-testid="word-sheet">
+              <div className="flex justify-center pt-2"><div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div></div>
+              <div className="px-4 pt-2 pb-1">
+                  <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">{t('player.sel.range')} · {formatTimecode(selStartTs, videoFps)} → {formatTimecode(selEndTs, videoFps)}</div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-300 truncate">«{selText}»</div>
+                      </div>
+                      <button onClick={closeSelSheet} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 shrink-0"><XIcon size={16} /></button>
+                  </div>
+              </div>
+              {sheetMode === 'actions' && (
+                  <div className="px-4 pb-3 flex items-center gap-1.5">
+                      {rangeHasDeletion ? (
+                          <button onClick={restoreSelection} title={selRange && selRange.start === selRange.end ? t('player.sel.restore_word') : t('player.sel.restore')} className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 flex items-center justify-center shrink-0" data-testid="sel-restore"><RotateCcw size={16} /></button>
+                      ) : (
+                          <button onClick={markSelectionDeleted} title={selRange && selRange.start === selRange.end ? t('player.sel.delete_word') : t('player.sel.delete')} className="w-10 h-10 rounded-xl bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shrink-0" data-testid="sel-delete"><Trash2 size={16} /></button>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onPointerDown={(e) => { e.preventDefault(); startSheetRecording(); }}
+                              onPointerUp={(e) => { e.preventDefault(); stopSheetRecording(); }}
+                              onPointerCancel={stopSheetRecording}
+                              onLostPointerCapture={stopSheetRecording}
+                              onContextMenu={(e) => e.preventDefault()}
+                              className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 touch-none select-none border transition-colors ${sheetRecording ? 'bg-red-600 text-white border-red-500' : 'bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border-indigo-500/20'}`}
+                              data-testid="sel-voice"
+                          title={t('player.sel.voice')} ><Mic size={14} /> {sheetRecording ? t('player.sel.recording') : t('player.sel.voice')}</button>
+                          <button onClick={() => setSheetMode('typing')} className="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 hover:bg-indigo-600/20 flex items-center justify-center" data-testid="sel-type" title={t('player.sel.type')}><Pencil size={16} /></button>
+                      </div>
+                      {sheetRecording && sheetInterim && (<div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center truncate" data-testid="sheet-interim">{sheetInterim}…</div>)}
+                  </div>
+              )}
+              {sheetMode === 'typing' && (
+                  <div className="px-4 pb-3 flex flex-col gap-2">
+                      <textarea autoFocus value={typedText} onChange={(e) => setTypedText(e.target.value)} rows={2} placeholder={t('player.sel.type_placeholder')} className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-[13px] text-zinc-900 dark:text-white outline-none focus:border-indigo-500 resize-none" data-testid="sel-typed" />
+                      <div className="flex gap-2">
+                          <button onClick={() => setSheetMode('actions')} className="flex-1 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold">{t('player.transcript.menu_cancel')}</button>
+                          <button onClick={sendTypedEdit} disabled={!typedText.trim()} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2" data-testid="sel-send"><Send size={14} /> {t('player.sel.send')}</button>
+                      </div>
+                  </div>
+              )}
+          </div>
+      )}
              {/* ... Fullscreen button ... */}
-             <div className="absolute bottom-4 right-4 z-50 opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100 transition-opacity duration-300">
-                <button onClick={() => toggleFullScreen()} className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
-             </div>
+              <div className={`absolute bottom-4 right-4 z-50 flex flex-col md:flex-row items-center md:items-end gap-2 transition-opacity duration-300 ${isFullscreen ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover/player:opacity-100'}`}>
+                 {isFullscreen && (
+                     <button onClick={() => setShowTxtOverlay(v => !v)} data-testid="txt-toggle" title={t('player.txt.toggle')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg border ${showTxtOverlay ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-white/10'}`}><FileText size={20} /></button>
+                 )}
+                 {isFullscreen && (
+                     <button onClick={() => { if (isLiveDictating) stopLiveDictation(); else startLiveDictation(); }} data-testid="live-mic" title={t('player.live.mic')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg border ${isLiveDictating ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white border-white/10'}`}>{isLiveDictating ? <MicOff size={20} /> : <Mic size={20} />}</button>
+                 )}
+{transcript && transcript.length > 0 && (<button onClick={() => setShowSubtitles(v => !v)} data-testid="cc-toggle" title={t('player.cc.toggle')} className={`p-2 rounded-lg backdrop-blur-sm transition-colors ${showSubtitles ? 'bg-indigo-500 text-white' : 'bg-black/60 text-zinc-300 hover:text-white'}`}><Captions size={18} /></button>)}
+                 <button onClick={() => toggleFullScreen()} data-testid="fs-toggle" className="p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg" title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>{isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}</button>
+              </div>
              
-             {/* ... Timecode ... */}
-             <div id="tour-timecode" className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-px bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden">
-                <div className="px-3 py-1 text-white font-mono text-lg tracking-widest">{formatTimecode(currentTime, videoFps)}</div>
-                <div className="h-6 w-px bg-white/20"></div>
-                <button onClick={cycleFps} className="px-2 py-1 hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps" title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
+             <div id="tour-timecode" data-testid="scrub-timecode-chip" data-state={`${scrubActive ? "scrub" : "idle"}`} className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 shadow-lg z-30 select-none overflow-hidden transition-all duration-200 ${scrubActive ? 'px-1 py-1' : 'px-0.5 py-0.5 opacity-90'}`}>
+                <div className={`font-mono text-white tracking-widest transition-all duration-200 ${scrubActive ? 'text-2xl md:text-3xl px-4 py-1.5' : 'text-xs px-2 py-0.5'}`}>{formatTimecode(currentTime, videoFps)}</div>
+                <div className={`${scrubActive ? 'h-8' : 'h-4'} w-px bg-white/20 transition-all`}></div>
+                <button onClick={cycleFps} className={`${scrubActive ? 'px-3 py-2' : 'px-1.5 py-0.5'} hover:bg-white/10 transition-colors flex items-center gap-1.5 group/fps`} title={t('player.fps')}><span className={`text-[10px] font-mono font-bold ${isFpsDetected ? 'text-indigo-400' : 'text-zinc-400 group-hover/fps:text-zinc-200'}`}>{Number.isInteger(videoFps) ? videoFps : videoFps.toFixed(2)} FPS</span></button>
              </div>
 
-             {/* ... Comments Overlay ... */}
+
+             {/* T-24: TXT-оверлей — весь транскрипт поверх затемнённого видео (фулскрин) */}
+             {isFullscreen && showTxtOverlay && (
+                 <div data-testid="txt-overlay" className="absolute inset-0 z-[110] bg-black/85 backdrop-blur-md pt-16 pb-24 overflow-y-auto">
+                     <div className="max-w-3xl mx-auto px-4">
+                         <div className="flex items-center justify-between mb-4">
+                             <h3 className="text-sm font-bold text-white uppercase tracking-wider">{t('player.txt.title')}</h3>
+                             <button onClick={() => setShowTxtOverlay(false)} className="p-2 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white" title={t('cancel')}><XIcon size={18} /></button>
+                         </div>
+                             {transcript && transcript.length > 0 ? (
+                             <div className="text-sm leading-loose [touch-action:pan-y] select-none" data-testid="txt-overlay-words"
+                                 onPointerDown={(e) => { const t = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null; if (!t || t.dataset.idx === undefined) return; selDragRef.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } const wIdx = Number(t.dataset.idx); wordUi.onTap((transcript ?? [])[wIdx], wIdx); }}
+                                 onPointerMove={(e) => { if (!selDragRef.current) return; const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null; const t = el?.closest('[data-idx]') as HTMLElement | null; if (t?.dataset.idx !== undefined) wordUi.onExtend(Number(t.dataset.idx)); }}
+                                 onPointerUp={() => { selDragRef.current = false; }}
+                                 onPointerCancel={() => { selDragRef.current = false; }}
+                             >
+                                 {transcript.map((chunk: TranscriptChunk, i: number) => {
+                                     const deleted = wordUi.isDeletedAt(i);
+                                     const isActive = !!(chunk.timestamp && currentTime >= chunk.timestamp[0] && currentTime < chunk.timestamp[1]);
+                                     const inSel = wordUi.selRange && i >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && i <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
+                                     return (
+                                         <span key={i} data-idx={i} data-testid="transcript-word" className={`transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400' : ''} ${inSel ? 'bg-indigo-500/20 rounded-sm' : ''} ${isActive && !deleted ? 'text-indigo-300 font-semibold' : 'text-zinc-200 hover:text-white'}`}>{chunk.text.trim()}{" "}</span>
+                                     );
+                                 })}
+                             </div>
+                         ) : (
+                             <div className="text-center py-10" data-testid="txt-overlay-empty">
+                                 <p className="text-sm text-zinc-400 mb-4">{t('player.txt.empty_hint')}</p>
+                                 <button onClick={handleTranscribe} disabled={isTranscribing || loadingDrive} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold">{t('player.transcribe.pill')}</button>
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             )}
+
+{showSubtitles && transcript && transcript.length > 0 && (
+<div className="absolute bottom-16 left-0 right-0 z-[60] flex justify-center pointer-events-none px-4" data-testid="subtitles-overlay">
+<div className="bg-black/75 backdrop-blur-sm rounded-xl px-4 py-2 max-w-[92%] text-center pointer-events-auto">
+<div className="text-sm md:text-base leading-snug break-words">
+{(() => {
+  const t = transcript;
+  const groups: { ws: any[]; idx: number[] }[] = [];
+  let cur: { ws: any[]; idx: number[] } = { ws: [], idx: [] };
+  t.forEach((w: any, i: number) => {
+    if (!w.timestamp) return;
+    cur.ws.push(w); cur.idx.push(i);
+    const ends = /[.!?…]$/.test(w.text || '') || (cur.ws.length > 1 && w.timestamp[0] - (cur.ws[cur.ws.length - 2].timestamp?.[1] ?? w.timestamp[0]) > 0.9);
+    if (ends) { groups.push(cur); cur = { ws: [], idx: [] }; }
+  });
+  if (cur.ws.length) groups.push(cur);
+  let gi = groups.findIndex(g => currentTime <= (g.ws[g.ws.length - 1].timestamp?.[1] ?? 0) + 0.15);
+  if (gi === -1) gi = groups.length - 1;
+  const g = groups[gi];
+  if (!g) return <span className="text-zinc-400">…</span>;
+  return g.ws.map((w: any, k: number) => {
+    const idx = g.idx[k];
+    const deleted = wordUi.isDeletedAt(idx);
+    const active = currentTime >= w.timestamp[0] - 0.05 && currentTime <= w.timestamp[1] + 0.05;
+    const inSel = wordUi.selRange && idx >= Math.min(wordUi.selRange.start, wordUi.selRange.end) && idx <= Math.max(wordUi.selRange.start, wordUi.selRange.end);
+    return (
+      <span key={idx} data-testid="subtitle-word" onClick={() => wordUi.onTap(w, idx)}
+        className={`cursor-pointer transition-colors mr-[0.3em] ${deleted ? 'line-through text-red-400 opacity-60' : inSel ? 'bg-indigo-500/40 rounded px-0.5' : active ? 'text-yellow-300 font-bold' : 'text-white'}`}>{w.text}</span>
+    );
+  });
+})()}
+</div>
+<div className="text-[9px] text-zinc-400 mt-1">{t('player.cc.hint')}</div>
+</div>
+</div>
+)}
+
+{uploadTasks && uploadTasks.length > 0 && (<div data-testid="upload-strip" className="absolute bottom-24 inset-x-0 z-30 px-4 pointer-events-none"><div className="mx-auto max-w-md bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex flex-col gap-1 pointer-events-auto">{uploadTasks.map((task: any) => (<div key={task.id} className="flex items-center gap-2 text-[10px] text-zinc-200"><span className="truncate flex-1 min-w-0">{task.name}</span><div className="w-20 h-1 bg-zinc-700 rounded-full overflow-hidden shrink-0"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.round(task.progress || 0)}%` }} /></div><span className="tabular-nums w-8 text-right shrink-0">{Math.round(task.progress || 0)}%</span>{cancelUpload && (<button onClick={() => cancelUpload(task.id)} className="text-zinc-500 hover:text-white p-0.5 shrink-0" title={t('common.close')}><XIcon size={12} /></button>)}</div>))}</div></div>)}
+{/* ... Comments Overlay ... */}
+              {viewMode !== 'side-by-side' && (
              <div className="absolute bottom-24 lg:bottom-12 left-4 z-20 flex flex-col items-start gap-2 pointer-events-none w-[80%] md:w-[60%] lg:w-[40%]">
                  {activeOverlayComments.map(c => { const cl = stringToColor(c.userId); return (<div key={c.id} className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 border border-white/5 shadow-lg max-w-full break-words"><span style={{ color: cl }} className="font-bold mr-2 text-xs uppercase">{c.authorName || 'User'}:</span><span className="text-zinc-100">{c.text}</span></div>); })}
              </div>
+              )}
 
              {/* ... Voice Modal ... */}
-             {showVoiceModal && isFullscreen && (
-                 <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4">
+             {/* T-07: модалка доступна и без fullscreen (мобильные); T-18: закрытие тапом по backdrop */}
+             {showVoiceModal && (
+                 <div data-testid="voice-modal-backdrop" className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => closeVoiceModal(false)}>
+                    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer shrink-0 ${isListening ? 'bg-red-500/20 ring-4 ring-red-500/20 scale-110' : 'bg-zinc-800 hover:bg-zinc-700'}`} onClick={toggleListening}><Mic size={20} className={`${isListening ? 'text-red-500 animate-pulse' : 'text-zinc-400'}`} /></div>
                             <div className="flex-1 overflow-hidden">
@@ -900,7 +1652,7 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                                 <div className="flex items-center gap-2 text-indigo-400 font-mono text-[10px] bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-500/20 w-fit"><span>{formatTimecode(markerInPoint || currentTime, videoFps)}</span>{markerOutPoint && (<><span>→</span><span>{formatTimecode(markerOutPoint, videoFps)}</span></>)}</div>
                             </div>
                         </div>
-                        <textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder={isListening ? "Listening..." : "Type comment..."} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
+                        <textarea value={newCommentText} onChange={(e) => handleCommentTextChange(e.target.value)} placeholder={isListening ? "Listening..." : "Type comment..."} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-white text-sm focus:border-indigo-500 outline-none h-20 resize-none" autoFocus />
                         <div className="flex w-full gap-2"><button onClick={() => closeVoiceModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 font-medium transition-colors text-xs">{t('cancel')}</button><button onClick={() => closeVoiceModal(true)} disabled={!newCommentText.trim() || isLocked} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs">{t('save')}</button></div>
                     </div>
                  </div>
@@ -919,15 +1671,50 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                     
                     {version.storageType === 's3' ? (
                         <>
-                            <p className="text-zinc-300 font-bold text-lg mb-2">S3 Connection Error</p>
-                            <p className="text-xs text-zinc-500 max-w-[280px] mb-6 leading-relaxed">
-                                Unable to load file from S3 Bucket. This is usually due to CORS misconfiguration or missing permissions.
-                            </p>
-                            {isManager && (
-                                <button onClick={() => onBack()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer mb-2">
-                                    <Settings2 size={16} /> Check S3 Settings
-                                </button>
+                            <p className="text-zinc-300 font-bold text-lg mb-2">{t('player.s3.title')}</p>
+                            <p className="text-xs text-zinc-500 max-w-[280px] mb-2 leading-relaxed">{t('player.s3.desc')}</p>
+                            {s3ErrorDetail && (
+                                <p className="text-[11px] text-orange-300 mb-4 max-w-[280px]" data-testid="s3-error-reason">
+                                    {s3ErrorDetail === 'auth' ? t('player.s3.reason_auth') : s3ErrorDetail === 'config' ? t('player.s3.reason_config') : s3ErrorDetail === 'media' ? t('player.s3.reason_media') : t('player.s3.reason_network')}
+                                </p>
                             )}
+                            <div className="flex flex-col items-center gap-2 mb-2">
+                                {/* T-36: автофикс в один клик + пошаговая инструкция */}
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            setS3ErrorDetail(null);
+                                            const token = await getTokenRef.current?.() ?? null;
+                                            const res = await fetch(`/api/storage?action=configure_cors`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                                body: JSON.stringify({ projectId: project.id }),
+                                            });
+                                            const data = await res.json().catch(() => ({}));
+                                            if (res.ok && data.success) { notify(t('player.s3.autofix_done'), 'success'); setReloadTick((t) => t + 1); }
+                                            else { notify(data.error || t('player.s3.autofix_fail'), 'error'); }
+                                        } catch (e: any) { notify(e?.message || t('player.s3.autofix_fail'), 'error'); }
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm cursor-pointer"
+                                    data-testid="s3-autofix"
+                                >
+                                    <Wrench size={16} /> {t('player.s3.autofix')}
+                                </button>
+                                <div className="text-[11px] text-zinc-500 max-w-[320px] text-left leading-relaxed border border-zinc-800 rounded-lg p-3" data-testid="s3-steps">
+                                    <div className="font-bold text-zinc-400 uppercase text-[9px] mb-1">{t('player.s3.steps_title')}</div>
+                                    <div>1. {t('player.s3.step1')}</div>
+                                    <div>2. {t('player.s3.step2')}</div>
+                                    <div>3. {t('player.s3.step3')}</div>
+                                </div>
+                                <button onClick={() => { setVideoError(false); setDriveUrlRetried(false); setS3ErrorDetail(null); setReloadTick(t => t + 1); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm border border-zinc-700 cursor-pointer" data-testid="s3-retry">
+                                    <RotateCcw size={16} /> {t('player.s3.retry')}
+                                </button>
+                                {isManager && (
+                                    <button onClick={() => (onOpenStorageSettings ? onOpenStorageSettings() : onBack())} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors text-sm shadow-lg shadow-indigo-900/20 cursor-pointer">
+                                        <Settings2 size={16} /> {t('player.s3.check_settings')}
+                                    </button>
+                                )}
+                            </div>
                         </>
                     ) : (
                         <>
@@ -954,25 +1741,50 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
              )}
 
              {/* ... Video Element ... */}
-             <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? 'grid grid-cols-2 gap-1' : ''}`}>
+             <div className={`relative w-full h-full flex items-center justify-center bg-black ${viewMode === 'side-by-side' ? (isDesktopViewport ? 'grid grid-cols-2 gap-1' : 'grid grid-cols-1 gap-2 overflow-y-auto') : ''}`}>
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-                    {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">v{version.versionNumber}</div>}
+                    {viewMode === 'side-by-side' && <div className="absolute top-4 left-4 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold pointer-events-none">A · v{version.versionNumber}</div>}
                     <video key={version.id} ref={videoRef} src={localFileSrc || driveUrl || version.url} className="w-full h-full object-contain pointer-events-none" onTimeUpdate={handleTimeUpdate} onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); setVideoError(false); setIsFpsDetected(false); setIsVerticalVideo(e.currentTarget.videoHeight > e.currentTarget.videoWidth); }} onError={handleVideoError} onEnded={() => setIsPlaying(false)} playsInline controls={false} />
                 </div>
-                {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
-                <div className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
+                {viewMode === 'side-by-side' && compareVersion && (<div className="relative w-full h-full flex items-center justify-center overflow-hidden border-l border-zinc-800"><div className="absolute top-4 right-4 z-10 bg-black/60 text-indigo-400 px-2 py-1 rounded text-xs font-bold pointer-events-none">B · v{compareVersion.versionNumber}</div><video ref={compareVideoRef} src={compareVersion.url} className="w-full h-full object-contain pointer-events-none" muted playsInline controls={false} /></div>)}
+                {/* T-18: onPointerCancel/onLostPointerCapture — iOS-системный жест обрывает скраб, safeEnd выводит из режима */}
+                <div data-testid="video-scrub-overlay" className={`absolute inset-0 z-30 touch-none ${isVideoScrubbing ? 'cursor-grabbing' : 'cursor-default hover:cursor-grab'}`} onPointerDown={handleVideoDragStart} onPointerMove={handleVideoDragMove} onPointerUp={handleVideoDragEnd} onPointerCancel={handleVideoDragEnd} onLostPointerCapture={handleVideoDragEnd} onPointerLeave={handleVideoDragEnd}></div>
              </div>
           </div>
 
           <div className={`${isVerticalVideo ? 'absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pb-6 pt-10' : 'bg-zinc-900 border-t border-zinc-800 pb-2'} p-2 lg:p-4 shrink-0 transition-transform duration-300`}>
-             <div id="tour-timeline" className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
+             {/* T-18: onPointerCancel/onLostPointerCapture — safeEnd и для таймлайна */}
+             <div id="tour-timeline" className="relative h-8 md:h-8 group cursor-pointer flex items-center touch-none" ref={timelineRef} onPointerDown={handleTimelinePointerDown} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp} onPointerCancel={handleTimelinePointerUp} onLostPointerCapture={handleTimelinePointerUp} onPointerLeave={handleTimelinePointerUp}>
                 <div className="w-full h-2 md:h-1.5 bg-zinc-700/50 rounded-full overflow-hidden relative"><div className="h-full bg-indigo-500" style={{ width: `${(currentTime / duration) * 100}%` }} /></div>
-                {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: c.status === 'resolved' ? '#22c55e' : cl }} />); })}
+                {filteredComments.map(c => { const l = (c.timestamp / duration) * 100; const w = c.duration ? (c.duration / duration) * 100 : 0.5; const cl = stringToColor(c.userId); return (<div key={c.id} className={`absolute top-1/2 -translate-y-1/2 h-4 md:h-2.5 rounded-sm z-10 opacity-80 pointer-events-none`} style={{ left: `${l}%`, width: `${Math.max(0.5, w)}%`, minWidth: '4px', backgroundColor: (c as any).editKind === 'delete' ? '#ef4444' : (c.status === 'resolved' ? '#22c55e' : cl) }} />); })}
              </div>
           </div>
+        {!isFullscreen && sidebarTab === 'comments' && (
+            <div className="w-full shrink-0 lg:fixed lg:bottom-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] transition-[bottom] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]" style={{ bottom: kbLift ? `${kbLift}px` : undefined }}>
+                {(markerInPoint !== null || markerOutPoint !== null) ? (
+                    <div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>
+                ) : (
+                    <div className="flex items-center gap-2 mb-2 px-1" data-testid="comment-context">
+                        <div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20">
+                            <MapPin size={9} />
+                            <span>{t('player.comment.context')} {formatTimecode(currentTime, videoFps)}</span>
+                        </div>
+                    </div>
+                )}
+                <div className="flex gap-2 items-start" id="tour-comment-input">
+                    <div className="relative flex-1">
+                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => handleCommentTextChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
+                        <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>
+                    </div>
+                    <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-3 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={16} /></button>
+                </div>
+            </div>
+        )}
+
         </div>
 
         {!isFullscreen && (
+            <FeatureErrorBoundary label={t('player.transcript.zone')}>
             <PlayerSidebar 
                 sidebarTab={sidebarTab} setSidebarTab={setSidebarTab} filteredComments={filteredComments} isManager={isManager}
                 version={version} handleToggleLock={handleToggleLock} setShowExportMenu={setShowExportMenu} showExportMenu={showExportMenu}
@@ -985,21 +1797,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
                 setTranscribeLanguage={setTranscribeLanguage} transcribeModel={transcribeModel} setTranscribeModel={setTranscribeModel}
                 handleTranscribe={handleTranscribe} loadingDrive={loadingDrive} driveFileMissing={driveFileMissing} videoError={videoError}
                 setTranscript={setTranscript} seekByFrame={seekByFrame} videoFps={videoFps} t={t}
+                wordUi={wordUi} comments={comments} transcribeEngine={transcribeEngine} changeTranscribeEngine={changeTranscribeEngine}
             />
+            </FeatureErrorBoundary>
         )}
 
-        {!isFullscreen && sidebarTab === 'comments' && (
-            <div className="fixed bottom-0 left-0 right-0 lg:left-auto lg:right-0 lg:w-80 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 z-50 p-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-5px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-                {(markerInPoint !== null || markerOutPoint !== null) && (<div className="flex items-center gap-2 mb-2 px-1"><div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20 uppercase"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div><span>Range: {formatTimecode(markerInPoint || currentTime, videoFps)} - {markerOutPoint ? formatTimecode(markerOutPoint, videoFps) : '...'}</span></div></div>)}
-                <div className="flex gap-2 items-start" id="tour-comment-input">
-                    <div className="relative flex-1">
-                        <input ref={sidebarInputRef} disabled={isLocked} className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-8 py-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" placeholder={isLocked ? t('player.comments_locked') : (isListening ? t('player.voice.listening') : t('player.voice.placeholder'))} value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }} />
-                        <button onClick={toggleListening} disabled={isLocked} className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-white disabled:opacity-30'}`}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>
-                    </div>
-                    <button onClick={handleAddComment} disabled={!newCommentText.trim() || isLocked} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-3 rounded-lg transition-colors shrink-0 disabled:cursor-not-allowed shadow-sm"><Send size={16} /></button>
-                </div>
-            </div>
-        )}
       </div>
 
       <FloatingControls 
@@ -1014,10 +1816,11 @@ export const Player: React.FC<PlayerProps> = ({ asset, project, currentUser, onB
         markerInPoint={markerInPoint}
         markerOutPoint={markerOutPoint}
         clearMarkers={clearMarkers}
-        startListening={startListening}
+        openVoiceModal={openVoiceModal}
         isListening={isListening}
-        toggleListening={toggleListening}
-        isFullscreen={isFullscreen}
+                isPTTActive={isPTTActive || isLiveDictating} pttText={liveText || pttText}
+        onMicPointerDown={startPTT}
+        onMicPointerUp={finishPTT}
       />
     </div>
   );

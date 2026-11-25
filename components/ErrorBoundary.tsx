@@ -60,6 +60,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
           {/* Action Buttons */}
           <div className="flex flex-col gap-3 w-full max-w-xs">
+            <button onClick={() => window.history.back()} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-bold transition-colors">← Назад</button>
             <button
                 onClick={() => {
                     // Hard reload ignoring cache

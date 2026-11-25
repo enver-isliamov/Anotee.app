@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from '../../services/toastBus';
 import { useAuth } from '@clerk/clerk-react';
 import { AdminUser, UserPlan } from '../../types';
 import { RefreshCw, Search, Crown, CheckCircle, Zap, Shield, Filter, Repeat } from 'lucide-react';
@@ -85,7 +86,7 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
             setSelectedUser(null);
             fetchUsers();
         } catch (e) {
-            alert("Ошибка при изменении плана");
+            toast("Ошибка при изменении плана");
         } finally {
             setIsGranting(false);
         }
@@ -107,7 +108,7 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
             });
             fetchUsers();
         } catch (e) {
-            alert("Ошибка изменения роли");
+            toast("Ошибка изменения роли");
         }
     };
 
@@ -139,7 +140,7 @@ export const AdminUsersTab: React.FC<{ currentUserId: string | null | undefined 
                 <div className="relative flex-1">
                     <input 
                         type="text" 
-                        placeholder="Поиск по имени или email..." 
+                        placeholder="Search by name or email..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none focus:border-indigo-500 transition-colors shadow-sm"

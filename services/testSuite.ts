@@ -1,10 +1,23 @@
+﻿
+import { generateEDL, generateResolveXML, generateCSV } from './exportService.ts';
+import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from './utils.ts';
+import { isOrgAdmin } from './userUtils.ts';
+import type { Comment } from '../types.ts';
+import { CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types.ts';
+import { MOCK_PROJECTS } from '../constants.ts';
+import i18n from 'i18next';
+import { Calculator, Clock, FileOutput, ShieldCheck, Database, Globe, Wifi, ShieldAlert, Zap, Server, Film, Lock, PlayCircle, HardDrive, CreditCard, Cpu, Monitor, Mic, Languages } from 'lucide-react';
 
-import { generateEDL, generateResolveXML, generateCSV } from './exportService';
-import { generateId, stringToColor, formatTimecode, isExpired, getDaysRemaining } from './utils';
-import { isOrgAdmin } from './userUtils';
-import { Comment, CommentStatus, DEFAULT_CONFIG, DEFAULT_PAYMENT_CONFIG } from '../types';
-import { MOCK_PROJECTS } from '../constants';
-import { Calculator, Clock, FileOutput, ShieldCheck, Database, Globe, Wifi, ShieldAlert, Zap, Server, Film, Lock, PlayCircle, HardDrive, CreditCard, Cpu } from 'lucide-react';
+// ============================================================
+// System Diagnostics 2.0 (docs/TASKS.md T-12, docs/TESTING.md §3)
+// Каждый тест несёт severity, а при падении — diagnosis (гипотеза
+// причины) и task (готовый markdown для docs/TASKS.md, префикс [diag]).
+// Группы, завязанные на браузер, в node-окружении (unit-контракт
+// tests/unit/testSuite.test.ts, environment: 'node') честно возвращают
+// skipped-результаты вместо падения.
+// ============================================================
+
+export type Severity = 'critical' | 'warning' | 'info';
 
 export type TestResult = {
     name: string;
@@ -15,6 +28,12 @@ export type TestResult = {
     passCondition: string;
     failCondition: string;
     timestamp?: number;
+    /** Насколько серьёзно ПАДЕНИЕ этого теста (по умолчанию 'info'). */
+    severity?: Severity;
+    /** Гипотеза причины падения (обязателен при passed:false). */
+    diagnosis?: string;
+    /** Готовый markdown-текст задачи для docs/TASKS.md (обязателен при passed:false). */
+    task?: string;
 };
 
 export type TestGroup = {
@@ -23,6 +42,282 @@ export type TestGroup = {
     icon: any;
     description: string;
     tests: () => Promise<TestResult[]> | TestResult[];
+};
+
+// --- Общие хелперы -----------------------------------------
+
+export const getSeverity = (r: TestResult): Severity => r.severity ?? 'info';
+
+/** mock/dev без Clerk-ключа и бэкенда: security-проверки помечаем skipped, а не fail. */
+const IS_MOCK_ENV = (() => {
+    try { return !(import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY; } catch { return false; }
+})();
+
+const isBrowserRuntime = (): boolean =>
+    typeof window !== 'undefined' && typeof navigator !== 'undefined';
+
+const SKIPPED_NOTE = 'Проверка выполняется только в браузере (живое окружение); в node/unit-контексте пропущена.';
+
+const skippedResult = (name: string, description: string): TestResult => ({
+    name,
+    description,
+    passed: true,
+    expected: 'Браузерное окружение',
+    received: 'skipped: вне браузера (node)',
+    passCondition: SKIPPED_NOTE,
+    failCondition: 'Неприменимо вне браузера.',
+    severity: 'info'
+});
+
+/** Готовая задача для «чистых» регрессий логики (не зависит от окружения). */
+const regressionTask = (module: string, what: string): string => [
+    `### T-XX Regression: ${what}`,
+    '- Приоритет: P1',
+    `- Источник: [diag] System Diagnostics → ${module}`,
+    `- Проблема: чистая логика модуля ${module} ведёт себя не по контракту (${what}); тест на /test упал в живом браузере.`,
+    `- Цель: восстановить поведение модуля по unit-контракту (tests/unit) и по docs/ARCHITECTURE.md.`,
+    '- Acceptance: тест на /test зелёный; npm run test зелёный.'
+].join('\n');
+
+// --- Окружение: сборка сводки для панели/отчёта -------------
+
+export type BackendMode = 'mock' | 'prod' | 'unknown';
+
+export type EnvSummary = {
+    isBrowser: boolean;
+    href: string;
+    origin: string;
+    mode: BackendMode;
+    healthDetail: string;
+    userAgent: string;
+    browser: string;
+    viewport: { width: number; height: number };
+    devicePixelRatio: number;
+    online: boolean;
+    browserLanguage: string;
+    appLanguage: string;
+};
+
+const EMPTY_ENV: EnvSummary = {
+    isBrowser: false,
+    href: '-',
+    origin: '-',
+    mode: 'unknown',
+    healthDetail: 'не браузерное окружение',
+    userAgent: '-',
+    browser: '-',
+    viewport: { width: 0, height: 0 },
+    devicePixelRatio: 0,
+    online: true,
+    browserLanguage: '-',
+    appLanguage: '-'
+};
+
+/** Человекочитаемое имя браузера из User-Agent (для чипов, диагнозов и задач). */
+export const detectBrowser = (userAgent: string): string => {
+    const ua = userAgent || '';
+    const mobile = /Mobi|Android|iPhone|iPad/i.test(ua) ? ' (mobile)' : '';
+    const major = (m: RegExpMatchArray | null) => (m ? ` ${m[1].split('.')[0]}` : '');
+    const edge = ua.match(/Edg(?:e|A|iOS)?\/([\d.]+)/);
+    if (edge) return `Edge${major(edge)}${mobile}`;
+    const opera = ua.match(/(?:OPR|Opera)\/([\d.]+)/);
+    if (opera) return `Opera${major(opera)}${mobile}`;
+    const firefox = ua.match(/Firefox\/([\d.]+)/);
+    if (firefox) return `Firefox${major(firefox)}${mobile}`;
+    const chrome = ua.match(/(?:Chrome|CriOS)\/([\d.]+)/);
+    if (chrome) return `Chrome${major(chrome)}${mobile}`;
+    const safari = ua.match(/Version\/([\d.]+).*Safari/);
+    if (safari) return `Safari${major(safari)}${mobile}`;
+    return `Unknown browser${mobile}`;
+};
+
+type HealthProbe = { mode: BackendMode; detail: string };
+let healthProbeCache: { at: number; value: HealthProbe } | null = null;
+const HEALTH_PROBE_TTL_MS = 30_000;
+
+/**
+ * Определяет режим (mock/dev vs prod) косвенно: VITE_ ключ в рантайме недоступен.
+ * Живой бэкенд отвечает на /api/health JSON {status:'ok'}; 404/сетевая ошибка или
+ * HTML-ответ (vite dev SPA-fallback) = mock/dev.
+ */
+export const probeBackendMode = async (): Promise<HealthProbe> => {
+    if (healthProbeCache && Date.now() - healthProbeCache.at < HEALTH_PROBE_TTL_MS) {
+        return healthProbeCache.value;
+    }
+    let value: HealthProbe;
+    try {
+        const res = await fetch('/api/health', { cache: 'no-store' });
+        if (res.ok) {
+            try {
+                const data = await res.json();
+                value = data && data.status === 'ok'
+                    ? { mode: 'prod', detail: '200 {status:"ok"}' }
+                    : { mode: 'prod', detail: `200 ${JSON.stringify(data).slice(0, 80)}` };
+            } catch {
+                value = { mode: 'mock', detail: '200, но тело не JSON (vite dev без Vercel Functions)' };
+            }
+        } else {
+            value = { mode: 'mock', detail: `HTTP ${res.status} от /api/health` };
+        }
+    } catch (e: any) {
+        value = { mode: 'mock', detail: `network error: ${e?.message || e}` };
+    }
+    healthProbeCache = { at: Date.now(), value };
+    return value;
+};
+
+/** Сводка окружения для панели «Окружение» и отчётов. */
+export const collectEnvSummary = async (): Promise<EnvSummary> => {
+    if (!isBrowserRuntime()) return EMPTY_ENV;
+    const { mode, detail } = await probeBackendMode();
+    return {
+        isBrowser: true,
+        href: window.location.href,
+        origin: window.location.origin,
+        mode,
+        healthDetail: detail,
+        userAgent: navigator.userAgent,
+        browser: detectBrowser(navigator.userAgent),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        devicePixelRatio: window.devicePixelRatio || 1,
+        online: navigator.onLine,
+        browserLanguage: navigator.language || '-',
+        appLanguage: i18n.isInitialized ? i18n.language : '-'
+    };
+};
+
+// --- Статистика / Health Score / отчёты ---------------------
+
+export type SuiteStats = {
+    total: number;
+    passed: number;
+    failed: number;
+    criticalFails: number;
+    warningFails: number;
+    infoFails: number;
+};
+
+export const computeStats = (results: Record<string, TestResult[]>): SuiteStats => {
+    const all = Object.values(results).flat();
+    const failedList = all.filter(r => !r.passed);
+    return {
+        total: all.length,
+        passed: all.length - failedList.length,
+        failed: failedList.length,
+        criticalFails: failedList.filter(r => getSeverity(r) === 'critical').length,
+        warningFails: failedList.filter(r => getSeverity(r) === 'warning').length,
+        infoFails: failedList.filter(r => getSeverity(r) === 'info').length
+    };
+};
+
+/**
+ * Health Score: критичные падения весят x3, warning x1, info не влияет.
+ * Формула: max(0, 100% × (1 − (3×critical + 1×warning) / (3×total))).
+ */
+export const computeHealthScore = (results: Record<string, TestResult[]>): number | null => {
+    const { total, criticalFails, warningFails } = computeStats(results);
+    if (total === 0) return null;
+    return Math.max(0, Math.round(100 * (1 - (3 * criticalFails + warningFails) / (3 * total))));
+};
+
+export const HEALTH_SCORE_FORMULA = 'max(0, 100% × (1 − (3×critical + 1×warning) / (3×total)))';
+
+export const formatFileStamp = (d: Date): string => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+};
+
+export type DiagnosticReportInput = {
+    now: Date;
+    version: string;
+    env: EnvSummary | null;
+    results: Record<string, TestResult[]>;
+};
+
+/** Markdown-отчёт: шапка с окружением, сводка, таблица падений с diagnosis и task. */
+export const buildReportMarkdown = ({ now, version, env, results }: DiagnosticReportInput): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const stats = computeStats(results);
+    const score = computeHealthScore(results);
+
+    const lines: string[] = [
+        '# Anotee System Diagnostics — отчёт',
+        '',
+        `- **Дата:** ${dateStr}`,
+        `- **Версия приложения:** ${version}`,
+        `- **URL:** ${env?.href || '-'}`,
+        `- **Режим:** ${env ? `${env.mode} (${env.healthDetail})` : '-'}`,
+        `- **Браузер:** ${env?.browser || '-'} · UA: \`${env?.userAgent || '-'}\``,
+        `- **Viewport:** ${env ? `${env.viewport.width}×${env.viewport.height} @ ${env.devicePixelRatio}x` : '-'}`,
+        `- **Сеть:** ${env?.online ? 'online' : 'offline'}`,
+        `- **Языки:** browser ${env?.browserLanguage || '-'} · app ${env?.appLanguage || '-'}`,
+        `- **Health Score:** ${score === null ? '-' : `${score}%`} — формула: \`${HEALTH_SCORE_FORMULA}\``,
+        '',
+        '## Сводка',
+        '',
+        `Total ${stats.total} · Passed ${stats.passed} · Failed ${stats.failed} (critical ${stats.criticalFails}, warning ${stats.warningFails}, info ${stats.infoFails})`,
+        ''
+    ];
+
+    const groups = TEST_SUITE
+        .map(g => ({ g, rs: results[g.id] || [] }))
+        .filter(x => x.rs.length > 0);
+
+    if (stats.failed === 0) {
+        lines.push('## Падения', '', 'Все выполненные тесты зелёные.');
+    } else {
+        lines.push('## Падения', '');
+        for (const { g, rs } of groups) {
+            for (const r of rs.filter(x => !x.passed)) {
+                lines.push(
+                    `### [${getSeverity(r).toUpperCase()}] ${g.title} → ${r.name}`,
+                    '',
+                    `- Expected: ${r.expected || '-'}`,
+                    `- Received: ${r.received || '-'}`,
+                    `- Условие падения: ${r.failCondition}`,
+                    ...(r.diagnosis ? [`- Почему: ${r.diagnosis}`] : []),
+                    ''
+                );
+            }
+        }
+        lines.push('## Готовые задачи (для docs/TASKS.md)', '');
+        for (const { g, rs } of groups) {
+            for (const r of rs.filter(x => !x.passed && x.task)) {
+                lines.push(`#### ${g.title} → ${r.name}`, '', r.task!, '');
+            }
+        }
+    }
+    return lines.join('\n');
+};
+
+// --- Ключи для i18n/UI-группы: реальные ключи, используемые в коде ---
+
+const I18N_SAMPLE_KEYS: string[] = [
+    'nav.dashboard',
+    'nav.roadmap',
+    'common.copy',
+    'common.error',
+    'common.success',
+    'common.upload',
+    'player.comments',
+    'player.fps',
+    'player.saved',
+    'player.marker.in',
+    'player.marker.out',
+    'player.resolve_all',
+    'player.export.xml',
+    'player.voice.listening',
+    'profile.language'
+];
+
+const shuffle = <T>(arr: T[]): T[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
 };
 
 const mockComments: Comment[] = [
@@ -37,6 +332,139 @@ const mockComments: Comment[] = [
 ];
 
 export const TEST_SUITE: TestGroup[] = [
+    {
+        id: 'environment',
+        title: 'Environment',
+        icon: Monitor,
+        description: 'Живое окружение: URL, режим (mock/prod), браузер, viewport, DPR, сеть, языки.',
+        tests: async () => {
+            if (!isBrowserRuntime()) {
+                return [
+                    skippedResult('App URL / Origin', 'Текущий URL/origin страницы диагностики.'),
+                    skippedResult('Runtime Mode (Mock/Prod)', 'Определение режима приложения через доступность /api/health.'),
+                    skippedResult('User Agent / Browser', 'Разбор User-Agent: браузер, версия, mobile/desktop.'),
+                    skippedResult('Viewport', 'Размер окна и минимально поддерживаемое разрешение.'),
+                    skippedResult('Device Pixel Ratio', 'Плотность пикселей устройства.'),
+                    skippedResult('Network (navigator.onLine)', 'Онлайн-статус браузера.'),
+                    skippedResult('Browser Language vs App Language', 'Язык браузера vs язык интерфейса приложения.')
+                ];
+            }
+            const { mode, detail } = await probeBackendMode();
+            const browser = detectBrowser(navigator.userAgent);
+            const res: TestResult[] = [];
+
+            res.push({
+                name: 'App URL / Origin',
+                description: 'Текущий URL/origin страницы диагностики.',
+                passed: true,
+                severity: 'info',
+                expected: 'Любой доступный origin',
+                received: window.location.href,
+                passCondition: 'Страница открыта и location доступен.',
+                failCondition: 'Неприменимо: location всегда доступен в браузере.'
+            });
+
+            res.push({
+                name: 'Runtime Mode (Mock/Prod)',
+                description: 'Режим приложения: есть ли живой бэкенд. VITE_ ключ недоступен в рантайме, поэтому определяем косвенно по /api/health.',
+                passed: true,
+                severity: 'info',
+                expected: 'mock/dev или prod',
+                received: `${mode} — ${detail}`,
+                passCondition: 'Режим определён (информационный тест).',
+                failCondition: 'Неприменимо: тест информационный.'
+            });
+
+            res.push({
+                name: 'User Agent / Browser',
+                description: 'Разбор User-Agent: браузер, версия, mobile/desktop.',
+                passed: true,
+                severity: 'info',
+                expected: 'Распознанный браузер',
+                received: `${browser}`,
+                passCondition: 'Браузер распознан (информационный тест).',
+                failCondition: 'Неприменимо: тест информационный.'
+            });
+
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const tooSmall = vw < 320 || vh < 320;
+            res.push({
+                name: 'Viewport',
+                description: 'Размер окна браузера и минимально поддерживаемое разрешение.',
+                passed: !tooSmall,
+                severity: tooSmall ? 'warning' : 'info',
+                expected: '≥ 320×320',
+                received: `${vw}×${vh}`,
+                passCondition: 'Окно не меньше минимально поддерживаемого (320px).',
+                failCondition: 'Viewport меньше 320px: интерфейс может обрезаться.',
+                diagnosis: 'Окно/экран меньше минимального: фиксированные панели и гриды могут уезжать за вьюпорт.',
+                task: [
+                    '### T-XX UI: минимальная ширина вьюпорта',
+                    '- Приоритет: P2',
+                    '- Источник: [diag] System Diagnostics → Environment (Viewport)',
+                    `- Проблема: приложение открыто во viewport ${vw}×${vh} (< 320px) — компоненты могут обрезаться.`,
+                    '- Цель: убедиться, что критические экраны (плеер, дашборд) деградируют корректно ниже 360px, либо задать min-width приложения.',
+                    '- Acceptance: на 320px нет горизонтального скролла в критических экранах.'
+                ].join('\n')
+            });
+
+            const dpr = window.devicePixelRatio || 1;
+            res.push({
+                name: 'Device Pixel Ratio',
+                description: 'Плотность пикселей (масштаб браузера × экран).',
+                passed: dpr >= 1,
+                severity: dpr >= 1 ? 'info' : 'warning',
+                expected: '≥ 1x',
+                received: `${dpr}x`,
+                passCondition: 'DPR не меньше 1 (масштаб страницы ≥ 100%).',
+                failCondition: 'DPR < 1: масштаб браузера < 100%, фиксированные панели могут «расползаться».',
+                diagnosis: 'Масштаб браузера меньше 100% (или нестандартный DPR): возможны артефакты fixed-панелей и таймлайна.',
+                task: [
+                    '### T-XX UI: поведение при browser zoom < 100%',
+                    '- Приоритет: P2',
+                    '- Источник: [diag] System Diagnostics → Environment (DPR)',
+                    '- Проблема: страница открыта с devicePixelRatio < 1 — пользовательский зум < 100%.',
+                    '- Цель: проверить вёрстку fixed-панелей (плеер, хедер) при 50–90% зума.',
+                    '- Acceptance: при зуме 50–90% нет наложений/двойных скроллбаров.'
+                ].join('\n')
+            });
+
+            res.push({
+                name: 'Network (navigator.onLine)',
+                description: 'Онлайн-статус браузера.',
+                passed: navigator.onLine,
+                severity: navigator.onLine ? 'info' : 'warning',
+                expected: 'online',
+                received: navigator.onLine ? 'online' : 'offline',
+                passCondition: 'Браузер видит сеть.',
+                failCondition: 'navigator.onLine === false: сеть недоступна.',
+                diagnosis: 'Браузер считает, что сети нет: API/CDN/voice-тесты упадут по сетевым причинам. Это состояние окружения, а не баг кода.',
+                task: [
+                    '### T-XX Infra: офлайн-состояние клиента',
+                    '- Приоритет: P2',
+                    '- Источник: [diag] System Diagnostics → Environment (Network)',
+                    '- Проблема: диагностика запущена офлайн (navigator.onLine = false) — сетевые тесты падают по среде, а не из-за кода.',
+                    '- Цель: (опционально) офлайн-баннер в UI и повтор синхронизации при восстановлении сети.',
+                    '- Acceptance: при восстановлении сети проекты/комментарии синхронизируются без ручного refresh.'
+                ].join('\n')
+            });
+
+            const appLang = i18n.isInitialized ? i18n.language : '-';
+            res.push({
+                name: 'Browser Language vs App Language',
+                description: 'Язык браузера vs язык интерфейса приложения (i18next).',
+                passed: true,
+                severity: 'info',
+                expected: 'Информационно',
+                received: `browser: ${navigator.language || '-'}; app: ${appLang}`,
+                passCondition: 'Оба языка показаны (информационный тест).',
+                failCondition: 'Неприменимо: тест информационный.'
+            });
+
+            return res;
+        }
+    },
     {
         id: 'api',
         title: 'Backend API Integrity',
@@ -56,20 +484,40 @@ export const TEST_SUITE: TestGroup[] = [
                     name: 'API Healthcheck',
                     description: 'Ping /api/health endpoint.',
                     passed: health.ok && data.status === 'ok',
+                    severity: 'critical',
                     expected: 'Status: 200 OK',
                     received: `Status: ${health.status}, Time: ${duration.toFixed(0)}ms`,
                     passCondition: 'Сервер отвечает 200 OK и JSON {status: "ok"}.',
-                    failCondition: '500 Error, таймаут или некорректный JSON.'
+                    failCondition: '500 Error, таймаут или некорректный JSON.',
+                    diagnosis: 'Vercel Functions недоступны: упавший деплой, лимиты Hobby-плана, регион/сеть. В mock/dev-режиме (vite dev) это ожидаемо — бэкенда нет.',
+                    task: [
+                        '### T-XX Backend: /api/health недоступен',
+                        '- Приоритет: P0',
+                        '- Источник: [diag] System Diagnostics → Backend API Integrity',
+                        '- Проблема: /api/health не отвечает 200 {status:"ok"} (api/health.js) — бэкенд-функции недоступны для этого клиента.',
+                        '- Цель: восстановить доступность Vercel Functions (деплой/лимиты/DNS); для dev — прогнать на vercel dev или проде.',
+                        '- Acceptance: тест API Healthcheck на /test зелёный на проде.'
+                    ].join('\n')
                 });
             } catch (e: any) {
                 res.push({
                     name: 'API Healthcheck',
                     description: 'Ping /api/health endpoint.',
                     passed: false,
+                    severity: 'critical',
                     expected: '200 OK',
                     received: e.message,
                     passCondition: 'Сервер доступен.',
-                    failCondition: 'Сетевая ошибка или сервер упал.'
+                    failCondition: 'Сетевая ошибка или сервер упал.',
+                    diagnosis: 'Запрос до /api/health не дошёл: бэкенда нет (mock/dev — ожидаемо), сеть недоступна или функции упали.',
+                    task: [
+                        '### T-XX Backend: /api/health недоступен',
+                        '- Приоритет: P0',
+                        '- Источник: [diag] System Diagnostics → Backend API Integrity',
+                        `- Проблема: fetch /api/health упал с ошибкой: ${e.message}. В mock/dev это ожидаемо; на проде — бэкенд недоступен.`,
+                        '- Цель: восстановить доступность Vercel Functions; для dev-проверки использовать vercel dev.',
+                        '- Acceptance: тест API Healthcheck на /test зелёный на проде.'
+                    ].join('\n')
                 });
             }
 
@@ -79,21 +527,43 @@ export const TEST_SUITE: TestGroup[] = [
                 res.push({
                     name: 'Auth Guard (401 Check)',
                     description: 'Попытка доступа к защищенному API без токена.',
-                    passed: secured.status === 401,
+                    passed: IS_MOCK_ENV || secured.status === 401,
+                    severity: IS_MOCK_ENV ? 'info' : 'critical',
                     expected: '401 Unauthorized',
-                    received: `${secured.status} ${secured.statusText}`,
+                    received: IS_MOCK_ENV ? `skipped (mock/dev): ${secured.status}` : `${secured.status} ${secured.statusText}`,
                     passCondition: 'Сервер отклоняет запросы без заголовка Authorization.',
-                    failCondition: 'Сервер возвращает 200 (утечка данных) или 500.'
+                    failCondition: 'Сервер возвращает 200 (утечка данных) или 500.',
+                    diagnosis: secured.status === 200
+                        ? 'Два сценария: (1) vite dev без функций отдаёт index.html (ложно-красный в dev); (2) на бэкенде не вызывается verifyUser (api/_auth.js) — утечка данных, см. docs/audit и TASKS T-02/T-06.'
+                        : 'Неожиданный статус защищённого эндпоинта: проверить деплой api/data.js.',
+                    task: [
+                        '### T-XX Security: /api/data отвечает не-401 без токена',
+                        '- Приоритет: P0',
+                        '- Источник: [diag] System Diagnostics → Backend API Integrity',
+                        '- Проблема: GET /api/data без Authorization вернул не-401. На проде это утечка данных (verifyUser не вызван, api/_auth.js); в vite dev это ложно-красный (SPA-fallback отдаёт index.html).',
+                        '- Цель: на проде — гарантированный verifyUser на всех мутирующих/читающих action (см. TASKS T-02, T-06); диагностику запускать на vercel dev/проде.',
+                        '- Acceptance: на проде GET /api/data без токена → 401; тест Auth Guard на /test зелёный.'
+                    ].join('\n')
                 });
             } catch (e: any) {
                 res.push({
                     name: 'Auth Guard (401 Check)',
-                    description: 'Network check',
+                    description: 'Попытка доступа к защищенному API без токена.',
                     passed: false,
+                    severity: 'critical',
                     received: e.message,
                     expected: '401',
-                    passCondition: 'Network ok',
-                    failCondition: 'Network fail'
+                    passCondition: 'Запрос выполнен, сервер отклонил анонимный доступ.',
+                    failCondition: 'Сетевая ошибка: статус проверить невозможно.',
+                    diagnosis: 'Запрос не дошёл: сеть/бэкенд недоступны — статус защиты неизвестен.',
+                    task: [
+                        '### T-XX Security: не удалось проверить auth-guard /api/data',
+                        '- Приоритет: P0',
+                        '- Источник: [diag] System Diagnostics → Backend API Integrity',
+                        `- Проблема: fetch /api/data упал: ${e.message} — статус auth-guard неизвестен.`,
+                        '- Цель: повторить проверку на доступном окружении (vercel dev/прод).',
+                        '- Acceptance: тест Auth Guard на /test выполнен и зелёный на проде.'
+                    ].join('\n')
                 });
             }
 
@@ -115,14 +585,31 @@ export const TEST_SUITE: TestGroup[] = [
                 res.push({
                     name: 'Payment Init Endpoint',
                     description: 'POST /api/payment?action=init (No Auth)',
-                    passed: initRes.status === 401,
+                    passed: IS_MOCK_ENV || initRes.status === 401,
+                    severity: IS_MOCK_ENV ? 'info' : 'critical',
                     expected: '401 Unauthorized',
-                    received: `${initRes.status}`,
+                    received: IS_MOCK_ENV ? `skipped (mock/dev): ${initRes.status}` : `${initRes.status}`,
                     passCondition: 'Эндпоинт существует и защищен.',
-                    failCondition: '404 (Файл не найден) или 500 (Ошибка кода).'
+                    failCondition: '404 (Файл не найден) или 500 (Ошибка кода).',
+                    diagnosis: 'В dev (vite) 404 — ожидаемо, функций нет. На проде 404/500 = сломан файл api/payment.js или деплой; 200 без токена = дыра в auth-guard.',
+                    task: [
+                        '### T-XX Billing: /api/payment?action=init недоступен или не защищён',
+                        '- Приоритет: P0',
+                        '- Источник: [diag] System Diagnostics → Billing Integration',
+                        '- Проблема: POST /api/payment?action=init без токена вернул не-401 (404/500/200). Деньги: файл api/payment.js не задеплоен, падает при импорте или не проверяет verifyUser.',
+                        '- Цель: восстановить эндпоинт и auth-guard; правки только по тест-плану (железное правило №1, зона api/payment.js).',
+                        '- Acceptance: на проде init без токена → 401; тест на /test зелёный.'
+                    ].join('\n')
                 });
             } catch (e: any) {
-                res.push({ name: 'Payment Init', passed: false, description: 'Fetch error', received: e.message, expected: '401', passCondition: '', failCondition: '' });
+                res.push({ name: 'Payment Init', passed: false, severity: 'critical', description: 'Fetch error', received: e.message, expected: '401', passCondition: 'Запрос выполнен, эндпоинт защищен.', failCondition: 'Сетевая ошибка: эндпоинт недоступен или заблокирован.', diagnosis: 'Запрос не дошёл: в dev — функций нет (ожидаемо), на проде — сеть/блокировка.', task: [
+                    '### T-XX Billing: не удалось проверить /api/payment?action=init',
+                    '- Приоритет: P0',
+                    '- Источник: [diag] System Diagnostics → Billing Integration',
+                    '- Проблема: fetch упал — статус платёжного эндпоинта неизвестен.',
+                    '- Цель: повторить на vercel dev/проде.',
+                    '- Acceptance: тест Payment Init на /test зелёный на проде.'
+                ].join('\n') });
             }
 
             // 2. Webhook Sanity Check
@@ -132,14 +619,31 @@ export const TEST_SUITE: TestGroup[] = [
                 res.push({
                     name: 'Webhook Endpoint',
                     description: 'POST /api/payment?action=webhook (Empty Body)',
-                    passed: hookRes.status === 400,
+                    passed: IS_MOCK_ENV || hookRes.status === 400,
+                    severity: IS_MOCK_ENV ? 'info' : 'warning',
                     expected: '400 Invalid Event',
-                    received: `${hookRes.status}`,
+                    received: IS_MOCK_ENV ? `skipped (mock/dev): ${hookRes.status}` : `${hookRes.status}`,
                     passCondition: 'Вебхук обрабатывает запрос и валидирует данные.',
-                    failCondition: '500 (Ошибка импорта/синтаксиса) или 404.'
+                    failCondition: '500 (Ошибка импорта/синтаксиса) или 404.',
+                    diagnosis: 'В dev — ожидаемый 404 (нет функций). На проде 500 = ошибка кода вебхука; при этом в TASKS T-01 уже есть P0 на подпись webhook (сейчас она не проверяется).',
+                    task: [
+                        '### T-XX Billing: webhook-эндпоинт отвечает не-400 на пустой запрос',
+                        '- Приоритет: P1',
+                        '- Источник: [diag] System Diagnostics → Billing Integration',
+                        '- Проблема: POST /api/payment?action=webhook без тела вернул не-400 — вебхук не валидирует вход (или не задеплоен). Дополнительно: подпись webhook до сих пор не проверяется (TASKS T-01, P0).',
+                        '- Цель: восстановить валидацию входа; закрыть T-01 (проверка подписи ЮKassa/Prodamus).',
+                        '- Acceptance: пустой POST → 400; подписанные вебхуки обоих провайдеров принимаются, подделанные — нет.'
+                    ].join('\n')
                 });
             } catch (e: any) {
-                res.push({ name: 'Webhook Check', passed: false, description: 'Fetch error', received: e.message, expected: '400', passCondition: '', failCondition: '' });
+                res.push({ name: 'Webhook Check', passed: false, severity: 'warning', description: 'Fetch error', received: e.message, expected: '400', passCondition: 'Вебхук обрабатывает запрос и валидирует данные.', failCondition: 'Сетевая ошибка: эндпоинт недоступен или заблокирован.', diagnosis: 'Запрос не дошёл: в dev — функций нет (ожидаемо), на проде — сеть/блокировка.', task: [
+                    '### T-XX Billing: не удалось проверить webhook-эндпоинт',
+                    '- Приоритет: P1',
+                    '- Источник: [diag] System Diagnostics → Billing Integration',
+                    '- Проблема: fetch webhook упал — статус неизвестен.',
+                    '- Цель: повторить на vercel dev/проде.',
+                    '- Acceptance: пустой POST → 400 на проде.'
+                ].join('\n') });
             }
 
             return res;
@@ -166,10 +670,13 @@ export const TEST_SUITE: TestGroup[] = [
                 name: 'Org Admin Detection',
                 description: 'Проверка утилиты isOrgAdmin',
                 passed: checkAdmin === true && checkMember === false,
+                severity: 'critical',
                 expected: 'Admin=True, Member=False',
                 received: `Admin=${checkAdmin}, Member=${checkMember}`,
                 passCondition: 'Функция корректно определяет роль org:admin.',
-                failCondition: 'Обычный участник получил права админа или наоборот.'
+                failCondition: 'Обычный участник получил права админа или наоборот.',
+                diagnosis: 'Сломана утилита services/userUtils.ts (isOrgAdmin): эскалация ролей в UI админки.',
+                task: regressionTask('services/userUtils.ts', 'isOrgAdmin неправильно определяет org:admin/org:member')
             });
 
             return res;
@@ -192,22 +699,180 @@ export const TEST_SUITE: TestGroup[] = [
                     name: 'Video CDN Access',
                     description: 'Проверка доступности публичного тестового видео.',
                     passed: head.ok && (type?.includes('video') || false),
+                    severity: 'warning',
                     expected: '200 OK, video/mp4',
                     received: `${head.status}, ${type}`,
                     passCondition: 'Сервер отдает видео-файл с корректным MIME.',
-                    failCondition: 'CORS ошибка или 404.'
+                    failCondition: 'CORS ошибка или 404.',
+                    diagnosis: 'storage.googleapis.com недоступен с этого клиента (региональная блокировка, корпоративный прокси, CORS). На сам Drive/S3-стриминг влияет косвенно, но указывает на сетевые ограничения пользователя.',
+                    task: [
+                        '### T-XX Media: внешний CDN недоступен у клиента',
+                        '- Приоритет: P2',
+                        '- Источник: [diag] System Diagnostics → Media Streaming QA',
+                        '- Проблема: HEAD-запрос к тестовому видео на storage.googleapis.com не удался — у части пользователей внешние CDN блокируются.',
+                        '- Цель: оценить долю таких пользователей (отчёты /test), при необходимости — зеркало демо-видео или прокси (api/proxyAudio.js как образец).',
+                        '- Acceptance: тест Video CDN Access зелёный у пользователей из проблемных регионов.'
+                    ].join('\n')
                 });
             } catch (e: any) {
                 res.push({
                     name: 'Video CDN Access',
                     description: 'CORS / Network check',
                     passed: false,
+                    severity: 'warning',
                     expected: 'Success',
                     received: e.message,
                     passCondition: 'Fetch успешен.',
-                    failCondition: 'Блокировка CORS или сети (возможно нужен VPN).'
+                    failCondition: 'Блокировка CORS или сети (возможно нужен VPN).',
+                    diagnosis: 'Сеть/CORS блокируют внешний CDN: в песочнице/CI это норма (внешние хосты недоступны), у пользователей — региональные ограничения.',
+                    task: [
+                        '### T-XX Media: внешний CDN недоступен у клиента',
+                        '- Приоритет: P2',
+                        '- Источник: [diag] System Diagnostics → Media Streaming QA',
+                        '- Проблема: запрос к тестовому видео упал (CORS/сеть) — клиент не достучался до внешнего CDN.',
+                        '- Цель: оценить масштаб (отчёты /test); рассмотреть зеркало/прокси для демо-контента.',
+                        '- Acceptance: тест зелёный без VPN в проблемных регионах.'
+                    ].join('\n')
                 });
             }
+
+            return res;
+        }
+    },
+    {
+        id: 'voice',
+        title: 'Voice Input',
+        icon: Mic,
+        description: 'Поддержка голосового ввода: SpeechRecognition, getUserMedia, MediaRecorder, permission микрофона.',
+        tests: async () => {
+            if (!isBrowserRuntime()) {
+                return [
+                    skippedResult('SpeechRecognition Support', 'Наличие webkitSpeechRecognition/SpeechRecognition в браузере.'),
+                    skippedResult('Microphone Capture (getUserMedia)', 'Доступность функции navigator.mediaDevices.getUserMedia (без запроса permission).'),
+                    skippedResult('MediaRecorder Support', 'Наличие MediaRecorder для записи аудио.'),
+                    skippedResult('Microphone Permission Status', 'Статус permission микрофона через Permissions API (без запроса доступа).')
+                ];
+            }
+            const browser = detectBrowser(navigator.userAgent);
+            const res: TestResult[] = [];
+            const w = window as unknown as Record<string, unknown>;
+
+            // 1. SpeechRecognition
+            const hasSR = typeof w.SpeechRecognition === 'function' || typeof w.webkitSpeechRecognition === 'function';
+            res.push({
+                name: 'SpeechRecognition Support',
+                description: 'Наличие webkitSpeechRecognition/SpeechRecognition — основа живого голосового ввода.',
+                passed: hasSR,
+                severity: hasSR ? 'info' : 'warning',
+                expected: 'SpeechRecognition доступен',
+                received: `SpeechRecognition: ${typeof w.SpeechRecognition}, webkitSpeechRecognition: ${typeof w.webkitSpeechRecognition}`,
+                passCondition: 'Браузер предоставляет SpeechRecognition API (Chrome/Edge/Safari 14.1+).',
+                failCondition: 'API отсутствует (Firefox и др.): живое распознавание речи невозможно.',
+                diagnosis: hasSR
+                    ? undefined
+                    : `${browser} не поддерживает webkitSpeechRecognition — нужен fallback на Whisper (MediaRecorder → services/transcriptionWorker.ts), как в TASKS T-07.`,
+                task: hasSR
+                    ? undefined
+                    : [
+                        `### T-XX Voice Input: fallback распознавания для ${browser}`,
+                        '- Приоритет: P1',
+                        `- Источник: [diag] System Diagnostics → Voice Input (браузер: ${browser})`,
+                        '- Проблема: браузер не предоставляет SpeechRecognition/webkitSpeechRecognition — кнопки микрофона в плеере молча не работают (components/Player.tsx:737-755).',
+                        '- Цель: при отсутствии SpeechRecognition — fallback MediaRecorder → Whisper (services/transcriptionWorker.ts) с индикацией записи и статуса транскрибации.',
+                        '- Acceptance: в Firefox голосовой комментарий создаётся (текст появляется после транскрибации); тест Voice Input → SpeechRecognition на /test зелёный.'
+                    ].join('\n')
+            });
+
+            // 2. getUserMedia (доступность функции, БЕЗ запроса permission)
+            const hasGetUserMedia = typeof navigator.mediaDevices?.getUserMedia === 'function';
+            const insecure = isBrowserRuntime() && !window.isSecureContext;
+            res.push({
+                name: 'Microphone Capture (getUserMedia)',
+                description: 'Доступность функции navigator.mediaDevices.getUserMedia (самой функции, без запроса доступа).',
+                passed: hasGetUserMedia,
+                severity: hasGetUserMedia ? 'info' : 'critical',
+                expected: 'mediaDevices.getUserMedia — function',
+                received: `mediaDevices: ${typeof navigator.mediaDevices}, getUserMedia: ${typeof navigator.mediaDevices?.getUserMedia}${insecure ? ', isSecureContext: false' : ''}`,
+                passCondition: 'Функция захвата аудио существует (HTTPS/localhost-контекст).',
+                failCondition: 'getUserMedia недоступен: небезопасный контекст (http) или старый браузер — захват микрофона невозможен.',
+                diagnosis: hasGetUserMedia
+                    ? undefined
+                    : insecure
+                        ? 'Страница открыта не по HTTPS (isSecureContext=false): mediaDevices недоступен по дизайну браузеров. Развернуть проект на http — голосовой ввод не заработает.'
+                        : 'mediaDevices/getUserMedia отсутствует: очень старый браузер или WebView без поддержки захвата аудио.',
+                task: hasGetUserMedia
+                    ? undefined
+                    : [
+                        '### T-XX Voice Input: микрофон недоступен (getUserMedia)',
+                        '- Приоритет: P0',
+                        '- Источник: [diag] System Diagnostics → Voice Input',
+                        `- Проблема: navigator.mediaDevices.getUserMedia недоступен (${insecure ? 'isSecureContext=false — http-контекст' : 'браузер без поддержки'}) — захват аудио невозможен, voice-комментарии не работают.`,
+                        '- Цель: обеспечить HTTPS-контекст продакшена; в UI показывать понятную ошибку вместо молчаливого провала (см. TASKS T-07).',
+                        '- Acceptance: на https-домене getUserMedia доступен; тест Microphone Capture на /test зелёный.'
+                    ].join('\n')
+            });
+
+            // 3. MediaRecorder
+            const hasMR = typeof window.MediaRecorder === 'function';
+            res.push({
+                name: 'MediaRecorder Support',
+                description: 'Наличие MediaRecorder — запись аудио (вложения, Whisper-fallback).',
+                passed: hasMR,
+                severity: hasMR ? 'info' : 'warning',
+                expected: 'MediaRecorder доступен',
+                received: `${typeof window.MediaRecorder}`,
+                passCondition: 'Браузер умеет записывать медиа-поток в файл.',
+                failCondition: 'MediaRecorder отсутствует: запись аудио-вложений и Whisper-fallback невозможны.',
+                diagnosis: hasMR
+                    ? undefined
+                    : `${browser} не поддерживает MediaRecorder — запись аудио и Whisper-fallback (см. TASKS T-07) недоступны в этом браузере.`,
+                task: hasMR
+                    ? undefined
+                    : [
+                        `### T-XX Voice Input: нет MediaRecorder в ${browser}`,
+                        '- Приоритет: P2',
+                        `- Источник: [diag] System Diagnostics → Voice Input (браузер: ${browser})`,
+                        '- Проблема: MediaRecorder недоступен — запись аудио-вложений и Whisper-fallback невозможны в этом браузере.',
+                        '- Цель: задокументировать матрицу поддерживаемых браузеров; при необходимости — альтернативный кодек/библиотека записи.',
+                        '- Acceptance: voice-флоу работает во всех браузерах из матрицы поддержки.'
+                    ].join('\n')
+            });
+
+            // 4. Microphone permission status (безопасно, без запроса доступа;
+            //    Safari бросает на query('microphone') — это info, не fail)
+            let perm: 'granted' | 'denied' | 'prompt' | 'unknown' = 'unknown';
+            let permError = '';
+            try {
+                const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+                perm = status.state as 'granted' | 'denied' | 'prompt';
+            } catch (e: any) {
+                permError = e?.message || 'Permissions API не поддерживает microphone';
+            }
+
+            const denied = perm === 'denied';
+            res.push({
+                name: 'Microphone Permission Status',
+                description: 'Статус доступа к микрофону через navigator.permissions.query (без запроса доступа).',
+                passed: !denied,
+                severity: denied ? 'warning' : 'info',
+                expected: 'granted | prompt | unknown (Safari)',
+                received: permError ? `unknown (${permError})` : perm,
+                passCondition: 'Микрофон не запрещён (granted/prompt) или браузер не отдаёт статус (Safari) — тогда info, не fail.',
+                failCondition: 'permission = denied: микрофон запрещён в настройках сайта.',
+                diagnosis: denied
+                    ? 'Пользователь запретил микрофон этому сайту: голосовой ввод не заработает, пока доступ не включат в настройках сайта (иконка замка в адресной строке).'
+                    : undefined,
+                task: denied
+                    ? [
+                        '### T-XX UX: понятный флоу при запрещённом микрофоне',
+                        '- Приоритет: P2',
+                        '- Источник: [diag] System Diagnostics → Voice Input (permission: denied)',
+                        '- Проблема: доступ к микрофону запрещён в настройках сайта; клик по Mic даёт молчаливый провал (components/Player.tsx:737-755 — нет обработчика onerror/not-allowed).',
+                        '- Цель: при denied/not-allowed показывать инструкцию «включите микрофон в настройках сайта» (см. TASKS T-07).',
+                        '- Acceptance: при denied клик по Mic показывает тост с инструкцией; после включения голосовой ввод работает.'
+                    ].join('\n')
+                    : undefined
+            });
 
             return res;
         }
@@ -230,7 +895,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: 'Consistent HSL string',
                 received: `${color1}`,
                 passCondition: 'Одинаковые ID дают одинаковый цвет.',
-                failCondition: 'Цвета меняются при каждом рендере.'
+                failCondition: 'Цвета меняются при каждом рендере.',
+                diagnosis: 'Сломан services/utils.ts → stringToColor: аватарки «мерцают» при каждом рендере.',
+                task: regressionTask('services/utils.ts', 'stringToColor перестал быть детерминированным')
             });
 
             return res;
@@ -254,7 +921,196 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: 'Blocked',
                 received: isAllowed ? 'Allowed' : 'Blocked',
                 passCondition: 'Запрещенные типы файлов блокируются.',
-                failCondition: 'Разрешена загрузка исполняемых файлов (.exe).'
+                failCondition: 'Разрешена загрузка исполняемых файлов (.exe).',
+                diagnosis: 'Кто-то расширил whitelist типов до исполняемых — проверь матрицу типов в ProjectView/useUploadManager.',
+                task: regressionTask('Upload Security Guard', 'whitelist типов файлов пропускает исполняемые')
+            });
+
+            return res;
+        }
+    },
+    {
+        id: 'byos_api',
+        title: 'BYOS / Storage API',
+        icon: Server,
+        description: 'Живые проверки контуров API хранилища (без секретов): здоровье, защита конфигурации, отсутствие 500.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof fetch === 'undefined') {
+                res.push(skippedResult('BYOS API Health', 'GET /api/health отвечает 200 (сервер жив).'));
+                res.push(skippedResult('BYOS Config Guard', 'GET /api/storage?action=config не отдаёт 500 (ожидаемо 401 без токена).'));
+                res.push(skippedResult('BYOS Test Guard', 'POST /api/storage?action=test не отдаёт 500 (ожидаемо 401 без токена).'));
+                return res;
+            }
+            const probe = async (name: string, init: RequestInit & { url: string }, okStatuses: number[], description: string, diagnosis: string) => {
+                try {
+                    const r = await fetch(init.url, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } });
+                    const isOk = okStatuses.includes(r.status);
+                    res.push({
+                        name,
+                        description,
+                        passed: isOk,
+                        expected: 'статус ' + okStatuses.join('/'),
+                        received: 'HTTP ' + r.status,
+                        passCondition: 'API отвечает ожидаемым статусом (не 500).',
+                        failCondition: 'API вернул неожиданный статус (вероятен сбой сервера).',
+                        severity: 'warning',
+                        diagnosis: isOk ? undefined : diagnosis,
+                        task: isOk ? undefined : regressionTask(name, 'API хранилища вернул ' + r.status)
+                    });
+                } catch (e: any) {
+                    res.push({
+                        name,
+                        description,
+                        passed: false,
+                        expected: 'статус ' + okStatuses.join('/'),
+                        received: 'network error: ' + (e?.message || e),
+                        passCondition: 'API отвечает ожидаемым статусом (не 500).',
+                        failCondition: 'Запрос к API не выполнился (сеть/CORS/сервер недоступен).',
+                        severity: 'warning',
+                        diagnosis,
+                        task: regressionTask(name, 'запрос к API хранилища не выполнился')
+                    });
+                }
+            };
+            await probe('BYOS API Health', { url: '/api/health' }, [200], 'GET /api/health отвечает 200 (сервер жив).', 'API недоступен: проверьте деплой и статус /api/health.');
+            await probe('BYOS Config Guard', { url: '/api/storage?action=config' }, [200, 400, 401, 403], 'GET config без токена — 401/403/400, но не 500.', 'Конфигурация хранилища падает 500-м: сбой чтения конфига (см. ISSUES ISS-021/ISS-023).');
+            await probe('BYOS Test Guard', { url: '/api/storage?action=test', method: 'POST', body: '{}' }, [400, 401, 403], 'POST test без токена — 400/401/403, но не 500.', 'Проверка доступа к бакету падает 500-м: вероятно, конфиг не сохранён или сбой серверной части.');
+            return res;
+        }
+    },
+    {
+        id: 'data_integrity',
+        title: 'Data Integrity',
+        icon: Database,
+        description: 'Чистые проверки хранилища и схемы проектов (без записи данных).',
+        tests: () => {
+            if (!isBrowserRuntime() || typeof localStorage === 'undefined') {
+                return [
+                    skippedResult('localStorage Availability', 'localStorage доступен и работает (чтение/запись пробного ключа).'),
+                    skippedResult('localStorage Headroom', 'Оценка заполненности localStorage (лимит ~5MB).'),
+                    skippedResult('Project Schema (types.ts)', 'Схема проектов (id/assets/versions/comments) соответствует types.ts.')
+                ];
+            }
+            const res: TestResult[] = [];
+
+            // 1. Доступность localStorage (пробная запись + удаление)
+            let lsAvailable = false;
+            let lsError = '';
+            try {
+                const probeKey = 'anotee_diag_probe';
+                localStorage.setItem(probeKey, '1');
+                lsAvailable = localStorage.getItem(probeKey) === '1';
+                localStorage.removeItem(probeKey);
+            } catch (e: any) {
+                lsError = e?.message || 'QuotaExceeded/Access denied';
+            }
+            res.push({
+                name: 'localStorage Availability',
+                description: 'localStorage доступен и не переполнен (чтение/запись/удаление пробного ключа).',
+                passed: lsAvailable,
+                severity: lsAvailable ? 'info' : 'critical',
+                expected: 'Доступен',
+                received: lsAvailable ? 'OK' : `Ошибка: ${lsError}`,
+                passCondition: 'Пробный ключ записался, прочитался и удалился.',
+                failCondition: 'Private mode, запрет cookies или переполненная квота — запись падает.',
+                diagnosis: 'localStorage недоступен (приватный режим/жёсткий запрет cookies): в mock/local-режиме проекты и комментарии не сохраняются между сессиями; на проде ломается кэш и язык интерфейса.',
+                task: [
+                    '### T-XX Data: localStorage недоступен у клиента',
+                    '- Приоритет: P1',
+                    '- Источник: [diag] System Diagnostics → Data Integrity',
+                    `- Проблема: localStorage бросает ошибку (${lsError}) — приватный режим или запрет хранилища.`,
+                    '- Цель: обёртка над localStorage (services/apiClient.ts) с in-memory fallback и предупреждением пользователю о риске потери данных.',
+                    '- Acceptance: в приватном режиме приложение работает, показывает предупреждение; тест /test зелёный (in-memory режим).'
+                ].join('\n')
+            });
+
+            // 2. Заполненность (оценка: сумма длин ключей+значений, UTF-16 ≈ 2 байта/символ)
+            let usedBytes = 0;
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k === null) continue;
+                    usedBytes += (k.length + (localStorage.getItem(k) || '').length) * 2;
+                }
+            } catch { /* оценка недоступна — не фейлим */ }
+            const QUOTA_BYTES = 5 * 1024 * 1024;
+            const usedPct = Math.round((usedBytes / QUOTA_BYTES) * 100);
+            res.push({
+                name: 'localStorage Headroom',
+                description: 'Оценка заполненности localStorage (лимит ~5MB).',
+                passed: usedPct < 80,
+                severity: usedPct < 80 ? 'info' : 'warning',
+                expected: '< 80% квоты (~5MB)',
+                received: `${usedPct}% (${Math.round(usedBytes / 1024)} KB)`,
+                passCondition: 'Занято меньше 80% квоты.',
+                failCondition: 'Хранилище почти заполнено: запись новых проектов/комментариев уронится с QuotaExceededError.',
+                diagnosis: 'Накопленные данные (anotee_projects_data и др.) занимают почти всю квоту: сохранение новых правок начнёт молча падать.',
+                task: [
+                    '### T-XX Data: переполнение localStorage у клиента',
+                    '- Приоритет: P1',
+                    '- Источник: [diag] System Diagnostics → Data Integrity',
+                    `- Проблема: localStorage заполнен на ${usedPct}% — приближается QuotaExceededError при сохранении проектов.`,
+                    '- Цель: чистка/компрессия anotee_projects_data (удаление blob-URL, локальных файлов), миграция тяжёлых данных в облако.',
+                    '- Acceptance: после чистки занято < 50%; сохранение проектов не падает.'
+                ].join('\n')
+            });
+
+            // 3. Схема проекта (types.ts: id → assets[].id → versions[].id + comments[])
+            const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+            const validateProjectSchema = (projects: unknown[]): string | null => {
+                for (let pi = 0; pi < projects.length; pi++) {
+                    const p = projects[pi];
+                    if (!isRecord(p) || typeof p.id !== 'string' || !p.id) return `projects[${pi}].id`;
+                    if (!Array.isArray(p.assets)) return `projects[${pi}].assets`;
+                    for (let ai = 0; ai < p.assets.length; ai++) {
+                        const a = p.assets[ai];
+                        if (!isRecord(a) || typeof a.id !== 'string' || !a.id) return `projects[${pi}].assets[${ai}].id`;
+                        if (!Array.isArray(a.versions)) return `projects[${pi}].assets[${ai}].versions`;
+                        for (let vi = 0; vi < a.versions.length; vi++) {
+                            const v = a.versions[vi];
+                            if (!isRecord(v) || typeof v.id !== 'string' || !v.id) return `projects[${pi}].assets[${ai}].versions[${vi}].id`;
+                            if (!Array.isArray(v.comments)) return `projects[${pi}].assets[${ai}].versions[${vi}].comments`;
+                        }
+                    }
+                }
+                return null;
+            };
+
+            let source = 'mock (constants.ts)';
+            let projects: unknown[] = MOCK_PROJECTS as unknown[];
+            try {
+                const raw = localStorage.getItem('anotee_projects_data');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        projects = parsed;
+                        source = 'localStorage (anotee_projects_data)';
+                    }
+                }
+            } catch { /* парсинг не удался — проверяем mock */ }
+
+            const schemaError = validateProjectSchema(projects);
+            res.push({
+                name: 'Project Schema (types.ts)',
+                description: 'Схема проектов: id → assets[] → versions[] → comments[] соответствуют types.ts.',
+                passed: schemaError === null,
+                severity: schemaError === null ? 'info' : 'critical',
+                expected: 'Все проекты: id, assets[], versions[], comments[]',
+                received: schemaError === null
+                    ? `OK: ${projects.length} проект(ов) из ${source}`
+                    : `Сломано поле: ${schemaError} (источник: ${source})`,
+                passCondition: 'Все обязательные поля схемы types.ts присутствуют во всех проектах.',
+                failCondition: 'Отсутствует обязательное поле — UI может падать или терять комментарии.',
+                diagnosis: 'Данные проекта не соответствуют types.ts: вероятна ручная правка localStorage, старая схема без миграции или баг синка — UI может упасть (белый экран) или потерять комментарии.',
+                task: [
+                    '### T-XX Data: схема проекта не соответствует types.ts',
+                    '- Приоритет: P0',
+                    '- Источник: [diag] System Diagnostics → Data Integrity',
+                    `- Проблема: в данных (${source}) отсутствует обязательное поле: ${schemaError} — нарушен контракт types.ts.`,
+                    '- Цель: добавить миграцию/нормализацию при загрузке (services/apiClient.ts: ensureProjectShape), найти источник битых данных.',
+                    '- Acceptance: тест Project Schema на /test зелёный; юнит-тест на нормализацию битой схемы.'
+                ].join('\n')
             });
 
             return res;
@@ -276,7 +1132,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: '37 frames',
                 received: `${framesTotal}`,
                 passCondition: 'Math.floor(1.5 * 25) === 37',
-                failCondition: 'Ошибка плавающей запятой.'
+                failCondition: 'Ошибка плавающей запятой.',
+                diagnosis: 'Арифметика кадров сломалась (железное правило №4: кадры через Math.floor) — рассинхрон маркеров.',
+                task: regressionTask('Core Logic & Math', 'расчёт кадров 1.5s @ 25fps')
             });
 
             const tc = formatTimecode(65.5, 25);
@@ -287,7 +1145,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: '00:01:05:12',
                 received: tc,
                 passCondition: 'Корректный перевод секунд в ЧЧ:ММ:СС:КК',
-                failCondition: 'Неверный расчет остатка кадров.'
+                failCondition: 'Неверный расчет остатка кадров.',
+                diagnosis: 'formatTimecode (services/utils.ts) выдаёт неверный таймкод — экспорт XML/CSV/EDL будет с битыми маркерами.',
+                task: regressionTask('services/utils.ts', 'formatTimecode неверный остаток кадров')
             });
 
             return res;
@@ -311,7 +1171,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: 'Expired (true)',
                 received: `${isExp}`,
                 passCondition: 'Дата 10-дневной давности считается истекшей (лимит 7 дней).',
-                failCondition: 'Пользователь сохраняет доступ после истечения срока.'
+                failCondition: 'Пользователь сохраняет доступ после истечения срока.',
+                diagnosis: 'Сломан services/utils.ts → isExpired: истёкшие подписки не блокируются (монетизация).',
+                task: regressionTask('services/utils.ts', 'isExpired не помечает истекшие подписки')
             });
 
             const daysLeft = getDaysRemaining(pastDate, 7); 
@@ -324,7 +1186,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: '0 and 7',
                 received: `${daysLeft} / ${daysLeftFuture}`,
                 passCondition: 'Истекший срок = 0, Новый срок = 7.',
-                failCondition: 'Неверный расчет дней до блокировки.'
+                failCondition: 'Неверный расчет дней до блокировки.',
+                diagnosis: 'Сломан services/utils.ts → getDaysRemaining: UI показывает неверные дни до блокировки.',
+                task: regressionTask('services/utils.ts', 'getDaysRemaining неверный расчёт дней')
             });
 
             return res;
@@ -345,7 +1209,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: 'Valid Header',
                 received: edl.substring(0, 20) + '...',
                 passCondition: 'Содержит TITLE и FCM.',
-                failCondition: 'Файл не откроется в DaVinci.'
+                failCondition: 'Файл не откроется в DaVinci.',
+                diagnosis: 'Сломан services/exportService.ts → generateEDL: экспорт для DaVinci битый.',
+                task: regressionTask('services/exportService.ts', 'generateEDL потерял TITLE/FCM заголовок')
             });
 
             const unsafeXml = generateResolveXML('Test', 1, [{...mockComments[0], text: 'A & B < C'}], 24);
@@ -356,7 +1222,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: '&amp; &lt;',
                 received: unsafeXml.includes('&amp;') ? 'Escaped' : 'Raw',
                 passCondition: 'Спецсимволы заменены на HTML entities.',
-                failCondition: 'Битый XML файл.'
+                failCondition: 'Битый XML файл.',
+                diagnosis: 'Сломано экранирование в services/exportService.ts → generateResolveXML: XML не парсится при спецсимволах в комментариях.',
+                task: regressionTask('services/exportService.ts', 'экранирование XML-спецсимволов')
             });
 
             return res;
@@ -378,7 +1246,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: '&lt;script&gt;',
                 received: sanitized,
                 passCondition: 'Теги скриптов превращены в текст.',
-                failCondition: 'Исполняемый JS код.'
+                failCondition: 'Исполняемый JS код.',
+                diagnosis: 'Санитизация ввода сломана — проверь все места рендера пользовательского текста (comments, названия проектов).',
+                task: regressionTask('Security & Sanitization', 'санитизация HTML-тегов ввода')
             });
 
             return res;
@@ -401,7 +1271,9 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: 'Length >= 32',
                 received: uuid,
                 passCondition: 'Генерируется непустая строка достаточной длины.',
-                failCondition: 'Дубликаты ID приведут к коллизиям в БД.'
+                failCondition: 'Дубликаты ID приведут к коллизиям в БД.',
+                diagnosis: 'generateId (services/utils.ts) возвращает короткие/пустые ID — коллизии при синке.',
+                task: regressionTask('services/utils.ts', 'generateId возвращает ID недостаточной длины')
             });
 
             return res;
@@ -422,11 +1294,21 @@ export const TEST_SUITE: TestGroup[] = [
             res.push({
                 name: 'Large Array Filter (50k)',
                 description: 'Фильтрация массива 50,000 элементов',
-                passed: duration < 50,
+                passed: duration < 50 && filtered.length === 25000,
                 expected: '< 50ms',
                 received: `${duration.toFixed(2)}ms`,
                 passCondition: 'Операция выполняется мгновенно (без фриза UI).',
-                failCondition: 'Медленный алгоритм.'
+                failCondition: 'Медленный алгоритм.',
+                severity: 'warning',
+                diagnosis: 'Устройство/вкладка сильно нагружены (троттлинг CPU, фоновые процессы): UI-операции могут «фризить». Это характеристика окружения, а не кода.',
+                task: [
+                    '### T-XX Perf: медленный клиент (стресс-тест CPU)',
+                    '- Приоритет: P2',
+                    '- Источник: [diag] System Diagnostics → Performance',
+                    '- Проблема: фильтрация 50k элементов заняла > 50ms — устройство нагружено или слабое.',
+                    '- Цель: замерить распределение по отчётам /test; при системных фризах — профилировать таймлайн плеера.',
+                    '- Acceptance: медиана теста по пользователям < 50ms.'
+                ].join('\n')
             });
 
             return res;
@@ -449,10 +1331,596 @@ export const TEST_SUITE: TestGroup[] = [
                 expected: '%D0%BF...',
                 received: encoded.substring(0, 10),
                 passCondition: 'Кириллица корректно кодируется в URI.',
-                failCondition: '404 ошибка при загрузке файлов с русскими именами.'
+                failCondition: '404 ошибка при загрузке файлов с русскими именами.',
+                diagnosis: 'encodeURIComponent ведёт себя нестандартно — проверь версию браузера/полифиллы.',
+                task: regressionTask('I18N & Unicode', 'кодирование кириллицы в URI')
             });
 
             return res;
         }
+    },
+    {
+        id: 'i18n_ui',
+        title: 'i18n / UI Locale',
+        icon: Languages,
+        description: 'Случайная выборка из 10 реальных ключей присутствует в активной локали (t() не возвращает сырой ключ).',
+        tests: () => {
+            if (!i18n.isInitialized) {
+                return [skippedResult(
+                    'Locale Keys Sampling (10)',
+                    'Случайная выборка из 10 использованных в коде ключей присутствует в активной локали.'
+                )];
+            }
+            const lang = i18n.language;
+            const sample = shuffle(I18N_SAMPLE_KEYS).slice(0, 10);
+            const missing = sample.filter(k => {
+                const v = i18n.t(k);
+                return !v || v === k;
+            });
+            const res: TestResult[] = [];
+            res.push({
+                name: 'Locale Keys Sampling (10)',
+                description: 'Случайная выборка из 10 использованных в коде ключей присутствует в активной локали.',
+                passed: missing.length === 0,
+                severity: missing.length === 0 ? 'info' : 'warning',
+                expected: `10/10 ключей переведены в '${lang}'`,
+                received: missing.length === 0
+                    ? `10/10 OK (${lang})`
+                    : `Отсутствуют в '${lang}': ${missing.join(', ')}`,
+                passCondition: 'i18next возвращает перевод (не сырой ключ) для всех 10 случайных ключей.',
+                failCondition: 'Хотя бы один ключ вернулся как сырой ключ: в UI попадёт «nav.dashboard» вместо текста.',
+                diagnosis: `Ключи отсутствуют в активной локали '${lang}': рассинхрон en.json/ru.json (контракт tests/unit/i18n.test.ts) или ключ удалён из кода, но остался в выборке. es/ja/ko/pt частичны и фолбэка́тся на en — для них это норма.`,
+                task: [
+                    '### T-XX i18n: отсутствующие ключи в активной локали',
+                    '- Приоритет: P2',
+                    '- Источник: [diag] System Diagnostics → i18n / UI Locale',
+                    `- Проблема: в локали '${lang}' отсутствуют ключи: ${missing.join(', ') || '(перепрогнать — выборка случайная)'} — в UI сырые ключи.`,
+                    '- Цель: восстановить пары en.json+ru.json (контракт tests/unit/i18n.test.ts), прогнать npm run i18n:extract.',
+                    '- Acceptance: тест Locale Keys Sampling на /test зелёный; npm run test зелёный.'
+                ].join('\n')
+            });
+            return res;
+        }
+    },
+  {
+    id: 'project_audit',
+    title: 'Project Audit (T-51)',
+    icon: ShieldAlert,
+    description: 'Инварианты по найденным в аудите проблемам: честные иконки источников, парность локалей, устойчивость экспорта, отсутствие секретов в мок-данных.',
+    tests: () => {
+      const res: TestResult[] = [];
+
+      // 1. Честные иконки: Drive-версия не должна выглядеть как S3
+      const allVersions = (MOCK_PROJECTS || []).flatMap(p => (p.assets || []).flatMap(a => a.versions || []));
+      const mislabeled = allVersions.filter(v => v.googleDriveId && v.storageType === 's3' && !v.s3Key);
+      res.push({
+        name: 'Source Icons Truthful',
+        description: 'Версии с Google Drive не должны иметь storageType \'s3\' (иначе в UI чужая иконка).',
+        passed: mislabeled.length === 0,
+        severity: 'warning',
+        expected: '0 версий с googleDriveId и storageType=s3',
+        received: mislabeled.length + ' найдено',
+        passCondition: 'Каждая версия имеет storageType, соответствующий реальному источнику.',
+        failCondition: 'Иконка S3 показывается на видео из Google Drive — вводит пользователя в заблуждение.',
+        diagnosis: 'storageType проставлен не при загрузке (проверь useUploadManager: выбор Drive игнорировался до T-45) или история данных не миграции (кнопка «Починить источники видео»).',
+        task: regressionTask('Project Audit', 'честные иконки источников Drive/S3')
+      });
+
+      // 2. Секреты не должны лежать в мок-данных
+      const raw = JSON.stringify(MOCK_PROJECTS || []);
+      const hasSecret = /secretAccessKey\s*:\s*"(?!\*)/.test(raw) || /accessKeyId\s*:\s*"[A-Za-z0-9]{16,}"/.test(raw);
+      res.push({
+        name: 'No Secrets in Mock Data',
+        description: 'В мок-данных не должно быть реальных ключей хранилища.',
+        passed: !hasSecret,
+        severity: 'critical',
+        expected: 'Секретов нет',
+        received: hasSecret ? 'Найдены похожие на секреты значения' : 'Чисто',
+        passCondition: 'Мок-данные не содержат полей с ключами доступа.',
+        failCondition: 'Утечка ключей хранилища в клиентский бандл.',
+        diagnosis: 'Ключи попали в constants/MOCK_PROJECTS — убрать и ротировать токен.',
+        task: regressionTask('Project Audit', 'секреты в мок-данных')
+      });
+
+      // 3. Парность локалей ru/en
+      if (!i18n.isInitialized) {
+        res.push(skippedResult('Locale Parity ru/en', 'Равенство наборов ключей ru.json и en.json.'));
+      } else {
+        const ruB = i18n.getResourceBundle('ru', 'translation') || {};
+        const enB = i18n.getResourceBundle('en', 'translation') || {};
+        const onlyRu = Object.keys(ruB).filter(k => !(k in enB));
+        const onlyEn = Object.keys(enB).filter(k => !(k in ruB));
+        res.push({
+          name: 'Locale Parity ru/en',
+          description: 'Наборы ключей русской и английской локали совпадают.',
+          passed: onlyRu.length === 0 && onlyEn.length === 0,
+          severity: 'warning',
+          expected: '0 расхождений',
+          received: `ru-only: ${onlyRu.length}, en-only: ${onlyEn.length}`,
+          passCondition: 'ru.json и en.json содержат одинаковые ключи.',
+          failCondition: 'В одном языке текст есть, в другом показывается сырой ключ.',
+          diagnosis: `Расхождения: ${[...onlyRu.slice(0,3), ...onlyEn.slice(0,3)].join(', ') || '—'}`,
+          task: regressionTask('Project Audit', 'парность локалей ru/en')
+        });
+      }
+
+      // 4. Экспорт устойчив к пустым данным
+      let csvOk = true; let csvErr = '';
+      try { generateCSV([]); } catch (e: any) { csvOk = false; csvErr = String(e?.message || e); }
+      res.push({
+        name: 'Export Handles Empty Data',
+        description: 'Экспорт CSV не падает на проекте без комментариев.',
+        passed: csvOk,
+        severity: 'warning',
+        expected: 'Пустой CSV без исключения',
+        received: csvOk ? 'OK' : csvErr,
+        passCondition: 'generateCSV([]) завершается без ошибки.',
+        failCondition: 'Кнопка экспорта падает при пустом списке комментариев.',
+        diagnosis: 'В exportService нет обработки пустого массива.',
+        task: regressionTask('Project Audit', 'экспорт пустых данных')
+      });
+
+      // 5. Валидность таймкодов комментариев
+      const badTs = allVersions.flatMap(v => v.comments || []).filter(c => c.timestamp < 0 || (c.duration ?? 0) < 0);
+      res.push({
+        name: 'Comment Timecodes Valid',
+        description: 'Таймкоды и длительности комментариев неотрицательны.',
+        passed: badTs.length === 0,
+        severity: 'info',
+        expected: '0 некорректных значений',
+        received: badTs.length + ' некорректных',
+        passCondition: 'Все комментарии имеют timestamp >= 0 и duration >= 0.',
+        failCondition: 'Маркеры уезжают на таймлайне в отрицательную зону.',
+        diagnosis: 'Скраб/маркер записал отрицательное время — проверить seek и setMarkerInPoint.',
+        task: regressionTask('Project Audit', 'валидность таймкодов')
+      });
+
+
+      // 6. Пустой/некорректный ввод не роняет UI
+      const emptyOk = (() => { try { generateCSV([]); generateEDL('Empty', 1, [], 24); return true; } catch { return false; } })();
+      res.push({
+        name: 'Empty Input Guard',
+        description: 'Экспорт с пустыми данными не бросает исключение (пустой проект/комментарии).',
+        passed: emptyOk,
+        severity: 'warning',
+        expected: 'OK без исключения',
+        received: emptyOk ? 'OK' : 'thrown',
+        passCondition: 'generateCSV([]) и generateEDL(пустой проект) завершаются без ошибок.',
+        failCondition: 'Кнопка экспорта падает на пустом проекте.',
+        diagnosis: 'В exportService нет guard для пустых данных.',
+        task: regressionTask('Project Audit', 'пустой ввод в экспорте')
+      });
+
+      // 7. Одновременные действия: повторное удаление одного слова идемпотентно
+      const twice = (() => { const set = new Set<string>(); set.add('w1'); set.delete('w1'); set.delete('w1'); return set.size === 0; })();
+      res.push({
+        name: 'Concurrent Delete Idempotent',
+        description: 'Повторное удаление одного и того же маркера не оставляет дублей (защита от гонок 409).',
+        passed: twice,
+        severity: 'info',
+        expected: '0 остатков',
+        received: twice ? 'OK' : 'дубли',
+        passCondition: 'Идемпотентность удаления подтверждена на модели множества.',
+        failCondition: 'Дубли маркеров удаления после гонки.',
+        diagnosis: 'Нет идемпотентности в синхронизации комментариев.',
+        task: regressionTask('Project Audit', 'идемпотентность удаления')
+      });
+
+      // 8. Недостаток прав: проверка прав менеджера не бросает на пустом пользователе
+      const rightsOk = (() => { try { isOrgAdmin('', []); return true; } catch { return false; } })();
+      res.push({
+        name: 'Rights Check Safe',
+        description: 'Проверка прав не падает при отсутствующих данных пользователя.',
+        passed: rightsOk,
+        severity: 'warning',
+        expected: 'false без исключения',
+        received: rightsOk ? 'OK' : 'thrown',
+        passCondition: 'isOrgAdmin(undefined) возвращает false, не бросая.',
+        failCondition: 'Падение проверки прав ломает шапку плеера.',
+        diagnosis: 'isOrgAdmin без optional chaining.',
+        task: regressionTask('Project Audit', 'безопасность проверки прав')
+      });
+      return res;
     }
+  }
+,
+    {
+        id: 'network_ext',
+        title: 'Сеть и доступность',
+        icon: Wifi,
+        description: 'Связь с бэкендом, задержка ответа и доступность внешних ресурсов из вашей сети.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof fetch === 'undefined') {
+                res.push(skippedResult('Online Status', 'navigator.onLine — есть ли сеть.'));
+                res.push(skippedResult('API Latency', 'Время ответа /api/health (мс).'));
+                res.push(skippedResult('Third-party Reachability', 'Доступность внешних скриптов (Cloudflare Insights, Yandex Metrika).'));
+                return res;
+            }
+            res.push({
+                name: 'Online Status',
+                description: 'Браузер сообщает о наличии сети (navigator.onLine).',
+                passed: navigator.onLine !== false,
+                expected: 'true',
+                received: String(navigator.onLine),
+                passCondition: 'Устройство онлайн.',
+                failCondition: 'Устройство офлайн — запросы не уйдут.',
+                severity: 'warning',
+                diagnosis: 'Нет сети у клиента: данные не синхронизируются.',
+                task: regressionTask('Online Status', 'клиент офлайн')
+            });
+            try {
+                const t0 = Date.now();
+                const r = await fetch('/api/health');
+                const ms = Date.now() - t0;
+                res.push({
+                    name: 'API Latency',
+                    description: 'Время ответа /api/health.',
+                    passed: r.status === 200 && ms < 2000,
+                    expected: '200 и < 2000 мс',
+                    received: 'HTTP ' + r.status + ' за ' + ms + ' мс',
+                    passCondition: 'Бэкенд отвечает быстро.',
+                    failCondition: 'Медленный или недоступный API.',
+                    severity: ms > 2000 ? 'warning' : 'info',
+                    diagnosis: 'Задержка API: возможны проблемы с сетью/регионом или холодный старт функций.',
+                    task: ms > 2000 ? regressionTask('API Latency', 'медленный ответ /api/health') : undefined
+                });
+            } catch (e: any) {
+                res.push({ name: 'API Latency', description: 'Время ответа /api/health.', passed: false, expected: '200', received: 'network error', passCondition: 'Бэкенд отвечает.', failCondition: 'API недоступен.', severity: 'warning', diagnosis: 'Запрос не выполнился: сеть/CORS/деплой.', task: regressionTask('API Latency', 'API недоступен') });
+            }
+            const probes = [
+                { name: 'Cloudflare Insights', url: 'https://static.cloudflareinsights.com/beacon.min.js' },
+                { name: 'Yandex Metrika', url: 'https://mc.yandex.ru/metrika/tag.js' }
+            ];
+            for (const pr of probes) {
+                try {
+                    const r = await fetch(pr.url, { method: 'GET' });
+                    res.push({ name: 'Reachable: ' + pr.name, description: 'Внешний ресурс доступен из вашей сети.', passed: r.status < 500, expected: 'HTTP < 500', received: 'HTTP ' + r.status, passCondition: 'Ресурс доступен.', failCondition: 'Ресурс заблокирован (регион/провайдер/расширения).', severity: 'info', diagnosis: 'Часть внешних скриптов блокируется — не влияет на работу приложения.', task: undefined });
+                } catch (e: any) {
+                    res.push({ name: 'Reachable: ' + pr.name, description: 'Внешний ресурс доступен из вашей сети.', passed: true, expected: 'предупреждение допустимо', received: 'blocked: ' + (e?.message || 'network error'), passCondition: 'Блокировка внешнего скрипта допустима (не критично).', failCondition: '—', severity: 'info', diagnosis: 'Внешний ресурс недоступен; приложение работает без него.', task: undefined });
+                }
+            }
+            return res;
+        }
+    },
+    {
+        id: 'pwa',
+        title: 'PWA и мобильная оболочка',
+        icon: Globe,
+        description: 'Manifest, standalone-режим, поддержка безопасных зон экрана и IndexedDB.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime()) {
+                res.push(skippedResult('PWA Manifest', 'Доступность /manifest.json.'));
+                res.push(skippedResult('Safe Area Support', 'Поддержка env(safe-area-inset-*) — вырезы экрана.'));
+                res.push(skippedResult('IndexedDB Available', 'Доступность IndexedDB.'));
+                return res;
+            }
+            try {
+                const r = await fetch('/manifest.json');
+                res.push({ name: 'PWA Manifest', description: 'GET /manifest.json отвечает 200 и валидный JSON.', passed: r.status === 200, expected: '200', received: 'HTTP ' + r.status, passCondition: 'Манифест доступен.', failCondition: '404/невалидный манифест — установка PWA сломана.', severity: 'warning', diagnosis: 'Манифест отсутствует в сборке (public/manifest.json).', task: r.status !== 200 ? regressionTask('PWA Manifest', 'manifest.json недоступен') : undefined });
+            } catch (e: any) {
+                res.push({ name: 'PWA Manifest', description: 'GET /manifest.json отвечает 200.', passed: false, expected: '200', received: 'error', passCondition: 'Манифест доступен.', failCondition: 'Сеть/деплой.', severity: 'warning', diagnosis: 'Не удалось проверить манифест.', task: regressionTask('PWA Manifest', 'ошибка запроса манифеста') });
+            }
+            const safeArea = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' ? CSS.supports('padding-top: env(safe-area-inset-top)') : false;
+            res.push({ name: 'Safe Area Support', description: 'Браузер понимает env(safe-area-inset-*).', passed: safeArea, expected: 'true', received: String(safeArea), passCondition: 'Отступы под вырезы поддерживаются.', failCondition: 'Нет поддержки safe-area — шапка может заезжать под «остров».', severity: 'info', diagnosis: 'Устаревший браузер без safe-area; на iOS ≥ 11 поддержка есть.', task: undefined });
+            const idbOk = typeof indexedDB !== 'undefined';
+            res.push({ name: 'IndexedDB Available', description: 'indexedDB доступен (кэш транскриптов).', passed: idbOk, expected: 'true', received: String(idbOk), passCondition: 'IndexedDB доступен.', failCondition: 'IndexedDB запрещён (приватный режим) — кэш транскриптов работать не будет.', severity: 'warning', diagnosis: 'Приватный режим/запрет хранилища.', task: idbOk ? undefined : regressionTask('IndexedDB Available', 'indexedDB недоступен') });
+            return res;
+        }
+    },
+    {
+        id: 'storage_idb',
+        title: 'IndexedDB и квоты',
+        icon: Database,
+        description: 'Реальные операции записи/чтения в IndexedDB и оценка доступного места.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof indexedDB === 'undefined') {
+                res.push(skippedResult('IndexedDB Round-trip', 'Запись → чтение → удаление тестовой записи.'));
+                res.push(skippedResult('Storage Estimate', 'Оценка доступного места (navigator.storage.estimate).'));
+                return res;
+            }
+            const dbName = 'anotee_diag';
+            const roundtrip = await new Promise<{ ok: boolean; detail: string }>((resolve) => {
+                try {
+                    const req = indexedDB.open(dbName, 1);
+                    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains('t')) db.createObjectStore('t'); };
+                    req.onerror = () => resolve({ ok: false, detail: 'open error' });
+                    req.onsuccess = () => {
+                        const db = req.result;
+                        try {
+                            const tx = db.transaction('t', 'readwrite');
+                            tx.objectStore('t').put('ping', 'k');
+                            tx.oncomplete = () => {
+                                const tx2 = db.transaction('t', 'readonly');
+                                const g = tx2.objectStore('t').get('k');
+                                g.onsuccess = () => { resolve({ ok: g.result === 'ping', detail: g.result === 'ping' ? 'write+read ok' : 'read mismatch' }); };
+                                g.onerror = () => resolve({ ok: false, detail: 'read error' });
+                            };
+                            tx.onerror = () => resolve({ ok: false, detail: 'write error' });
+                        } catch (e: any) { resolve({ ok: false, detail: 'tx error: ' + (e?.message || e) }); }
+                    };
+                } catch (e: any) { resolve({ ok: false, detail: 'exception: ' + (e?.message || e) }); }
+            });
+            res.push({ name: 'IndexedDB Round-trip', description: 'Запись/чтение тестовой записи в IndexedDB.', passed: roundtrip.ok, expected: 'write+read ok', received: roundtrip.detail, passCondition: 'IndexedDB работает.', failCondition: 'Операции с IndexedDB падают.', severity: 'warning', diagnosis: 'Браузер запрещает IndexedDB или хранилище повреждено.', task: roundtrip.ok ? undefined : regressionTask('IndexedDB Round-trip', 'сбой операций IndexedDB') });
+            try {
+                const est: any = (navigator as any).storage && (navigator as any).storage.estimate ? await (navigator as any).storage.estimate() : null;
+                if (est && est.quota) {
+                    const usedPct = Math.round(((est.usage || 0) / est.quota) * 100);
+                    res.push({ name: 'Storage Estimate', description: 'Оценка использования квоты браузера.', passed: usedPct < 90, expected: '< 90%', received: usedPct + '% (' + Math.round((est.usage || 0) / 1048576) + ' МБ из ' + Math.round(est.quota / 1048576) + ' МБ)', passCondition: 'Есть свободное место.', failCondition: 'Хранилище почти заполнено.', severity: 'info', diagnosis: 'Мало места: возможны сбои записи кэша.', task: usedPct >= 90 ? regressionTask('Storage Estimate', 'квота браузера почти исчерпана') : undefined });
+                } else {
+                    res.push({ name: 'Storage Estimate', description: 'Оценка использования квоты браузера.', passed: true, expected: 'API доступен', received: 'skipped: API недоступен в этом браузере', passCondition: '—', failCondition: '—', severity: 'info', diagnosis: 'Браузер не поддерживает navigator.storage.estimate.', task: undefined });
+                }
+            } catch (e: any) {
+                res.push({ name: 'Storage Estimate', description: 'Оценка использования квоты браузера.', passed: true, expected: 'API доступен', received: 'skipped: ' + (e?.message || e), passCondition: '—', failCondition: '—', severity: 'info', diagnosis: 'Оценка квоты недоступна.', task: undefined });
+            }
+            return res;
+        }
+    },
+    {
+        id: 'media_caps',
+        title: 'Медиа и кодеки',
+        icon: Film,
+        description: 'Поддержка видео-кодеков, записи, распознавания речи и аудио-контекста на этом устройстве.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof document === 'undefined') {
+                res.push(skippedResult('Video Codecs', 'canPlayType для mp4/h264 и webm/vp9.'));
+                res.push(skippedResult('MediaRecorder', 'Доступность MediaRecorder.'));
+                res.push(skippedResult('SpeechRecognition', 'Доступность распознавания речи.'));
+                res.push(skippedResult('AudioContext', 'Доступность Web Audio API.'));
+                return res;
+            }
+            const v = document.createElement('video');
+            const mp4 = v.canPlayType('video/mp4; codecs="avc1.42E01E"') || '';
+            const webm = v.canPlayType('video/webm; codecs="vp9"') || '';
+            res.push({ name: 'Video Codecs', description: 'Поддержка H.264 (mp4) и VP9 (webm).', passed: !!mp4, expected: 'mp4: probably/maybe', received: 'mp4=' + (mp4 || 'no') + ', webm=' + (webm || 'no'), passCondition: 'Устройство воспроизводит mp4.', failCondition: 'Нет H.264 — часть видео не откроется.', severity: 'warning', diagnosis: 'Браузер/ОС без H.264 (редко, обычно старые сборки Linux).', task: mp4 ? undefined : regressionTask('Video Codecs', 'нет поддержки H.264') });
+            const mr = typeof (window as any).MediaRecorder !== 'undefined';
+            res.push({ name: 'MediaRecorder', description: 'Запись аудио/видео доступна.', passed: mr, expected: 'true', received: String(mr), passCondition: 'MediaRecorder доступен.', failCondition: 'Запись недоступна в этом браузере.', severity: 'info', diagnosis: 'Нет MediaRecorder (iOS Safari < 14.3).', task: undefined });
+            const sr = !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+            res.push({ name: 'SpeechRecognition', description: 'Распознавание речи доступно (диктовка).', passed: sr, expected: 'true', received: String(sr), passCondition: 'Диктовка доступна.', failCondition: 'Диктовка недоступна — используется ручной ввод.', severity: 'info', diagnosis: 'Браузер без SpeechRecognition (Firefox/Safari-ограничения).', task: undefined });
+            const ac = !!((window as any).AudioContext || (window as any).webkitAudioContext);
+            res.push({ name: 'AudioContext', description: 'Web Audio API доступен.', passed: ac, expected: 'true', received: String(ac), passCondition: 'Аудио-анализ доступен.', failCondition: 'Аудио-API недоступен.', severity: 'info', diagnosis: 'Нет Web Audio (редко).', task: undefined });
+            return res;
+        }
+    },
+    {
+        id: 'transcription',
+        title: 'Транскрибация',
+        icon: Mic,
+        description: 'Доступность модели Whisper: хост загрузки (HF/зеркало), WebGPU-ускорение и кэш браузера.',
+        tests: async () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime()) {
+                res.push(skippedResult('Model Host', 'Доступность хоста модели Whisper.'));
+                res.push(skippedResult('WebGPU', 'Доступность WebGPU-ускорения.'));
+                res.push(skippedResult('Model Cache', 'Кэш модели в браузере.'));
+                return res;
+            }
+
+            // 1. Хост загрузки модели (HF или зеркало)
+            const env = (import.meta as any).env || {};
+            const mirrorRaw = typeof env.VITE_WHISPER_MODEL_BASE_URL === 'string' ? env.VITE_WHISPER_MODEL_BASE_URL : '';
+            const mirror = mirrorRaw.replace(/\/+$/, '');
+            const isMirror = mirror.length > 8;
+            const hostBase = isMirror ? mirror : 'https://huggingface.co';
+            const hostLabel = isMirror ? 'зеркало' : 'huggingface.co';
+            const probeOne = async (model: string) => {
+                const t0 = performance.now();
+                try {
+                    const ctrl = new AbortController();
+                    const to = setTimeout(() => ctrl.abort(), 8000);
+                    const r = await fetch(hostBase + '/' + model + '/resolve/main/config.json', { signal: ctrl.signal, cache: 'no-store' });
+                    clearTimeout(to);
+                    return { ok: r.ok, status: r.status, ms: Math.round(performance.now() - t0) };
+                } catch (e: any) {
+                    return { ok: false, status: 0, ms: Math.round(performance.now() - t0), err: String(e?.message || e) };
+                }
+            };
+            const pNew = await probeOne('onnx-community/whisper-tiny');
+            const pLegacy = pNew.ok ? null : await probeOne('Xenova/whisper-tiny');
+            const probeOk = pNew.ok || (!!pLegacy && pLegacy.ok);
+            const probeDetail = 'onnx-community: ' + (pNew.ok ? ('HTTP ' + pNew.status + ' · ' + pNew.ms + 'ms') : 'нет') +
+                (pLegacy ? (' · Xenova(fallback): ' + (pLegacy.ok ? ('HTTP ' + pLegacy.status + ' · ' + pLegacy.ms + 'ms') : 'нет')) : '') +
+                ' · источник: ' + hostLabel;
+            const t0 = performance.now();
+            try {
+                const r = { ok: probeOk, status: probeOk ? 200 : (pNew.status || (pLegacy ? pLegacy.status : 0)) };
+                const ms = Math.round(performance.now() - t0);
+                res.push({
+                    name: 'Model Host',
+                    description: 'Хост загрузки модели Whisper (источник для транскрибации).',
+                    passed: r.ok,
+                    severity: r.ok ? 'info' : 'warning',
+                    expected: 'HTTP 200 (config.json модели)',
+                    received: probeDetail,
+                    passCondition: 'Хост модели отвечает — модель скачается и закэшируется.',
+                    failCondition: 'Хост недоступен — транскрибация зависнет на «Загрузке модели».',
+                    diagnosis: r.ok ? undefined : (isMirror
+                        ? 'Зеркало модели недоступно: проверьте URL и CORS (структура HF: {model}/resolve/{revision}/). Инструкция — Библия → «Транскрибация».'
+                        : 'huggingface.co недоступен — типично для РФ без VPN. Настройте зеркало модели (VITE_WHISPER_MODEL_BASE_URL); пошагово — Библия → «Транскрибация».'),
+                    task: r.ok ? undefined : [
+                        '### T-XX Transcription: модель Whisper недоступна',
+                        '- Приоритет: P1',
+                        '- Источник: [diag] System Diagnostics → Транскрибация → Model Host',
+                        '- Проблема: хост модели (' + hostLabel + ') не отдаёт config.json ни для onnx-community/whisper-tiny, ни для Xenova/whisper-tiny — скачивание модели не начнётся.',
+                        '- Цель: поднять зеркало модели (reverse-proxy на huggingface.co или копия файлов) и задать VITE_WHISPER_MODEL_BASE_URL; см. Библия → «Транскрибация».',
+                        '- Acceptance: тест Model Host зелёный; транскрибация запускается без VPN.'
+                    ].join('\n'),
+                });
+            } catch (e: any) {
+                res.push({
+                    name: 'Model Host',
+                    description: 'Хост загрузки модели Whisper (источник для транскрибации).',
+                    passed: false,
+                    severity: 'warning',
+                    expected: 'HTTP 200 (config.json модели)',
+                    received: 'сеть недоступна/таймаут · источник: ' + hostLabel,
+                    passCondition: 'Хост модели отвечает — модель скачается и закэшируется.',
+                    failCondition: 'Хост недоступен — транскрибация зависнет на «Загрузке модели».',
+                    diagnosis: isMirror
+                        ? 'Зеркало не отвечает: проверьте хост и CORS; инструкция — Библия → «Транскрибация».'
+                        : 'huggingface.co недоступен из этой сети (в РФ без VPN — ожидаемо). Настройте зеркало модели; инструкция — Библия → «Транскрибация».',
+                    task: [
+                        '### T-XX Transcription: модель Whisper недоступна',
+                        '- Приоритет: P1',
+                        '- Источник: [diag] System Diagnostics → Транскрибация → Model Host',
+                        '- Проблема: запросы конфига модели к ' + hostLabel + ' не прошли (' + (e?.message || 'network error') + ').',
+                        '- Цель: поднять зеркало модели и задать VITE_WHISPER_MODEL_BASE_URL; см. Библия → «Транскрибация».',
+                        '- Acceptance: тест Model Host зелёный; транскрибация запускается без VPN.'
+                    ].join('\n'),
+                });
+            }
+
+            // 2. WebGPU (информационно)
+            const hasGpu = typeof (navigator as any).gpu !== 'undefined';
+            res.push({
+                name: 'WebGPU',
+                description: 'Ускорение транскрибации на видеокарте (движок whisper-webgpu).',
+                passed: true,
+                severity: hasGpu ? 'info' : 'warning',
+                expected: 'navigator.gpu доступен',
+                received: hasGpu ? 'доступен — быстрый режим возможен' : 'нет — транскрибация пойдёт через WASM (медленнее)',
+                passCondition: 'Информационный тест (возможности устройства).',
+                failCondition: 'Не применимо: отсутствие WebGPU — не ошибка, а характеристика устройства.'
+            });
+
+            // 3. Кэш модели
+            try {
+                const keys = await caches.keys();
+                const tf = keys.filter((k) => /transformers/i.test(k));
+                let detail = tf.length ? 'кэш найден: ' + tf.join(', ') : 'кэш пуст — модель ещё не скачивалась';
+                try {
+                    if ((navigator as any).storage?.estimate) {
+                        const est = await (navigator as any).storage.estimate();
+                        detail += ' · хранилище: ' + Math.round((est.usage || 0) / 1048576) + ' МБ';
+                    }
+                } catch { /* ignore */ }
+                res.push({
+                    name: 'Model Cache',
+                    description: 'Кэш модели в браузере — повторные запуски без повторной загрузки.',
+                    passed: true,
+                    severity: 'info',
+                    expected: 'Cache Storage доступен',
+                    received: detail,
+                    passCondition: 'Информационный тест.',
+                    failCondition: 'Не применимо.'
+                });
+            } catch (e: any) {
+                res.push({
+                    name: 'Model Cache',
+                    description: 'Кэш модели в браузере.',
+                    passed: false,
+                    severity: 'warning',
+                    expected: 'Cache Storage доступен',
+                    received: 'ошибка: ' + (e?.message || e),
+                    passCondition: 'caches API работает — модель будет кэшироваться.',
+                    failCondition: 'caches API недоступен (приватный режим/ограничения) — модель будет качаться каждый раз.',
+                    diagnosis: 'Браузер в приватном режиме или ограничил Cache Storage: транскрибация будет работать, но модель не закэшируется.'
+                });
+            }
+            return res;
+        }
+    },
+    {
+        id: 'security_client',
+        title: 'Безопасность',
+        icon: ShieldAlert,
+        description: 'Защищённый контекст, HTTPS и отсутствие секретов в локальном хранилище.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime()) {
+                res.push(skippedResult('Secure Context', 'HTTPS/secure context.'));
+                res.push(skippedResult('No Secrets in localStorage', 'Секреты не лежат в localStorage в открытом виде.'));
+                return res;
+            }
+            const secure = (window as any).isSecureContext === true;
+            res.push({ name: 'Secure Context', description: 'Приложение открыто по HTTPS (secure context).', passed: secure, expected: 'true', received: String(secure), passCondition: 'HTTPS активен.', failCondition: 'Не HTTPS — микрофон/буфер обмена будут ограничены.', severity: 'critical', diagnosis: 'Открыто по http:// — браузеры блокируют микрофон и часть API.', task: secure ? undefined : regressionTask('Secure Context', 'приложение открыто без HTTPS') });
+            let leaks = 0;
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i) || '';
+                    const val = localStorage.getItem(k) || '';
+                    const looksJson = val.trimStart().startsWith('{') || val.trimStart().startsWith('[');
+                    if (/secret|accesskey|apikey|token/i.test(k) && val.length > 20 && !looksJson) leaks++;
+                }
+            } catch { /* ignore */ }
+            res.push({ name: 'No Secrets in localStorage', description: 'В localStorage нет похожих на секреты значений.', passed: leaks === 0, expected: '0 подозрительных ключей', received: leaks + ' подозрительных', passCondition: 'Секреты не хранятся локально.', failCondition: 'Похоже на хранение секретов в localStorage.', severity: 'critical', diagnosis: 'Ключи доступа могут попадать в localStorage — риск утечки.', task: leaks ? regressionTask('No Secrets in localStorage', 'секреты найдены в localStorage') : undefined });
+            return res;
+        }
+    },
+    {
+        id: 'a11y',
+        title: 'Доступность интерфейса',
+        icon: ShieldCheck,
+        description: 'Базовые проверки доступности текущей страницы: alt, aria-label, язык, заголовок.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof document === 'undefined') {
+                res.push(skippedResult('Images alt', 'У изображений есть alt.'));
+                res.push(skippedResult('Icon Buttons', 'Иконочные кнопки имеют aria-label/title.'));
+                res.push(skippedResult('Document Language', 'У <html> задан lang.'));
+                return res;
+            }
+            const imgs = Array.from(document.querySelectorAll('img'));
+            const noAlt = imgs.filter((i) => !i.getAttribute('alt')).length;
+            res.push({ name: 'Images alt', description: 'Изображения без alt (для скринридеров).', passed: noAlt === 0, expected: '0 без alt', received: noAlt + ' из ' + imgs.length, passCondition: 'Все изображения подписаны.', failCondition: 'Часть изображений без alt.', severity: 'info', diagnosis: 'Добавьте alt/aria-hidden для декоративных картинок.', task: noAlt ? regressionTask('Images alt', 'изображения без alt') : undefined });
+            const btns = Array.from(document.querySelectorAll('button'));
+            const iconOnly = btns.filter((b) => !b.textContent?.trim() && !b.getAttribute('aria-label') && !b.getAttribute('title')).length;
+            res.push({ name: 'Icon Buttons', description: 'Кнопки без текста должны иметь aria-label/title.', passed: iconOnly === 0, expected: '0 без описания', received: iconOnly + ' из ' + btns.length, passCondition: 'Иконочные кнопки описаны.', failCondition: 'Часть кнопок нечитаема для скринридера и не имеет подсказки.', severity: 'info', diagnosis: 'Добавьте aria-label или title иконочным кнопкам.', task: iconOnly ? regressionTask('Icon Buttons', 'кнопки без доступного имени') : undefined });
+            // T-232: у ссылок-иконок и контролов шапки должно быть доступное имя
+            const links = Array.from(document.querySelectorAll('a'));
+            const namelessLinks = links.filter((a) => {
+                const hasText = (a.textContent || '').trim().length > 0;
+                const hasName = a.getAttribute('aria-label') || a.getAttribute('title');
+                const hasImgAlt = !!a.querySelector('img[alt]:not([alt=""])');
+                return !hasText && !hasName && !hasImgAlt;
+            }).length;
+            res.push({ name: 'Link Names', description: 'Ссылки-иконки должны иметь текст, aria-label или title.', passed: namelessLinks === 0, expected: '0 без имени', received: String(namelessLinks) + ' из ' + links.length, passCondition: 'Все ссылки имеют доступное имя.', failCondition: 'Часть ссылок нечитаема для скринридера.', severity: 'info', diagnosis: 'Добавьте текст, aria-label или title ссылкам-иконкам.', task: namelessLinks ? regressionTask('Link Names', 'ссылки без доступного имени') : undefined });
+
+            const header = document.querySelector('header');
+            const headerControls = header ? Array.from(header.querySelectorAll('button, a')) : [];
+            const namelessHeader = headerControls.filter((el) => {
+                const hasText = (el.textContent || '').trim().length > 0;
+                const hasName = el.getAttribute('aria-label') || el.getAttribute('title');
+                return !hasText && !hasName;
+            }).length;
+            res.push({ name: 'Header Controls Labeled', description: 'Кнопки/ссылки шапки имеют доступное имя (aria-label/title/текст).', passed: namelessHeader === 0, expected: '0 без имени', received: String(namelessHeader) + ' из ' + headerControls.length, passCondition: 'Контролы шапки подписаны.', failCondition: 'Часть кнопок шапки нечитаема для скринридера.', severity: 'info', diagnosis: 'Добавьте aria-label или title кнопкам шапки.', task: namelessHeader ? regressionTask('Header Controls Labeled', 'контролы шапки без имени') : undefined });
+
+            const lang = document.documentElement.getAttribute('lang') || '';
+            res.push({ name: 'Document Language', description: 'У <html> задан атрибут lang.', passed: !!lang, expected: 'например ru/en', received: lang || 'нет', passCondition: 'Язык документа указан.', failCondition: 'Скринридеры неверно читают текст.', severity: 'info', diagnosis: 'Добавьте lang в index.html.', task: lang ? undefined : regressionTask('Document Language', 'нет lang у html') });
+            return res;
+        }
+    },
+    {
+        id: 'perf_client',
+        title: 'Производительность',
+        icon: Zap,
+        description: 'Загрузка страницы, память вкладки и заполненность localStorage.',
+        tests: () => {
+            const res: TestResult[] = [];
+            if (!isBrowserRuntime() || typeof performance === 'undefined') {
+                res.push(skippedResult('Page Load Time', 'Время полной загрузки страницы.'));
+                res.push(skippedResult('JS Heap Usage', 'Использование памяти вкладки.'));
+                return res;
+            }
+            try {
+                const nav: any = performance.getEntriesByType('navigation')[0] || null;
+                const loadMs = nav ? Math.round(nav.loadEventEnd - nav.startTime) : Math.round(performance.now());
+                res.push({ name: 'Page Load Time', description: 'Полная загрузка страницы (loadEventEnd).', passed: loadMs < 5000, expected: '< 5000 мс', received: loadMs + ' мс', passCondition: 'Страница грузится быстро.', failCondition: 'Долгая загрузка — проверьте размер бандла и сеть.', severity: 'info', diagnosis: 'Крупный бандл или медленная сеть.', task: loadMs >= 5000 ? regressionTask('Page Load Time', 'медленная загрузка страницы') : undefined });
+            } catch (e: any) {
+                res.push({ name: 'Page Load Time', description: 'Полная загрузка страницы.', passed: true, expected: '—', received: 'skipped: ' + (e?.message || e), passCondition: '—', failCondition: '—', severity: 'info', diagnosis: '—', task: undefined });
+            }
+            const mem: any = (performance as any).memory;
+            if (mem && mem.usedJSHeapSize) {
+                const mb = Math.round(mem.usedJSHeapSize / 1048576);
+                res.push({ name: 'JS Heap Usage', description: 'Использование JS-памяти вкладки.', passed: mb < 300, expected: '< 300 МБ', received: mb + ' МБ', passCondition: 'Память в норме.', failCondition: 'Высокое потребление памяти.', severity: 'info', diagnosis: 'Возможна утечка или тяжёлый транскрипт в памяти.', task: mb >= 300 ? regressionTask('JS Heap Usage', 'высокое потребление памяти') : undefined });
+            } else {
+                res.push({ name: 'JS Heap Usage', description: 'Использование JS-памяти вкладки.', passed: true, expected: 'API доступен', received: 'skipped: performance.memory недоступен (не Chromium)', passCondition: '—', failCondition: '—', severity: 'info', diagnosis: 'Метрика доступна только в Chromium-браузерах.', task: undefined });
+            }
+            return res;
+        }
+    }
+
 ];

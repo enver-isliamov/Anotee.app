@@ -1,4 +1,4 @@
-
+﻿
 // Limit for browser-side processing to prevent tab crashes (Out Of Memory)
 const MAX_FILE_SIZE_MB = 300;
 // Stricter limit for Serverless Proxy (Vercel has 10s timeout, can't process huge files)
@@ -26,9 +26,14 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
     // 1. Safety Check for Remote URLs (Head Request)
     if (fetchUrl.startsWith('http')) {
         try {
-            const head = await fetch(fetchUrl, { method: 'HEAD' });
+            // T-31: для S3 presigned URL метод HEAD ломает подпись (метод участвует в canonical request) —
+            // используем GET с Range (Range не подписывается, это разрешено); для Drive-прокси HEAD работает как раньше
+            const head = await fetch(fetchUrl, isProxyRequest
+                ? { method: 'HEAD' }
+                : { method: 'GET', headers: { Range: 'bytes=0-1' } });
             if (head.ok) {
-                const size = parseInt(head.headers.get('content-length') || '0', 10);
+                    const contentRange = head.headers.get('content-range'); // 'bytes 0-1/123456'
+                    const size = contentRange ? parseInt(contentRange.split('/')[1] || '0', 10) : parseInt(head.headers.get('content-length') || '0', 10);
                 const limit = isProxyRequest ? MAX_PROXY_BYTES : MAX_BYTES;
                 const limitMb = isProxyRequest ? MAX_PROXY_SIZE_MB : MAX_FILE_SIZE_MB;
 
@@ -43,29 +48,78 @@ export async function extractAudioFromUrl(url: string, isProxyRequest = false): 
         }
     }
 
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000, // Whisper expects 16kHz
-    });
+    // T-38: iOS Safari — AudioContext({sampleRate: 16000}) может игнорироваться или бросить.
+    // Декодируем на нативной частоте, затем вручную ресемплим до 16000 Hz (линейная интерполяция).
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) throw new Error("Web Audio API не поддерживается этим браузером");
+    const audioContext = new AudioCtx();
+    try { await audioContext.resume(); } catch { /* iOS: suspended context */ }
 
     try {
-        const response = await fetch(fetchUrl);
+        // T-354: ретрай на сетевой блип (2 попытки); TypeError (Failed to fetch) — классифицируем как блокировку
+        let response: Response | null = null;
+        let lastFetchErr: any = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                response = await fetch(fetchUrl);
+                lastFetchErr = null;
+                break;
+            } catch (err) {
+                lastFetchErr = err;
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 700));
+            }
+        }
+        if (!response) throw lastFetchErr;
         if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
         
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-        // Get the first channel (mono)
-        const audioData = audioBuffer.getChannelData(0);
+        // T-38: ресемплинг до 16000 Hz (Whisper ожидает 16кГц) — линейная интерполяция
+        const sourceRate = audioBuffer.sampleRate;
+        const targetRate = 16000;
+        // T-351: микс всех каналов (усреднение) — если звук оказался только в правом канале,
+        // он больше не теряется (раньше брался только канал 0).
+        let sourceData = audioBuffer.getChannelData(0);
+        if (audioBuffer.numberOfChannels > 1) {
+            const mixed = new Float32Array(sourceData.length);
+            for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+                const data = audioBuffer.getChannelData(c);
+                for (let i = 0; i < data.length; i++) mixed[i] += data[i];
+            }
+            const inv = 1 / audioBuffer.numberOfChannels;
+            for (let i = 0; i < mixed.length; i++) mixed[i] *= inv;
+            sourceData = mixed;
+        }
+        if (sourceRate === targetRate) return sourceData; // уже 16кГц
 
-        return audioData;
+        const ratio = sourceRate / targetRate;
+        const targetLength = Math.round(sourceData.length / ratio);
+        const result = new Float32Array(targetLength);
+        for (let j = 0; j < targetLength; j++) {
+            const srcIdx = j * ratio;
+            const srcIdxFloor = Math.floor(srcIdx);
+            const srcIdxCeil = Math.min(srcIdxFloor + 1, sourceData.length - 1);
+            const frac = srcIdx - srcIdxFloor;
+            result[j] = sourceData[srcIdxFloor] * (1 - frac) + sourceData[srcIdxCeil] * frac;
+        }
+        return result;
     } catch (e: any) {
         console.error("Audio extraction failed", e);
         if (e.message.includes('too large')) throw e;
+        const msg = String(e?.message || '');
+        // T-354: TypeError: Failed to fetch при GET — почти всегда CORS бакета или обрыв сети.
+        // Специальный код, чтобы UI показал понятную инструкцию, а не «Failed to fetch».
+        if (e instanceof TypeError || /Failed to fetch|ERR_FAILED|NetworkError|CORS/i.test(msg)) {
+            const err = new Error('AUDIO_FETCH_BLOCKED');
+            (err as any).original = msg;
+            throw err;
+        }
         throw new Error(e.message || "Failed to extract audio. The file might be corrupted, too large, or format unsupported.");
     } finally {
         // CRITICAL: Close context to release hardware resources
         if (audioContext.state !== 'closed') {
-            await audioContext.close();
+            try { await audioContext.close(); } catch { /* iOS может бросить при close на suspended */ }
         }
     }
 }

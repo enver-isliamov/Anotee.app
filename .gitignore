@@ -26,3 +26,20 @@ dist
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Playwright
+test-results
+playwright-report
+blob-report
+
+playwright.local.config.ts
+
+_repro321.spec.ts
+
+_debug.spec.ts
+
+audit-report.json
+
+# служебные файлы агента (вне продукта)
+.openclaw/
+

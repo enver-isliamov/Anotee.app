@@ -1,0 +1,44 @@
+﻿/* Входная точка Tailwind — подключается в index.tsx (import './index.css').
+   Папку src/ не создаём (железное правило №6 AGENTS.md), файл лежит в корне рядом с index.tsx. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* T-89: safe-area всегда (в Safari env() = 0, на iPhone с «островом» — реальный отступ).
+   Ранее правило работало только в PWA-режиме и шапка уезжала под статус-бар/остров. */
+.safe-top {
+  /* мобильный: сохраняем базовый py-2 шапки + inset (Codex P2) */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+}
+.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+@media (min-width: 768px) {
+  /* md: у шапки py-0 — добавляем только inset, без лишних 8px */
+  .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+}
+/* T-25: iA-принцип — комфортная длина строки для чтения транскрипта */
+.reading-column {
+  max-width: 72ch;
+}
+
+/* T-125/T-136: мобильная устойчивость вёрстки.
+   ВАЖНО: не ставим overflow-x:hidden на html и не меняем height у video/svg —
+   это ломает вертикальный скролл и раскладку плеера (T-136).*/
+img, svg {
+  max-width: 100%;
+}
+video, canvas {
+  max-width: 100%;
+}
+/* длинные строки (ключи, endpoint, ID) не растягивают контейнер */
+code, pre, .font-mono {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+@media (max-width: 767px) {
+  /* предотвращаем горизонтальный сдвиг только на мобильных и только для body */
+  body { overflow-x: hidden; }
+  /* чтобы нижний таб-бар не перекрывал последний контент */
+  main, .page-content { padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }
+}

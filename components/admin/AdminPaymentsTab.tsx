@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from '../../services/toastBus';
 import { useAuth } from '@clerk/clerk-react';
 import { PaymentConfig, DEFAULT_PAYMENT_CONFIG, PlanConfig, PlanFeature } from '../../types';
 import { RefreshCw, CreditCard, CheckCircle, ExternalLink, Edit3, GripVertical, Zap, X, Plus, Save, Key, Edit2, Check, Lock, Unlock, Hash, Link as LinkIcon, Eye, EyeOff, Heart } from 'lucide-react';
@@ -224,10 +225,10 @@ export const AdminPaymentsTab: React.FC = () => {
                 },
                 body: JSON.stringify(paymentConfig)
             });
-            alert("Настройки интеграций сохранены!");
+            toast("Настройки интеграций сохранены!");
             setIsEditingGateway(false); // Lock gateway selection after save
         } catch (e) {
-            alert("Не удалось сохранить настройки платежей");
+            toast("Не удалось сохранить настройки платежей");
         } finally {
             setIsSavingPayment(false);
         }
@@ -532,10 +533,10 @@ export const AdminPaymentsTab: React.FC = () => {
                         </p>
                         <div className="bg-white dark:bg-zinc-950 rounded-xl p-4 border border-zinc-200 dark:border-zinc-800">
                             <LockedConfigInput 
-                                label="Прямая Ссылка для Донатов (URL)" 
+                                label="Direct donation link (URL)" 
                                 value={paymentConfig.donationUrl || ''} 
                                 onChange={(val) => setPaymentConfig(prev => ({...prev, donationUrl: val}))}
-                                placeholder="https://cloudtips.ru/... или https://tinkoff.ru/..."
+                                placeholder="https://cloudtips.ru/... or https://tinkoff.ru/..."
                                 icon={LinkIcon}
                             />
                         </div>

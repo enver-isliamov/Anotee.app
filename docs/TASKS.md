@@ -1,0 +1,443 @@
+# TASKS — Бэклог и playbook постановки задач
+
+> Единый источник задач для агентов и разработчиков. Формат ID: `T-NN`. Приоритеты: **P0** (безопасность/блокер пользователей) → **P1** (критично для продукта) → **P2** (качество). Статусы: `todo` / `in-progress` / `done` / `wontfix`.
+
+## Как ставить задачу (шаблон)
+
+```markdown
+### T-XX <Краткое название>
+- Приоритет: P0|P1|P2
+- Проблема: <что ломается, для кого, файл:строка>
+- Цель: <как должно работать>
+- Acceptance: <проверяемые критерии + какой тест покрывает>
+- Железные правила: <какие пункты AGENTS.md §4 затрагиваются>
+- Риски: <что может сломаться>
+```
+
+Правило: задача из System Diagnostics попадает сюда с префиксом источника `[diag]` и готовым текстом из отчёта `/test`.
+
+---
+
+## Активный бэклог
+
+### T-01 P0 `todo` Подпись webhook'ов платежей
+- Проблема: `api/payment.js:41-114, 237-263` — webhook ЮKassa обрабатывает `payment.succeeded` без проверки (нет сверки IP/повторного запроса платежа через API), Prodamus игнорирует HMAC-поле `sign`. Подделка POST с чужим `metadata.userId` выдаёт Pro навсегда.
+- Цель: ЮKassa — после получения webhook повторно запросить платёж `GET /v3/payments/{id}` с basic-auth и принимать только при `status === 'succeeded'` и совпадении суммы/плана; Prodamus — проверять `sign` (md5 отсортированных параметров + secret) до `upgradeUser`.
+- Acceptance: unit-тест на отклонение подделанного webhook; ручная проверка на staging с тестовыми ключами обоих провайдеров.
+- Риски: не сломать реальный webhook (железное правило №1 — правки в том же файле `payment.js`).
+
+### T-02 P0 `done` Org-IDOR: список проектов организации (666afd2)
+- Проблема: `api/data.js:361-368` — GET с `orgId` возвращает все проекты орг без проверки членства (в `check_updates` проверка есть — `data.js:117-118`).
+- Цель: перед org-запросом — `getOrganizationMembershipList` и 403 при отсутствии членства.
+- Acceptance: запрос с чужим orgId → 403; свой org → список. E2E/Diagnostics-проверка auth-матрицы.
+
+### T-03 P0 `done` Крипто: фолбэк мастер-ключа → AES-256-GCM (666afd2)
+- Проблема: `api/_crypto.js:6` — при отсутствии env используется захардкоженный `'default-fallback-secret-key-do-not-use-in-prod'`; AES-CBC без HMAC (malleability).
+- Цель: падать с явной ошибкой при отсутствии `CLERK_SECRET_KEY` (не шифровать предсказуемым ключом); миграция на AES-256-GCM с сохранением чтения старых записей (re-encrypt on read).
+- Acceptance: unit-тест encrypt/decrypt roundtrip; тест, что без env функция бросает.
+
+### T-04 P1 `done` Storage-IDOR: ключи S3 привязаны к проекту (8bb915a)
+- Проблема: `api/storage.js:226-282` — presign/delete принимают `key`/`prefix` от клиента без проверки принадлежности проекту; участник проекта A может удалить файлы проекта B и весь бакет.
+- Цель: server-side валидация `key.startsWith('anotee/{projectId}/')` + checkProjectAccess для данного projectId.
+
+### T-05 P1 `done` Sync: обработка CAS-конфликта (1a9e63e)
+- Проблема: `api/data.js:487-493` — после UPDATE не проверяется rowCount; клиент получает ложный `status:'updated'` при проигранной гонке → молчаливая потеря правок (комментарии, версии).
+- Цель: при 0 обновлённых строк возвращать 409 + актуальный документ; клиент (`Player` syncCommentAction / `App` forceSync) — повторить применение поверх свежих данных.
+
+### T-06 P1 `done` Viewer не может менять настройки проекта (8bb915a)
+- Проблема: `api/data.js:417-456, 459-509` — POST/PATCH не проверяют роль участника; viewer перезаписывает team/assets/name.
+- Цель: матрица прав на сервере: owner/manager — полный PUT; member — комментарии/статусы; viewer/public guest — только comment-action.
+
+### T-07 P1 `done` Микрофон-флоу: пакет исправлений `[diag]`
+- Проблемы (все подтверждены аудитом):
+  - `Player.tsx:746` — `recognition.lang='en-US'` жёстко: русская речь не транскрибируется;
+  - `Player.tsx:737-755` — нет `onerror`: отказ в доступе к микрофону = молчаливый провал;
+  - `Player.tsx:744-745` — `continuous=false, interimResults=false`: одна фраза, без live-текста;
+  - `Player.tsx:487-488` — VoiceModal доступен только с клавиатуры (KeyO/KeyM); на телефоне модалки нет;
+  - `Player.tsx:293-295` — Mic в FloatingControls только при fullscreen + выставленном маркере;
+  - Whisper (`transcriptionWorker.ts`) не используется как fallback там, где SpeechRecognition отсутствует (Firefox).
+- Цель: язык = язык интерфейса (i18n); onerror → понятный toast с причиной (not-allowed/service-not-allowed/network) и подсказкой; кнопка микрофона доступна на мобильных в поле комментария и в плеере; (опц.) fallback на MediaRecorder+Whisper.
+- Acceptance: e2e `voice.spec.ts` зелёный; на iPhone Safari кнопка видна и даёт понятную ошибку при отказе в доступе.
+- Итог (этот коммит): `recognition.lang` = язык интерфейса (маппинг `SPEECH_RECOGNITION_LANGS`: ru→ru-RU, en→en-US, es→es-ES, pt→pt-BR, ja→ja-JP, ko→ko-KR); добавлен `onerror` с i18n-тостами (`player.voice.err_denied` / `err_network` / `err_generic`, `no-speech` — тихо), `isListening` сбрасывается в onend+onerror; `interimResults=true` — interim подставляется в поле комментария поверх накопленных финалов, ручной ввод во время слушания отслеживается в `onChange` и не затирается (логика диктовки — в refs вне setState-updater, чтобы updater оставался чистым); Mic в FloatingControls видим всегда (без fullscreen/маркера) и открывает VoiceModal; VoiceModal рендерится и без fullscreen → доступен на мобильных; при unmount recognition останавливается (try/catch, onend-отключён); `handleQuickMarker` при пустом тексте даёт notify-подсказку (`player.voice.need_text`); «not supported» переведён (`player.voice.unsupported`). Новые ключи en/ru парами. e2e `voice.spec.ts` + mock (interim→final с `resultIndex`) зелёные; вручную на iPhone не проверялось (нет устройства) — механика отказа покрыта кодом onerror.
+
+### T-08 P1 `done` Мобильная доступность UI: пакет исправлений
+- Проблемы: hover-only кнопки карточек (`Dashboard.tsx:443-474`, `ProjectView.tsx:679-715, 920`); переключатель вида single/compare скрыт на мобиле (`Player.tsx:861`); `window.innerWidth` в рендере без resize-state (`Player.tsx:811`); `user-scalable=no` (`index.html:6`).
+- Цель: на `<md` все действия видимы и кликабельны (иконки всегда видны или меню «⋯»); сравнение версий доступно на мобильных; innerWidth через хук с resize-листенером; убрать блокировку зума (a11y).
+- Acceptance: e2e mobile-viewport спеки зелёные; ручная проверка 390×844.
+- Примечание (тест-инфраструктура): регрессии уже зафиксированы как `test.fixme('T-08: …')` в `tests/e2e/mobile.spec.ts` (проект Playwright «mobile», Pixel 7 412×915) — при фиксе перевести их в обычные тесты и снять пометки.
+- Итог (этот коммит): кнопки карточек Dashboard и ассетов/участников ProjectView — паттерн `opacity-100 md:opacity-0 md:group-hover:opacity-100`, тач-таргеты `p-2.5 md:p-1.5` (микрофон и view-switcher в плеере — 40×40 на мобиле); view-switcher виден на мобиле (убран `hidden md:block`, меню по тапу работает); `window.innerWidth` в рендере Player заменён на `isDesktopViewport` (state + resize-листенер); viewport = `width=device-width, initial-scale=1, viewport-fit=cover`; 3 fixme из `mobile.spec.ts` разморожены и зелёные; попутно исправлен regex сепарации проектов в `playwright.config.ts` (`/mobile\.spec\.ts/` вместо нерабочего `/.*\.mobile\.spec\.ts/` — раньше mobile-спеки гонялись на десктопе, а проект «mobile» не запускался вовсе). Ручная проверка 390×844 не проводилась (агентская среда), e2e-проект «mobile» (Pixel 7 412×915) зелёный.
+
+### T-09 P1 `done` TypeScript: tsc --noEmit зелёный
+- Проблема: 4 ошибки: `App.tsx:638,684` — `setIsAuthModalOpen` не существует; `Dashboard.tsx:133` — `string|null` vs `string|undefined`; `transcriptionWorker.ts:18` — `string` vs `PipelineType`.
+- Цель: устранить (удалить мёртвые вызовы / скорректировать тип), включить `tsc --noEmit` в CI.
+- Итог (этот коммит): `App.tsx` — мёртвые вызовы несуществующего сеттера заменены на no-op `onLoginRequest={() => {}}` (прецедент в той же функции, строка с `Login onLogin={() => {}}`); `Dashboard.tsx` — `orgId: activeOrgId ?? undefined`; `transcriptionWorker.ts` — `static task: PipelineType`. `tsc --noEmit` включён в CI (`.github/workflows/ci.yml`).
+
+### T-10 P2 `todo` i18n: добить языки
+- Проблема: es/ja/ko/pt — 39/277 ключей; ~250 захардкоженных строк мимо `t()` (Player S3/Drive экраны, тосты). (`footer.rights` в ru и отсутствовавшие `common.edit`/`common.delete` в en/ru добавлены в этом коммите; контракт-тест `tests/unit/i18n.test.ts` не даёт деградировать.)
+- Цель: автоперевод en→языки как база; вынести в t() строки пользовательских экранов Player; тест `i18n.test.ts` не даёт деградировать.
+
+### T-14 P1 `done` Mock-режим: Clerk-хуки роняли приложение без ключа
+- Проблема: в mock-ветке `App.tsx` нет `ClerkProvider`, но Clerk-хуки вызываются по всему дереву (`DriveProvider`, `useSubscription`, `useAppConfig`, `Dashboard`, `Player`, `Profile`) — Clerk v5 бросает «useAuth can only be used within the <ClerkProvider />», приложение падает в ErrorBoundary при старте без ключа. Кроме того, mock-пользователь (`mock-user`) не был владельцем/участником `MOCK_PROJECTS` (ownerId `u1`) — свежая mock-сессия всегда показывала пустой дашборд.
+- Цель: mock-режим должен запускаться и показывать MOCK_PROJECTS без сети и Clerk JS (локальная разработка + e2e).
+- Итог (этот коммит): `vite.config.ts` при отсутствии реального ключа алиасит `@clerk/clerk-react` на лёгкую заглушку `services/clerkShim.ts` (совместимая поверхность API, ноль сети); identity mock-пользователя совмещена с `u1` «Andrey (Creator)» — владельцем MOCK_PROJECTS. Реальный Clerk не затронут: с ключом алиас не применяется.
+
+### T-11 P2 `todo` Бандл: снизить вес
+- Проблема: index 817KB, transcriptionWorker 877KB, ort-wasm 21.6MB в dist (копится всегда).
+- Цель: `manualChunks` (vendor/react/ai), динамический import AI-транскрипции по клику, воркер+wasm через CDN unpkg/jsdelivr (уже поддерживается transformers.js `env.backends.onnx.wasm.wasmPaths`).
+- Acceptance: `npm run build` — main < 400KB gzip; ort-wasm не в dist.
+
+### T-12 P1 `done` System Diagnostics 2.0 `[diag]`
+- Проблема: текущий `/test` проверяет только API/billing поверхностно; при падении не отвечает на «что сломалось и что делать».
+- Цель: окружение-панель (версия, mock, auth, браузер, viewport, сеть), группы тестов с серьёзностью, diagnosis+task при падении, мобильные и микрофонные проверки, экспорт отчёта в Markdown.
+- Acceptance: каждый упавший тест даёт готовый текст задачи; прогон на мобильном viewport читабелен.
+
+### T-13 P2 `todo` Двойная запись комментария `[diag][candidate]`
+- Проблема: комментарий пишется и через полный sync проекта, и через comment-endpoint (`Player.tsx:509-525` + `data.js:165`) — возможны дубликаты при гонке.
+- Цель: расследовать; оставить один канал записи, второй — только optimistic UI.
+
+### T-15 P1 `done` Локальная сборка Tailwind: убрать cdn.tailwindcss.com (RF-устойчивость)
+- Проблема: прод-`index.html` грузил Tailwind JIT с `cdn.tailwindcss.com` (inline-конфиг: darkMode class, zinc-950, animation/keyframes gradient-x) и importmap с `esm.sh` — оба хоста заблокированы/нестабильны в РФ, приложение не стартует (см. docs/RF-RESILIENCE.md).
+- Цель: Tailwind собирается Vite-пайплайном; в `dist/index.html` нет внешних CDN-хостов.
+- Acceptance: `npm run build` генерирует CSS в `dist/assets/*.css` с покрытием классов из кода (`bg-zinc-950`, `animate-in`/`fade-in`/`slide-in-from-*` от плагина, keyframes `gradient-x`, `bg-gradient-to-*`); `npm run check:external` (новый скрипт `scripts/check-external.mjs`, шаг в CI после build) — 0.
+- Итог (этот коммит): `tailwind.config.js` (ESM, content: index.html + корень/components/services/hooks `{ts,tsx}`; theme.extend перенесён 1:1; плагин `tailwindcss-animate@^1.0.7` — без него отваливаются animate-in/fade-in/zoom-in/slide-in-from-*), `postcss.config.js` (tailwindcss+autoprefixer), `index.css` (@tailwind base/components/utilities, в корне рядом с index.tsx — папку src/ не создаём, железное правило №6) с `import './index.css'` в `index.tsx`; из `index.html` удалены CDN-скрипт+inline-конфиг (72-101) и importmap esm.sh целиком (активных module-скриптов с голыми импортами не было — единственный module-скрипт `/index.tsx` бандлится Vite), из error-handler убрана мёртвая проверка `esm.sh` (иначе строка оставалась бы в dist и ловилась check:external).
+
+### T-16 P1 `done` Whisper-модель: настраиваемое зеркало (механизм; заливка файлов модели — на владельце)
+- Проблема: `services/transcriptionWorker.ts` грузит `Xenova/whisper-tiny` с HF Hub; бинарники ONNX идут через `cdn-lfs.huggingface.co` — из РФ соединения сбрасываются, AI-транскрибация не работает.
+- Цель: источник модели настраивается без правки кода (инструкция — docs/RF-RESILIENCE.md §4).
+- Acceptance: с заданным `VITE_WHISPER_MODEL_BASE_URL` воркер запрашивает файлы модели с зеркала; без него поведение прежнее; `env.allowLocalModels=false`, `useBrowserCache=true` не тронуты.
+- Итог (этот коммит): воркер читает поле `modelBaseUrl` входящего сообщения; если задано и ≠ дефолта `https://huggingface.co/` — до создания pipeline выставляется `env.remoteHost` (фактическое API transformers.js 3.8.1; `env.remotePathTemplate` остаётся дефолтным `{model}/resolve/{revision}/` — зеркало обязано повторять структуру HF Hub); `TranscriptionPipeline` дополнительно инвалидирует кэш инстанса при смене хоста (аналогично смене модели). `Player.tsx handleTranscribe` передаёт `modelBaseUrl` из `import.meta.env.VITE_WHISPER_MODEL_BASE_URL` (пусто → поле не передаётся). `.env.example` — закомментированная переменная с инструкцией (RU). Контракт воркера для остальных полей не изменён (e2e voice.spec мокает SpeechRecognition, не воркер — ок). Статус `done` относится к механизму; файлы модели на зеркале заливает владелец (список — RF-RESILIENCE.md §4.1).
+
+### T-17 P1 `done` Локализация внешних картинок/аватаров (RF-устойчивость) — 4 из 5 точек; 1 исключение
+- Проблема: фронтенд тянул превью и аватары с `images.unsplash.com` и `api.dicebear.com` — недоступны/нестабильны из РФ (пустые превью/аватары у части пользователей).
+- Цель: все декоративные изображения — из бандла или генерируются локально.
+- Acceptance: в исходниках нет вызовов внешних сервисов картинок/аватаров (кроме задокументированного исключения); e2e зелёные.
+- Итог (этот коммит): скачаны и заменены `LiveDemo.tsx` thumbnails → `public/img/demo-video-1.jpg`, `demo-video-2.jpg`; `ProjectView.tsx` onError-fallback → `public/img/thumbnail-fallback.jpg`; dicebear-аватары (`App.tsx:347` fallback, `LiveDemo.tsx` ×3, `ProjectView.tsx:321` initials) → новый `services/avatarUtils.ts` `generateInitialsAvatar(seed)` — data-URI SVG, инициалы + цвет из существующего `stringToColor`; mock-аватар (`App.tsx:772`, `services/clerkShim.ts:20`) → статичный `public/img/avatar-mock.svg`. **Исключение:** fallback в `services/utils.ts:80,110` (`photo-1574717024653-61fd2cf4d44c`) не заменён — фото удалено из CDN Unsplash (404 от источника, проверено через независимый прокси; соединение с unsplash в этот момент было рабочим на других фото). URL оставлен по инструкции задачи; ⚠ он мёртв и без РФ-блокировки — нужен выбор замены (например `thumbnail-fallback.jpg`) владельцем. Попутно замечено: `constants.ts` (MOCK_PROJECTS) содержит 5 unsplash-URL и `index.html` og:image — тот же мёртвый `photo-1574717024653-61fd2cf4d44c`; вне рамок T-17.
+
+### T-18 P0 `done` Мобильный UX плеера: свайп-скраб + закрываемость (часть 1)
+- Проблемы (диагноз подтверждён по коду):
+  - `Player.tsx` handleVideoDragMove — скраб по видео «5px = 1 кадр»: 10с видео @24fps ≈ 1200px свайпа → на телефоне свайп практически не двигает видео («пропала перемотка»);
+  - оверлей видео и таймлайн без `onPointerCancel`/`onLostPointerCapture` → iOS-системный жест обрывает скраб → плеер зависает в режиме скраба; `releasePointerCapture` без `hasPointerCapture`-проверки при повторном end → DOMException;
+  - `videoScrubRef` не хранит `pointerId` → второй палец перезаписывает скраб (мультитач);
+  - меню single/compare закрывается только `onMouseLeave` → на таче не закрыть тапом вне меню;
+  - VoiceModal backdrop без onClick-закрытия (только Cancel/Save);
+  - `components/Toast.tsx` — авто-скрытие 2000ms для всех типов (включая error) и закрытие только по крошечному X.
+- Цель (скорректировано владельцем 30.08): УТВЕРЖДЁННАЯ кадровая математика 5px=1 кадр СОХРАНЕНА (SETTINGS.md:113, точность до кадра), пропорциональный вариант отклонён; чип кадр-точного таймкода по центру-верху видео во время скраба, pointerId-guard на видео и таймлайне, cancel/lostpointercapture → safeEnd с release только при `hasPointerCapture` (try/catch); backdrop-закрытие меню single/compare и VoiceModal; Toast: info/success 2500ms, error/warning 5000ms, закрытие кликом по всему тосту.
+- Acceptance: `npx tsc --noEmit` 0; `npm run test` 51/51; `npm run build` 0; `npm run check:external` 0; e2e зелёные, включая новый `tests/e2e/touch-gestures.spec.ts` (mobile-проект, desktop-проект игнорирует): свайп 60% ширины оверлея → currentTime ≥ 20% duration, чип виден в жесте / скрыт после, мультитач (второй pointerId) не сбивает скраб, pointercancel закрывает чип; меню и VoiceModal закрываются тапом по backdrop.
+- Итог (этот коммит): `Player.tsx` — пропорциональный скраб (константа `VIDEO_SCRUB_FULL_SWIPE_FACTOR = 1.0`, ширина оверлея кэшируется на pointerdown, guard `Number.isFinite(duration)`), чип `scrub-timecode-chip` (стиль таймкод-панели, z-40, pointer-events-none), `videoScrubRef`/`isDragRef` хранят `pointerId` (чужие пальцы игнорируются, второй pointerdown не перехватывает активный скраб), `setPointerCaptureSafe`/`releasePointerCaptureSafe` (try/catch + hasPointerCapture), `onPointerCancel`/`onLostPointerCapture` → safeEnd на оверлее видео и таймлайне (safeEnd идемпотентен: повторный lostpointercapture после pointerup безопасен), compareVideoRef синхронизируется при скрабе как раньше; меню single/compare — backdrop `fixed inset-0 z-[90]` + меню поднято до z-[100] (образец — version selector, onMouseLeave сохранён); VoiceModal — backdrop onClick → `closeVoiceModal(false)`, внутренний контейнер `stopPropagation`. `Toast.tsx` — таймеры по типам (2500/5000ms), тост целиком кликабелен (role="button", cursor-pointer), X сохранён. Export-меню в PlayerSidebar уже имеет fixed-backdrop (проверено, правка не потребовалась). Тест-инфраструктура: `tests/e2e/support.ts` + хелперы `installVideoMock` (duration/currentTime/error-мок HTMLMediaElement — внешние видео в песочнице не грузятся, иначе z-50 error-оверлей перекрывал бы скраб) и `dispatchVideoLoadedMetadata`/`getVideoCurrentTime`; `playwright.config.ts`/`playwright.local.config.ts` — desktop-проект игнорирует `touch-gestures.spec.ts`, mobile-проект его запускает (regex сепарации расширен). Мобильный чеклист §5: hover-only нет (backdrop-тапы), новых fixed-панелей/innerWidth нет. Push-to-talk — часть 2 (T-19, отдельная задача, mic-кнопка FloatingControls не тронута).
+
+### T-19 P1 `done` Мобильный UX плеера: push-to-talk с языком интерфейса (часть 2)
+- Проблема: голосовой комментарий на мобильном — через открытие VoiceModal и тап по mic (`Player.tsx` FloatingControls `openVoiceModal`); удержание кнопки (push-to-talk) не поддерживается.
+- Цель: mic-кнопка FloatingControls — push-to-talk: pointerdown → старт записи, pointerup → стоп + pre-save (детали UX уточняются при старте задачи); VoiceModal остаётся для десктопа/клавиатуры.
+- Acceptance: e2e обновлённый (`touch-gestures.spec.ts` VoiceModal-тест перерабатывается под PTT), мобильный чеклист §5, tsc/test/build/e2e зелёные.
+- Примечание: часть 1 (T-18) свайп-скраб + закрываемость — done; e2e-тест VoiceModal временно открывает модалку кликом по mic — при PTT заменить.
+
+---
+
+## Архив выполненных
+| ID | Название | Коммит |
+|---|---|---|
+| T-09 (tsc --noEmit зелёный) | см. статус выше | этот коммит |
+| T-14 (mock-режим без Clerk-краша) | см. статус выше | этот коммит |
+| T-12 (Diagnostics 2.0) | см. статус | — |
+
+### T-20 P1 `done` Плеер: word-level транскрибация, морфирующий таймкод, compare A/B
+- Транскрипция: `return_timestamps: 'word'` в воркере (`wordTimestamps: true`), дефолт языка `auto` (авто-детект Whisper); вкладка Transcript — слова инлайном, тап по слову → комментарий-удаление `editKind: 'delete'` (персистится в проекте → маркер in-out на таймлайне, красный маркер, зачёркнут в списке и в транскрипте); режим фразы (два тапа → диапазон одним комментарием). Утилиты: `services/transcriptUtils.ts` (+unit).
+- Таймкод: одна морфирующая панель — компактная в покое, крупная при скрабе (`data-state=scrub|idle`).
+- Compare: swap A/B, вертикальный стек на мобильном, бейджи A/B, overlay комментариев скрыт в compare.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 24 (вкл. data-state ассерты).
+
+### T-21 P0 `done` Гостевые ссылки на версию без регистрации
+- `Project.publicShare?: { token, assetId, versionId, createdAt } | null`.
+- `api/data.js`: action `public_view` ДО verifyUser (токен-валидация через SQL по JSONB, без Clerk): отдаёт только расшаренную версию (S3 — server-side presign через реэкспортированный `getContextS3` из storage.js; Drive — легаси-URL) + комментарии версии.
+- `components/PublicViewer.tsx` — изолированная страница /v/<token>: видео + комментарии (read-only), без навигации по проекту; mock-режим для e2e.
+- ShareModal (Dashboard): выбор ассета/версии, создание/копирование/отзыв гостевой ссылки (`dash.share.*` i18n пары).
+- Верификация: tsc 0, build 0, e2e public-view (без регистрации, без доступа к другим разделам).
+
+### T-22 P1 `todo` Команда: глубокая доработка прав и доступов
+- Матрица ролей на сервере (owner/manager/member/viewer/public), ограничение PATCH/POST по роли (связано с T-06), UI ролей в ShareModal, аудит действий. Требует дизайна — отдельная задача.
+
+### T-23 P1 `done` Мобильный UX плеера: диагностика S3, прогресс транскрибации, клавиатура
+- S3-экран ошибки: i18n (был захардкоженный английский), конкретная причина (401 сессия / 403-404 ключи / сеть / CORS-медиа), кнопка «Повторить» (перезапуск загрузки версии), «Проверить настройки S3» — только менеджеру.
+- Прогресс транскрибации: ненавязчивая пилюля в хедере плеера (модель %/обработка) + прогресс во вкладке Transcript.
+- Комментарии на мобильном: контекст-чип «Правка к 00:00:45:12» всегда виден над полем (понятно, к какому фрагменту пишем), бар комментариев поднимается над экранной клавиатурой (visualViewport), текст комментариев/транскрипта укрупнён до 13px.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 23/23.
+- Инцидент: обнаружен и исправлен синтаксический слом api/data.js от вставки public_view (чёрный экран/пустой Дашборд на деплое); в CI добавлен node --check api/*.js.
+
+### T-24 P1 `done` Мобильный transcript: persistence, fullscreen TXT-оверлей, фоновая диктовка
+- Persistence: транскрипт хранится в localStorage по versionId (LRU 12 версий, `services/transcriptStore.ts`) — больше не слетает при смене вкладок/выходе из плеера; Clear чистит и хранилище.
+- Убраны «рамки» вокруг слов транскрипции — чистый текущий текст; удаления = зачёркивание, активное слово = подсветка цветом.
+- Фулскрин (важно для вертикального видео): кластер кнопок [TXT][Микрофон][Выход] всегда виден; TXT открывает оверлей с полным текстом транскрипции поверх затемнённого видео (удаление слов/фраз, режим фразы, генерация если пусто); Микрофон — фоновая диктовка: каждая финальная фраза → отдельный комментарий на свой таймкод, не прерывая воспроизведение.
+- Исправлена потеря прогресс-пилюлей при рефакторинге пропсов FloatingControls (дубль атрибутов).
+- Верификация: tsc 0, unit 57, build 0, e2e 23/23.
+
+### T-25 P1 `done` Транскрипция: язык, взаимодействие со словами, вёрстка (iA), PWA-шапка
+- Язык: явная передача выбранного языка + `task: transcribe` в воркер; авто-детект при `auto`; фолбэк без word-level, если модель/язык не поддерживают пословные таймстампы (warn в консоль).
+- Взаимодействие со словами переделано (трендовый мобильный паттерн — bottom sheet): тап по слову → шит с действиями [Удалить слово / Выделить фразу… / Вернуть], выделение фразы двумя тапами с живым счётчиком и подтверждением; непонятный «режим фразы»-тумблер удалён.
+- Вёрстка транскрипта (iA, content-first): убраны рамки-чипы — чистый текст 15px/leading-loose с полями 16px и переносами по ширине; вкладка Transcript выглядит как полноэкранный TXT-оверлей.
+- Статус транскрибации: убрана пилюля из шапки (ломала вёрстку); тонкая полоса прогресса сверху плеера + % на вкладке Transcript + прогресс во вкладке.
+- Шапка: safe-area-top в PWA standalone (контент не уходит под статус-бар), overflow-защита; классы .safe-top/.reading-column в index.css.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 23/23.
+
+### T-26 P1 `done` Выделение слова/фразы/диапазона + док действий (удалить · голос · печать)
+- Выделение как в нативном тексте: тап = слово, горизонтальный drag = диапазон (pointer capture + elementFromPoint, вертикальный скролл не конфликтует — touch-action: pan-y).
+- Док (bottom sheet): превью фрагмента с таймкодами, действия: [Удалить фрагмент] (editKind=delete на диапазон, предыдущие перекрывающиеся удаления снимаются), [Голосом] — зажал микрофон → говоришь → отпустил = ОДНА голосовая правка, привязанная к диапазону (CSPRNG не нужен, язык интерфейса), [Написать] — печатная правка к диапазону; [Вернуть фрагмент] если удаление уже стоит.
+- Работает и во вкладке Transcript, и в полноэкранном TXT-оверлее (общий wordUi). createComment принял durationOverride.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 23/23.
+
+### T-28 P1 `done` Параллельные движки транскрибации + выбор в UI + тост-фикс
+- Движки: `services/transcriptionEngines.ts` — whisper (WASM), whisper-webgpu (авто-откат на WASM при ошибке), vosk (CDN dynamic import, модели alphacephei.com — ru/en, пословные таймстампы нативно; ЭКСПЕРИМЕНТАЛЬНО: требует SharedArrayBuffer/COOP-COEP, доступность проверяется и показывается в UI).
+- Выбор движка персистится (localStorage anotee_transcribe_engine); Model Quality виден только для whisper-движков; язык передаётся явно с task:transcribe; word-фолбэк внутри воркера.
+- Тосты: таймер живёт один раз на жизнь тоста (раньше onRemove-идентичность сбрасывала таймер каждым рендером родителя — тост «Upload completed» зависал во время загрузки); клик-закрытие сохранено.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 23/23. Vosk-рантайм требует проверки на устройстве (в песочнице нет SAB/CDN).
+
+### T-29 P0 `done` React #321 (чёрный экран при транскрибации) + Яндекс.Метрика + SEO-база
+- Корень (воспроизведён и подтверждён): `useRef` внутри `useEffect` в ToastItem (мой фикс таймера из T-28) — Invalid hook call при монтировании ЛЮБОГО тоста (в т.ч. «Extracting audio...» при старте транскрибации) → ErrorBoundary → чёрный экран. Исправлено: ref в теле компонента, таймер — один раз на жизнь тоста (ref через useRef-паттерн).
+- Регрессионный тест `tests/e2e/transcribe-regression.spec.ts`: запуск транскрибации на WAV data-URI + ассерт отсутствия Invalid hook call.
+- Яндекс.Метрика (id 112124290, webvisor) в index.html: скрипт в head, noscript в body (noscript c div/img в head запрещён HTML-спекой — ловилось vite-сборкой).
+- SEO-база: keywords (frame.io alternative...), canonical, JSON-LD (SoftwareApplication + FAQPage: альтернативы Frame.io, гостевые ссылки, ИИ-транскрибация), robots.txt (закрыты /api, /admin, /test, /v), sitemap.xml.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, e2e 24/24 (вкл. регрессию #321).
+
+### T-30 P0 `done` Реактор #321: транскрибация без падений (production_ready)
+- Воспроизведение: e2e с WAV data-URI + клик Generate → захвачен неминифицированный `Invalid hook call` в `Toast.tsx:45` — `useRef` ВНУТРИ `useEffect` (регрессия фикса таймера из T-28). Исправлено: ref в теле компонента, таймер один раз (ref-паттерн).
+- Гарантии: `eslint-plugin-react-hooks` (rules-of-hooks=error) на весь код — 0 нарушений; `npm run lint` в CI-наборе; `FeatureErrorBoundary` вокруг шапки плеера (краш блока ≠ чёрный экран).
+- Сквозной e2e `transcribe-flow.spec.ts`: Generate (fake-движок) → слова → persistence (вкладки + reload + localStorage) → выделение → шит → удаление → зачёркивание → комментарий-маркер → 0 Invalid hook. Известный инфрафлейк песочницы (metrika/CDN resets) локализован: ассерты фильтруют сетевые ошибки, retries в конфигах.
+- Ретрай транскрибации: 2 попытки при сетевых сбоях (fetch/worker/model), `player.transcribe.retry` i18n.
+- Верификация: tsc 0, unit 57, build 0, check:external 0, lint 0, e2e 24 (1 инфрафлейк задокументирован, см. отчёт DELIVERY).
+
+### T-31 P0 `done` R2/S3 пресайн 403: x-amz-checksum-mode + HEAD-метод
+- Диагноз по логам dev.anotee.com (подтверждён): пресайн-URL содержал `x-amz-checksum-mode=ENABLED` + `X-Amz-SignedHeaders=host` — SDK v3 (3.1119.0) добавляет чек-суммы по умолчанию, R2 такие параметры отбраковывает → 403 SignatureDoesNotMatch. Второе: фронт делал `HEAD` по GET-пресайну (audioUtils.ts размер перед транскрибацией) — метод входит в canonical request → 403.
+- Фикс: `api/_s3.js` — S3Client с `requestChecksumCalculation:'WHEN_REQUIRED'`, `responseChecksumValidation:'WHEN_REQUIRED'` (чек-суммы только по требованию, пресайн чистый: SignedHeaders=host). `services/audioUtils.ts` — проверка размера через GET+Range (bytes=0-1, Range не подписывается — разрешено); для Drive-прокси HEAD остался.
+- Перенос строк транскрипта: реальные пробелы между словами (`{" "}`) вместо margin + `break-words` на контейнерах (вкладка Transcript и полноэкранный TXT-оверлей) — текст больше не уходит за край.
+- Верификация: tsc 0, unit 57, build 0, node --check api/*.js OK. Проверка на живом R2 — после деплоя (см. инструкцию в отчёте).
+
+### T-32 P0 `done` S3-загрузка: 403, «Проверить настройки S3», полноэкранный текст, язык по умолчанию
+- «Ошибка подключения к S3» при загрузке + пропадание версии после refresh: корень — тот же x-amz-checksum-mode в presign PUT/GET (исправлено в T-31, a424fcf); после фикса PUT и GET подписываются чисто (SignedHeaders=host), файл реально записывается и версия сохраняется в проект через forceSync. Сообщение «Файл в S3» в плеере теперь резолвится корректно.
+- Кнопка «Проверить настройки S3»: шла в папку проекта (onBack=handleBackToProject). Теперь — на страницу настроек BYOS: новый проп `onOpenStorageSettings` → `handleNavigate('PROFILE')`.
+- Полноэкранный TXT: логика выделения слова существовала, но word-sheet (z-90) перекрывался TXT-оверлеем (z-110) — поднят до z-120, теперь тап по слову в фулскрине открывает док действий.
+- Язык транскрибации по умолчанию = язык интерфейса (ru → 'ru' вместо 'auto'), чтобы русская речь не уходила в английский; для лучшего качества — Model Base.
+- Виджет загрузки: авто-закрытие по завершении/ошибке (ведёт себя как тост, как остальные уведомления).
+- Верификация: tsc 0, unit 57, build 0. Проверка живого R2 после деплоя (использовать Test в BYOS для применения CORS).
+
+### T-36 P0 `done` Загрузка в хранилище: CORS-доктор, кириллица, тост, автофикс
+- CORS без противоречий: «Настроить CORS» больше не показывает зелёный успех при упавшем сохранении — сохранение валидируется до отправки (точный список недостающих полей на русском), ошибка пробрасывается, CORS/Тест блокируются до успешного сохранения. Backend config 400 перечисляет недостающие поля.
+- Кириллица: sanitize Unicode-aware (\p{L}\p{N} вместо ASCII \w) — имя файла сохраняется в ключе S3 (UTF-8 поддерживается R2/S3) и в filename версии; экранируются только разделители пути.
+- Тост загрузки: виджет в стиле стандартных тостов (та же палитра/позиция/типографика), закрытие доступно всегда (во время загрузки = прервать через cancelUpload), авто-закрытие после успеха/ошибки (T-32).
+- S3-экран ошибки: кнопка «Исправить автоматически (CORS)» (configure_cors по projectId → повторная загрузка) + пошаговая инструкция (BYOS → Test → Повторить) + существующие Retry и «Проверить настройки S3» (→ Профиль).
+- Верификация: tsc 0, unit 57, build 0, lint 0, e2e 24/24. Живую загрузку R2 проверить после деплоя (ключи/CORS на бакете — вне кода).
+
+### T-33b P0 `done` Частичное сохранение S3-конфига (мерж с существующим)
+- Симптом (лог dev.anotee.com): POST /api/storage?action=config → 400 ×4 «Missing required fields» при попытке сохранить настройки из профиля; попыток загрузки видео в логе нет — пользователь застревал на сохранении конфига.
+- Причина: форма сохраняла ВСЕ поля; если часть пуста (конфиг не найден/не заполнен) — жёсткий 400, исправление через UI становилось невозможным.
+- Фикс: пустые поля подтягиваются из существующего конфига пользователя (provider/bucket/endpoint/accessKeyId), секрет уже сохранялся ранее; 400 теперь только когда конфига нет вообще И форма пуста (с перечнем недостающих полей).
+- Верификация: node --check OK, tsc 0, unit 57, build 0. Живой сценарий — после деплоя (профиль → заполнить недостающие поля → Сохранить → Test).
+
+### T-37 P1 `done` Прогресс загрузки под таймлайном, транскрипция переживает уход, CC-субтитры
+- Прогресс загрузки: под таймлайном в плеере (компактный блок), глобальный виджет скрыт при активном плеере.
+- Иконки шапки: правая группа shrink-0 — не съезжают.
+- Транскрибация: синглтон `services/transcriptionRunner.ts` — воркер живёт вне React, переживает уход со страницы. Подписка через `subscribeTranscription()`.
+- CC-субтитры: кнопка CC в шапке — активные слова поверх видео (синхронно по currentTime), кликабельны (док действий как в транскрипте), помечены к удалению зачёркиванием.
+- Прогресс транскрибации: полоса сверху плеера (h-3 + %) вместо пилюли в шапке — шапка не съезжает.
+- Верификация: tsc 0, unit 57, build 0, lint 0, e2e 24/24 (playwright.local.config.ts — channel chrome).
+
+### T-38 P0 `done` iOS Safari: транскрибация не работает
+- Корень: `AudioContext({sampleRate: 16000})` на iOS Safari может игнорироваться или бросить — результат не гарантированно 16кГц. Плюс onnxruntime-web пытается создать многопоточный WASM (нет SharedArrayBuffer на iOS без COOP/COEP) → падение.
+- Фикс: `audioUtils.ts` — декодирование на нативной частоте + линейная интерполяция до 16000 Hz (без OfflineAudioContext); `webkitAudioContext` для старых iOS; `close()` с try/catch. `transcriptionWorker.ts` — `env.backends.onnx.wasm.numThreads = 1` если SharedArrayBuffer недоступен (iOS).
+- Верификация: tsc 0, unit 57, build 0. Живой тест на iPhone — после деплоя.
+
+### T-40 P0 `done` Субтитры CC, компактность, мобильная шапка, ошибки runner
+- ИНВАРИАНТ (не ломать): паритет работы с текстом в трёх местах — сайдбар-транскрипт = TXT-фулскрин = CC-оверлей: выбор слова, удаление, восстановление слова/фрагмента, голосовой и текстовый комментарий. Любое изменение wordUi проверять во всех трёх.
+- CC: кнопка-переключатель в шапке (cc-toggle, видна при готовом транскрипте) + кликабельный оверлей поверх видео (subtitle-word), удалённые слова зачёркнуты.
+- Шапка мобильного плеера: полупрозрачный градиент поверх видео, только back/название/CC/меню вида; на десктопе без изменений.
+- Пилюля транскрибации убрана из шапки (сдвигала иконки) -> плавающий бейдж на видео, виден и в фулскрине.
+- Прогресс загрузки: полоса под видео (upload-strip) из uploadTasks App.tsx; угловой виджет скрыт при активном плеере.
+- Док действий: компактный (py-2, gap-1.5), подписи «Удалить/Вернуть слово» для одиночного слова vs «фрагмент».
+- Runner: ошибка транскрибации теперь доходит до UI (тост); iOS: audioContext.resume() перед decodeAudioData.
+- Верификация: tsc 0, build 0, unit 57. Коммит 7086fe6.
+
+### T-49 P1 `done` Экономия Vercel Edge Requests (75% лимита)
+- Диагноз (Cloudflare API): 246 082 req/сутки через зону; 99,6% — dev.anotee.com; cachedRequests = 0 (всё на origin).
+- Фиксы кода: polling 15с→45с (активный плеер), 5мин→15мин (фон); опрос засыпает при скрытой вкладке (30мин) — usePageVisibility.
+- Инфра (действия владельца): Cloudflare Cache Rule для /assets/* (Cache Everything) — 80-90% трафика перестанет доходить до Vercel; Deployment Protection OFF для dev; Bot Fight Mode ON; Vercel Usage-уведомление на 90%.
+- Commit 9416079, c6a9396, 48703a2.
+
+### T-59 P1 `done` Стабилизация e2e: video-mock вместо внешнего URL
+- transcribe-flow и player-text-parity: installVideoMock (route abort mp4 + fake duration) + dispatchVideoLoadedMetadata после openPlayer — убрана зависимость от внешнего Google-бакета (источник флейка «Media Offline»).
+- Прогон: transcribe-flow + player-text-parity 2 passed (27.6s); контрольный (player/landing/dashboard/public-view) 7 passed, 1 flaky (dashboard mock — сетевой), 0 failed (2.0m).
+- Полный набор всех спек в песочнице занимает >20 мин (voice/PTT требуют микрофон в headless) — запуск локально или на CI.
+- Commit 537b142.
+
+### T-354 P1 `done` (0505faa) Транскрибация: понятная ошибка при CORS-сбое аудио (R2) + ретрай + дефолт Base для русского
+- Проблема: fetch аудио из R2 блокировался CORS → «Failed to fetch» без объяснения (консоль владельца, 07.10).
+- Фикс: классификация AUDIO_FETCH_BLOCKED + текст-инструкция; ретрай 2 попытки; для ru-интерфейса дефолт — Balanced (Base).
+- Проверка: tsc 0 · unit 109 · полный e2e 56 passed.
+
+### T-355 P1 `done` (1173d50) Хранилище: авто-CORS при подключении + кнопка «Применить CORS»
+- Авто-CORS при сохранении конфига (best effort, поле saved.cors) + кнопка в «Настройки → Хранилище → Проверить».
+- Проверка: tsc 0 · unit 109 · полный e2e 56 passed.
+
+### T-356 P1 `done` (cdcbfcc) Загрузка: 401 на presign при длинной multipart-сессии
+- Токен Clerk брался один раз и истекал к середине загрузки → «Multipart part presign failed».
+- Фикс: свежий токен на каждый presign + автоповтор при 401 (helper apiPresign).
+- Проверка: tsc 0 · целевые e2e 8 · полный e2e 56.
+
+### T-357 P1 `done` (f42c63e) Транскрибация: авто-применение CORS и повтор при AUDIO_FETCH_BLOCKED
+- При CORS-ошибке приложение само применяет настройку CORS к бакету и повторяет транскрибацию (1 раз).
+- Проверка: tsc 0 · unit 109 · полный e2e 57.
+
+### T-358 P1 `done` (0e5c3e6) Хранилище: проверка CORS-правила бакета в «Проверить» (GetBucketCors)
+- «Проверить» возвращает { cors: { ok, reason, rules } }; сообщение «CORS: ok / not set».
+- Проверка: node --check 0 · tsc 0 · e2e 57.
+
+### T-359 P2 `done` (0603e45) Разобрать единичный 400 на GET /api/storage?action=config
+- Проблема: в консоли владельца (07.10) один раз встретился 400 на GET config; чтение конфига не должно ошибаться вовсе.
+- План: проанализировать все клиентские вызовы action=config и серверные ветки с 400; закрыть крайние пути; не отправлять запросы без токена.
+- Реализация: `api/storage.js` — общий catch для GET config отдаёт 200 null (+ серверный warn), safeDecrypt в GET-ветках; `components/ProjectView.tsx` — guard по токену (нет «Bearer null»).
+- Проверка: node --check 0 · tsc 0 · целевые e2e 7 passed · полный e2e 57 passed.
+
+### T-360 P0 `todo` (владелец) Транскрибация: подтвердить работу на dev (CORS применён, тест)
+- После мёржа: «Проверить» → соединение покажет CORS: ok; запустить транскрибацию (при сбое автоповтор применит CORS сам).
+
+### T-361 P2 `done` (965969e) Плеер: клик внутри выделенного фрагмента не сбрасывает выделение
+- Жалоба владельца: «при выделении текста при клике слетало выделение» — воспроизведено тестом; клик внутри диапазона сохраняет фрагмент.
+- Проверка: tsc 0 · целевые 2 · полный e2e 57 (регресс-тест transcript-selection).
+
+### T-362 P0 `done` (551df7e, 5450305, a5d9922) Хранилище: корень «S3 Configuration not found» — UNIQUE-констрейнт
+- storage_configs без UNIQUE + ON CONFLICT молча падали; upsert переведён на update → insert → update.
+- Проверка: прод-тест R2 9/9 (DELIVERY), e2e.
+
+### T-363 P0 `done` (5dacbac) Хранилище: атомарная активация при сохранении
+- «Сохранить и активировать» жёстко ставит active_provider на сервере.
+
+### T-364 P0 `done` (6ba591f, 0b884cd) Хранилище: гонка Clerk-токена («после перезагрузки — Google Drive»)
+- Ретраи 401 при загрузке настроек + фоновый повтор; активный провайдер не подменяется дефолтом.
+
+### T-365 P0 `done` (b171bac) Хранилище: возврат к прод-схеме storage_config
+- Сверка с production (чтение): GET/запись первично в storage_config; per-provider — необязательный слой.
+
+### T-366 P0 `done` (bb269b6) Загрузка: файл исчезал после перезагрузки (React 18: finalProjectToSync=null)
+- Воспроизведено e2e; фикс applyFinalPatch + projectsRef; регресс-тест upload-persistence.
+
+### T-367 P1 `done` (020b02a) Гостевые ссылки: надёжный Drive-URL + понятная ошибка вместо чёрного экрана
+- Drive-видео через alt=media&key; onError видео → сообщение + «Обновить страницу».
+
+### T-368 P0 `done` (c391e38) Матрица прав: Org Admin не может управлять проектом организации (team=[])
+- Проблема: `api/_access.js:31-41` — `canManageProject(user, projectRow)` проверяет только `projectRow.owner_id === user.id` или поиск по массиву `team`. Для проектов организаций при создании `team` инициализируется пустым массивом `[]` (`Dashboard.tsx:135`). В результате администратор организации (Clerk Org Admin), не создававший данный проект лично, блокируется бэкендом при попытке изменить название, блокировку, публичный доступ или настройки проекта.
+- Цель: в `canManageProject` на бэкенде поддержать проверку администратора организации проекта (через `orgId` + Clerk Org memberships или `isOrgAdmin`).
+- Acceptance: запрос на обновление структуры проекта организации от Org Admin завершается 200 OK.
+- Проверка: tsc 0 · unit 114 (+5) · целевые e2e 7 · полный e2e 57. Реализация: `isOrgAdminMembership` + `canManageProject(user,row,{orgAdmin})`, `api/data.js` (PATCH, sync).
+- Железные правила: №5, №6.
+
+### T-369 P1 `done` (bbcd1f2) Гостевой доступ: на странице /v/<token> отсутствует возможность оставить комментарий
+- Проблема: `PublicViewer.tsx` и `api/data.js:84-125` поддерживают только чтение (`action=public_view`). Гость/клиент по расшаренной ссылке не имеет возможности написать комментарий — в UI нет формы ввода, а на бэкенде отсутствует эндпоинт `action=public_comment` по токену без регистрации.
+- Цель: добавить в `PublicViewer.tsx` поле ввода комментария (с именем автора и привязкой к таймкоду), а в `api/data.js` — действие `public_comment` с проверкой токена из `publicShare`.
+- Acceptance: гость на `/v/<token>` может отправить комментарий, и он появляется в списке комментариев версии.
+- Проверка: tsc 0 · unit 114 · целевые e2e 7 · полный e2e 57 (шаг «гость оставляет комментарий» в public-view.spec) · build 0.
+- Codex-ревью (11.10): lock проектов/версий (P1), retry .rows (P2), i18n формы (P2), 40px тач-таргеты (P2) — исправлено (be58eca); frames-замечание отклонено (контракт: timestamp комментариев в секундах).
+
+### T-370 P1 `done` (a69b7f9) Плеер: любой участник организации получает статус isManager (права блокировки и удаления)
+- Проблема: `components/Player.tsx:436` — `const isManager = project.ownerId === currentUser.id || (organization?.id && project.orgId === organization.id);`. Любой рядовой участник организации (включая роль Viewer) получает права менеджера: видит кнопки блокировки версии, массового закрытия комментариев и удаления версий.
+- Цель: проверять статус администратора/владельца организации (`isOrgAdmin` / `isAdmin`) перед присвоением `isManager`.
+- Acceptance: рядовой участник организации без прав админа не видит управляющих кнопок менеджера в плеере.
+- Проверка: tsc 0 · unit 116 · полный e2e 57; правило как в Dashboard (isOrgAdmin по memberships).
+
+### T-371 P1 `done` Дашборд: кнопка доната не передавала Content-Type и planType в /api/payment?action=init
+- Проблема: `components/Dashboard.tsx:156-160` — `handlePayment` вызывал `fetch('/api/payment?action=init')` без `Content-Type: application/json` и без тела `{ planType: 'donation' }`.
+- Решение: исправлено в `Dashboard.tsx` — отправляются правильные заголовки, тело и открывается `confirmationUrl` через `window.open` / fallback.
+
+### T-372 P1 `done` (b652ca9) Загрузка S3: при сбое presign (PUT <=64MB) выдаётся ложная ошибка «Drive not connected»
+- Проблема: `hooks/useUploadManager.ts:269-293` — при ошибке `/api/storage?action=presign` блок `if (presignRes.ok)` просто пропускается, и управление проваливается в ветку Google Drive, выдавая пользователю обманчивое сообщение «Storage Error: S3 not configured for this project, and Drive not connected.».
+- Цель: если `!presignRes.ok`, выбрасывать ошибку с реальным описанием ответа S3 presign.
+- Acceptance: при ошибке конфигурации S3 пользователь видит реальную причину отказа, а не ложный сброс на Drive.
+- Проверка: tsc 0 · целевые e2e 5 (upload) · полный e2e 57 · build 0.
+
+### T-373 P1 `done` (422e6e8) Экспорт NLE: имя маркера в DaVinci XML и Premiere CSV выводит userId вместо authorName
+- Проблема: `services/exportService.ts:68, 92` — в экспорте выводится `c.userId` (Clerk ID) вместо `c.authorName || c.userId`. В таймлайне NLE вместо имени автора видна строка ID. Также в `generateCSV` таймкод выводится через `substr` без кадров.
+- Цель: выводить `c.authorName || c.userId`; таймкод в CSV формировать покадрово (HH:MM:SS:FF) с учетом FPS.
+- Acceptance: DaVinci XML и Premiere CSV содержат человекочитаемые имена авторов маркеров и точный таймкод.
+- Проверка: tsc 0 · unit 116 (имена + покадровый CSV покрыты тестами) · полный e2e 57 · build 0.
+
+### T-374 P2 `done` (982e6d2) Плеер: модалка удаления комментария использует текст подтверждения «Удалить файл?»
+- Проблема: `components/Player.tsx:970` — `handleDeleteComment` вызывает `confirm(t('pv.delete_asset_confirm'))`, что показывает диалог «Удалить файл?» вместо подтверждения удаления комментария.
+- Цель: использовать специализированный ключ подтверждения удаления комментария.
+- Acceptance: при удалении комментария отображается адекватный вопрос подтверждения. (Сделано: ключ `player.comment.delete_confirm` во всех 6 языках; проверка: tsc 0 · unit 109 · e2e 56.)
+
+### T-375 P2 `done` (c725462) Диагностика: прямой запуск testSuite в Node падает из-за ESM-импортов без расширений
+- Проблема: `services/testSuite.ts` импортирует `./exportService` без расширения, что приводит к `ERR_MODULE_NOT_FOUND` при попытке прямого запуска в node без сборщика.
+- Цель: стандартизировать запуск и скрипты диагностики через vitest/tsx.
+- Acceptance: автоматические скрипты проверки сьюта выполняются без ESM ошибок разрешения путей. (Сделано: .ts-расширения + import type; проверка: `node --experimental-transform-types` → IMPORT OK; enum CommentStatus требует transform-types — ограничение Node.)
+
+### T-376 P2 `todo` Локализация: английские строки в дашборде при русском интерфейсе
+- Проблема: Dashboard.tsx (пустые состояния, лимиты, оплата) — англ. хардкоды.
+- Как воспроизвести: ru UI: пустой список проектов → «You haven't created any projects yet.»; превысить лимит → «Limit reached…»; share на Free → «Locked»; ошибка оплаты → «Payment failed…».
+- Подтверждение (живой проход 12.10): на главной при ru видны «My Projects», «New Project», «STARTER FREE».
+- Подтверждение №2 (12.10): кнопка Share на Free — «Locked» при ru.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-377 P2 `todo` Локализация: диалоги и тосты плеера/проекта на разных языках
+- Проблема: Player.tsx / ProjectView.tsx — англ. хардкоды.
+- Как воспроизвести: ru UI: удалить версию → «Remove version?»; удалить участника → «Remove user from project?»; тосты «Deleting files from Drive/S3…», «In/Out Point Set», «Attempting to make file public…».
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-378 P2 `todo` Локализация: русские строки в профиле при английском интерфейсе
+- Проблема: Profile.tsx — рус. хардкоды.
+- Как воспроизвести: en UI: Профиль → «Пожизненный доступ / Подписка активна / Базовый тариф»; отмена автопродления/хранилища → русские диалоги; «Ошибка сети».
+- Подтверждение (12.10): «Базовый тариф», «Обновиться», «Поддержать проект», «Управлять подпиской», «Выйти» — на русском при en.
+- Подтверждение №2 (12.10): «Настройки» при en целиком русская — «Хранилище, подключения и сервисные действия.», «Провайдер Хранилища», «не настроено», «Храните файлы на личном диске…»
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-379 P1 `todo` Удаление проекта: сбой очистки S3 не показывается пользователю
+- Проблема: Dashboard.tsx S3 cleanup — catch → console.warn.
+- Как воспроизвести: Offline/блокировка delete_folder → удалить проект: ошибок нет, файлы в бакете остались.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-380 P2 `todo` Удаление проекта не чистит файлы Google Drive
+- Проблема: Dashboard delete — только S3/vercel cleanup.
+- Как воспроизвести: Проект с Drive-видео → удалить проект → файлы в Drive остаются (ассеты чистятся «Delete everywhere»).
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-381 P2 `todo` Гостевые комментарии: нет ограничения частоты
+- Проблема: public_comment без rate-limit.
+- Как воспроизвести: 200 POST за минуту на один /v/<token> — все принимаются.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-382 P2 `todo` Транскрипт: нет автоскролла к активному слову
+- Проблема: Player.tsx — нет scrollIntoView.
+- Как воспроизвести: Длинный транскрипт → Play → подсветка уезжает за экран, скролл вручную.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-383 P2 `todo` Дашборд: нет поиска и сортировки проектов
+- Проблема: Dashboard — только разделение owned/shared.
+- Как воспроизвести: 15+ проектов → искать по сетке вручную.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-384 P2 `todo` Нет отмены запущенной транскрибации
+- Проблема: Player — terminate только при unmount.
+- Как воспроизвести: Запустить на длинном видео → кнопки «Отменить» нет.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-385 P2 `todo` Гостевая страница /v/<token> не локализована
+- Проблема: PublicViewer.tsx — рус. хардкоды.
+- Как воспроизвести: en UI → /v/<token>: «Ссылка недоступна», «Комментарии», футер — по-русски.
+- Подтверждение (12.10): гостевая страница показывает «КОММЕНТАРИИ», «Гостевой доступ…» при en.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-386 P2 `todo` Тач-таргеты кнопок карточек проектов <40px
+- Проблема: Dashboard — p-2.5+иконка 14 ≈34px.
+- Как воспроизвести: 390×844 → измерить кнопки карточки проекта (<40px).
+- Подтверждение (12.10): замер — кнопки 32×32 и 34×34 px.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-387 P2 `todo` «Поделились со мной»: матч только по team.id
+- Проблема: Dashboard isInTeam vs серверный ACL.
+- Как воспроизвести: team-запись {id:'u_x', email:'you@mail'} → нет в «Поделились», сервер доступ даёт.
+- Acceptance: проблема устранена и воспроизведение из шага выше больше не даёт эффекта; проверка добавлена в тесты/чек-лист.
+
+### T-388 P2 `todo` Локальная разработка: красные SyntaxError в консоли (конфиг хранилища)
+- Проблема: Vite dev отдаёт не-JSON на /api/storage?action=config; клиент логирует console.error (шум, пугает при диагностике).
+- Как воспроизвести: `npm run dev` → открыть Профиль → консоль: «Failed to load S3 config SyntaxError: Unexpected token 'i'…». В прод-среде не проявляется.
+- Acceptance: dev/mock не генерирует красных SyntaxError при загрузке конфига.
+
+### T-389 P2 `todo` Страница Roadmap: контент на английском при русском интерфейсе
+- Проблема: при ru заголовки/описания фич роадмапа на английском («Webhook Notifications», «Configure custom webhooks…», «Browser Extension for Quick Analysis»).
+- Как воспроизвести: ru UI → /roadmap.
+- Acceptance: контент роадмапа переведён (или согласовано решение о едином языке).

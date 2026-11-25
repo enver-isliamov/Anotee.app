@@ -1,8 +1,13 @@
-
+﻿
 import { sql } from '@vercel/postgres';
 import { del } from '@vercel/blob';
 import { verifyUser, getClerkClient } from './_auth.js';
 import { checkProjectAccess } from './_permissions.js';
+import { isOrgMember, extractOrgIds, isOrgAdminMembership } from './_orgAccess.js';
+import { canManageProject, touchesStructuralFields, stripStructuralChanges } from './_access.js';
+import { resolveSyncOutcome } from './_sync.js';
+import { applyCommentAction } from './_comments.js';
+import { sanitizeRoadmapPostInput, toggleRoadmapVote, normalizeRoadmapStatus } from './_roadmap.js';
 
 const isDbConnectionError = (err) => {
     return err.message && (
@@ -56,8 +61,164 @@ function sanitizeProjectForUser(projectData, user, isGuest = false) {
     return projectData;
 }
 
+// T-14x: платформенный админ (Clerk publicMetadata.role) — как в api/admin.js
+async function isPlatformAdmin(user) {
+    try {
+        const clerk = getClerkClient();
+        const clerkUser = await clerk.users.getUser(user.userId);
+        const role = clerkUser.publicMetadata && clerkUser.publicMetadata.role;
+        return role === 'admin' || role === 'superadmin';
+    } catch (e) {
+        return false;
+    }
+}
+
+// T-368: админ организации проекта (Clerk memberships) — даёт права менеджера в org-проектах.
+async function isOrgAdminFor(user, orgId) {
+    if (!orgId) return false;
+    try {
+        const clerk = getClerkClient();
+        const userId = user.userId || user.id;
+        const memberships = await clerk.users.getOrganizationMembershipList({ userId, limit: 100 });
+        return isOrgAdminMembership(memberships, orgId);
+    } catch (e) {
+        console.warn('org admin check failed:', e && e.message ? e.message : e);
+        return false;
+    }
+}
+
 export default async function handler(req, res) {
   try {
+      // ==========================================
+      // T-21: PUBLIC VIEW — гостевой доступ к одной версии БЕЗ регистрации.
+      // Валидация по токену из project.publicShare; Clerk не требуется.
+      // Ветер стоит ДО verifyUser намеренно: гость не аутентифицирован.
+      // ==========================================
+      const earlyAction = req.query && req.query.action;
+      if (earlyAction === 'public_view' && req.method === 'GET') {
+          const token = String(req.query.token || '');
+          if (!token || token.length < 20) return res.status(400).json({ error: 'Invalid token' });
+          const { rows } = await sql`SELECT id, owner_id, data FROM projects WHERE data->'publicShare'->>'token' = ${token} LIMIT 1`;
+          if (!rows || !rows.length) return res.status(404).json({ error: 'Link not found or revoked' });
+          const projectData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+          const share = projectData.publicShare;
+          if (!share || share.token !== token) return res.status(404).json({ error: 'Link not found or revoked' });
+          const sharedAsset = (projectData.assets || []).find(a => a.id === share.assetId);
+          if (!sharedAsset) return res.status(404).json({ error: 'Asset not found' });
+          const sharedVersion = (sharedAsset.versions || []).find(v => v.id === share.versionId);
+          if (!sharedVersion) return res.status(404).json({ error: 'Shared version not found or deleted' }); // M1: без fallback на другую версию
+          let videoUrl = sharedVersion.url || null;
+          try {
+              if (sharedVersion.storageType === 's3' && sharedVersion.s3Key) {
+                  const { getS3Client } = await import('./_s3.js');
+                  const { s3, config } = await getS3Client(rows[0].owner_id); // B1: presign от имени владельца, без Clerk
+                  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+                  const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+                  videoUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: config.bucket, Key: sharedVersion.s3Key }), { expiresIn: 3600 });
+              } else if (sharedVersion.storageType === 'drive' && sharedVersion.googleDriveId) {
+                  // T-14x: как в основном плеере (googleDrive.getVideoStreamUrlLegacy) — через API-ключ надёжнее,
+                  // чем uc?export=download: последний часто отдаёт interstitial/HTML-страницу,
+                  // из-за чего <video> показывал чёрный экран и «не воспроизводил».
+                  // Файлы, загруженные приложением, публичные (GoogleDriveService.makeFilePublic при загрузке).
+                  const driveKey = process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY;
+                  videoUrl = driveKey
+                      ? `https://www.googleapis.com/drive/v3/files/${sharedVersion.googleDriveId}?alt=media&key=${driveKey}`
+                      : `https://drive.google.com/uc?export=download&confirm=t&id=${sharedVersion.googleDriveId}`;
+              }
+          } catch (presignErr) {
+              console.error('public_view presign failed', presignErr);
+              videoUrl = null;
+          }
+          // T-369: форма гостевого комментария скрывается, если проект или версия заблокированы
+          const commentsLocked = !!projectData.isLocked || !!sharedVersion.isLocked;
+          const publicComments = (sharedVersion.comments || []).map(c => ({ id: c.id, authorName: c.authorName, text: c.text, timestamp: c.timestamp, duration: c.duration, status: c.status, editKind: c.editKind, createdAt: c.createdAt }));
+          return res.status(200).json({
+              projectName: projectData.name,
+              assetTitle: sharedAsset.title,
+              versionNumber: sharedVersion.versionNumber,
+              videoUrl,
+              comments: publicComments,
+              isLocked: !!sharedVersion.isLocked,
+              canComment: !commentsLocked
+          });
+      }
+
+      // ==========================================
+      // T-369: PUBLIC COMMENT — гость оставляет комментарий к расшаренной версии.
+      // Валидация по share-токену; Clerk не требуется. Пишем в ту же версию, что и public_view,
+      // через read-modify-write с CAS и retry (не затираем конкурентные правки проекта).
+      // ==========================================
+      if (earlyAction === 'public_comment' && req.method === 'POST') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const token = String((body && body.token) || '');
+          const content = String((body && body.content) || '').trim();
+          let authorName = String((body && body.authorName) || '').trim();
+          const tsRaw = Number(body && body.timestamp);
+          if (!token || token.length < 20) return res.status(400).json({ error: 'Invalid token' });
+          if (!content || content.length > 2000) return res.status(400).json({ error: 'Comment must be 1..2000 chars' });
+          if (!authorName) authorName = 'Гость';
+          if (authorName.length > 60) authorName = authorName.slice(0, 60);
+
+          const { rows } = await sql`SELECT id, owner_id, data FROM projects WHERE data->'publicShare'->>'token' = ${token} LIMIT 1`;
+          if (!rows || !rows.length) return res.status(404).json({ error: 'Link not found or revoked' });
+          const projectData0 = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+          const share = projectData0.publicShare;
+          if (!share || share.token !== token) return res.status(404).json({ error: 'Link not found or revoked' });
+
+          const comment = {
+              id: crypto.randomUUID(),
+              text: content,
+              authorName,
+              userId: 'guest',
+              authorId: 'guest',
+              guest: true,
+              timestamp: Number.isFinite(tsRaw) && tsRaw >= 0 ? Math.round(tsRaw * 1000) / 1000 : 0,
+              duration: 0,
+              status: 'OPEN',
+              createdAt: new Date().toISOString(),
+          };
+
+          for (let attempt = 0; attempt < 3; attempt++) {
+              // Codex P2 (ревью): у @vercel/postgres результат — { rows }, а не массив.
+              const freshRows = attempt === 0
+                  ? [{ data: projectData0 }]
+                  : (await sql`SELECT data FROM projects WHERE id = ${rows[0].id}`).rows;
+              if (!freshRows || freshRows.length === 0) return res.status(404).json({ error: 'Project not found' });
+              const freshData = typeof freshRows[0].data === 'string' ? JSON.parse(freshRows[0].data) : freshRows[0].data;
+              const currentVersion = freshData._version || 0;
+              const fAsset = (freshData.assets || []).find(a => a.id === share.assetId);
+              if (!fAsset) return res.status(404).json({ error: 'Asset not found' });
+              const fVersion = (fAsset.versions || []).find(v => v.id === share.versionId);
+              if (!fVersion) return res.status(404).json({ error: 'Shared version not found or deleted' });
+              // Codex P1 (ревью): уважаем блокировки — как авторизованный плеер (Player: project.isLocked || version.isLocked)
+              if (freshData.isLocked || fVersion.isLocked) return res.status(403).json({ error: 'Comments are locked' });
+              if (!Array.isArray(fVersion.comments)) fVersion.comments = [];
+              fVersion.comments.push(comment);
+              freshData._version = currentVersion + 1;
+              const upd = await sql`
+                  UPDATE projects SET data = ${JSON.stringify(freshData)}::jsonb, updated_at = ${Date.now()}
+                  WHERE id = ${rows[0].id} AND ((data->>'_version')::int = ${currentVersion} OR data->>'_version' IS NULL)`;
+              if (upd.rowCount > 0) return res.status(200).json({ success: true, comment });
+          }
+          return res.status(409).json({ error: 'Busy, try again' });
+      }
+
+      // ==========================================
+      // ROADMAP: публичное чтение доски (раздел /roadmap виден и гостям).
+      // Синхронизируется с «Библией проекта» (/bible.html → «Дорожная карта»).
+      // ==========================================
+      if (earlyAction === 'roadmap' && req.method === 'GET') {
+          try {
+              await sql`CREATE TABLE IF NOT EXISTS roadmap_posts (id TEXT PRIMARY KEY, data JSONB NOT NULL, created_at BIGINT, updated_at BIGINT)`;
+              const { rows } = await sql`SELECT data FROM roadmap_posts ORDER BY created_at DESC LIMIT 300`;
+              return res.status(200).json({ posts: rows.map((r) => r.data) });
+          } catch (e) {
+              console.error("Roadmap read error:", e && e.message ? e.message : e);
+              return res.status(200).json({ posts: [] });
+          }
+      }
+
       // FORCE EMAIL FETCH: Required for "Shared with Me" personal invites to work.
       const requireEmail = true; 
       const user = await verifyUser(req, requireEmail);
@@ -160,29 +321,17 @@ export default async function handler(req, res) {
           if (!version) return res.status(404).json({ error: "Version not found" });
           if (!version.comments) version.comments = [];
 
-          switch (commentAction) {
-              case 'create':
-                  version.comments.push({ ...payload, userId: user.id, createdAt: 'Just now' });
-                  break;
-              case 'update':
-                  const uIdx = version.comments.findIndex(c => c.id === payload.id);
-                  if (uIdx !== -1) {
-                      const isCommentOwner = version.comments[uIdx].userId === user.id;
-                      const isProjectOwner = projectRow.owner_id === user.id;
-                      if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
-                      version.comments[uIdx] = { ...version.comments[uIdx], ...payload };
-                  }
-                  break;
-              case 'delete':
-                  const dIdx = version.comments.findIndex(c => c.id === payload.id);
-                  if (dIdx !== -1) {
-                      const isCommentOwner = version.comments[dIdx].userId === user.id;
-                      const isProjectOwner = projectRow.owner_id === user.id;
-                      if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
-                      version.comments.splice(dIdx, 1);
-                  }
-                  break;
+          // T-13: идемпотентное применение — повторный create/retry/гонка не создаёт дубликатов.
+          // Владение проверяем до мутации (как раньше: автор комментария или владелец проекта).
+          if ((commentAction === 'update' || commentAction === 'delete') && payload) {
+              const cIdx = version.comments.findIndex(c => c.id === payload.id);
+              if (cIdx !== -1) {
+                  const isCommentOwner = version.comments[cIdx].userId === user.id;
+                  const isProjectOwner = projectRow.owner_id === user.id;
+                  if (!isCommentOwner && !isProjectOwner) return res.status(403).json({ error: "Forbidden" });
+              }
           }
+          applyCommentAction(version.comments, commentAction, payload, user.id);
 
           const newVersion = currentVersion + 1;
           projectData._version = newVersion;
@@ -194,8 +343,114 @@ export default async function handler(req, res) {
               AND ((data->>'_version')::int = ${currentVersion} OR data->>'_version' IS NULL);
           `;
 
-          if (updateResult.rowCount === 0) return res.status(409).json({ error: "Conflict" });
+          if (updateResult.rowCount === 0) {
+          // T-80: last-write-wins для comment-действий — перечитываем свежие данные, применяем ту же операцию
+          const fresh = await sql`SELECT data FROM projects WHERE id = ${projectId}`;
+          if (fresh.length === 0) return res.status(404).json({ error: "Project not found" });
+          const freshData = fresh[0].data || {};
+          const freshCurrent = freshData._version || 0;
+          const fAsset = (freshData.assets || []).find(a => a.id === assetId);
+          if (!fAsset) return res.status(404).json({ error: "Asset not found" });
+          const fVersion = (fAsset.versions || []).find(v => v.id === versionId);
+          if (!fVersion) return res.status(404).json({ error: "Version not found" });
+          if (!fVersion.comments) fVersion.comments = [];
+          // T-13: то же идемпотентное применение в T-80-ветке (без дублей при гонке)
+          applyCommentAction(fVersion.comments, commentAction, payload, user.id);
+          freshData._version = freshCurrent + 1;
+          await sql`UPDATE projects SET data = ${JSON.stringify(freshData)}::jsonb, updated_at = ${Date.now()} WHERE id = ${projectId}`;
+          return res.status(200).json({ success: true, _version: freshData._version });
+      }
           return res.status(200).json({ success: true, _version: newVersion });
+      }
+
+      // ==========================================
+      // MERGED ROUTE: ROADMAP ACTIONS (write)
+      // create/vote/comment — авторизованные; update/delete — платформенный админ.
+      // ==========================================
+      if (req.method === 'POST' && action === 'roadmap_create') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const check = sanitizeRoadmapPostInput(body || {});
+          if (!check.ok) return res.status(400).json({ error: check.error });
+          await sql`CREATE TABLE IF NOT EXISTS roadmap_posts (id TEXT PRIMARY KEY, data JSONB NOT NULL, created_at BIGINT, updated_at BIGINT)`;
+          const post = {
+              id: crypto.randomUUID(),
+              ...check.value,
+              status: 'under_review',
+              authorId: user.id,
+              createdAt: new Date().toISOString(),
+              voterIds: [user.id],
+              comments: [],
+          };
+          await sql`INSERT INTO roadmap_posts (id, data, created_at, updated_at) VALUES (${post.id}, ${JSON.stringify(post)}::jsonb, ${Date.now()}, ${Date.now()})`;
+          return res.status(200).json({ post });
+      }
+      if (req.method === 'POST' && action === 'roadmap_vote') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const postId = body && body.postId;
+          if (!postId) return res.status(400).json({ error: "Missing postId" });
+          const { rows } = await sql`SELECT data FROM roadmap_posts WHERE id = ${postId}`;
+          if (!rows.length) return res.status(404).json({ error: "Post not found" });
+          const post = rows[0].data;
+          const vote = toggleRoadmapVote(post, user.id);
+          post.voterIds = vote.voterIds;
+          await sql`UPDATE roadmap_posts SET data = ${JSON.stringify(post)}::jsonb, updated_at = ${Date.now()} WHERE id = ${postId}`;
+          return res.status(200).json({ post, voted: vote.voted });
+      }
+      if (req.method === 'POST' && action === 'roadmap_comment') {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const { postId, content, authorName, authorAvatar } = body || {};
+          const text = typeof content === 'string' ? content.trim() : '';
+          if (!postId || text.length < 1) return res.status(400).json({ error: "Missing content" });
+          if (text.length > 2000) return res.status(400).json({ error: "Comment is too long" });
+          const { rows } = await sql`SELECT data FROM roadmap_posts WHERE id = ${postId}`;
+          if (!rows.length) return res.status(404).json({ error: "Post not found" });
+          const post = rows[0].data;
+          if (!Array.isArray(post.comments)) post.comments = [];
+          const comment = {
+              id: crypto.randomUUID(),
+              authorId: user.id,
+              authorName: String(authorName || 'User').slice(0, 60),
+              authorAvatar: authorAvatar || null,
+              content: text.slice(0, 2000),
+              createdAt: new Date().toISOString(),
+          };
+          post.comments.push(comment);
+          await sql`UPDATE roadmap_posts SET data = ${JSON.stringify(post)}::jsonb, updated_at = ${Date.now()} WHERE id = ${postId}`;
+          return res.status(200).json({ post, comment });
+      }
+      if (req.method === 'POST' && (action === 'roadmap_update' || action === 'roadmap_delete')) {
+          let body = req.body;
+          if (typeof body === 'string') try { body = JSON.parse(body); } catch (e) {}
+          const postId = body && body.postId;
+          if (!postId) return res.status(400).json({ error: "Missing postId" });
+          if (!(await isPlatformAdmin(user))) return res.status(403).json({ error: "Admin access required" });
+          if (action === 'roadmap_delete') {
+              await sql`DELETE FROM roadmap_posts WHERE id = ${postId}`;
+              return res.status(200).json({ success: true });
+          }
+          const { rows } = await sql`SELECT data FROM roadmap_posts WHERE id = ${postId}`;
+          if (!rows.length) return res.status(404).json({ error: "Post not found" });
+          const post = rows[0].data;
+          if (body.status) {
+              const st = normalizeRoadmapStatus(body.status);
+              if (!st) return res.status(400).json({ error: "Unknown status" });
+              post.status = st;
+          }
+          if (typeof body.title === 'string') {
+              const t = body.title.trim();
+              if (t.length < 3 || t.length > 140) return res.status(400).json({ error: "Bad title length" });
+              post.title = t;
+          }
+          if (typeof body.description === 'string') {
+              const dsc = body.description.trim();
+              if (dsc.length < 3 || dsc.length > 2000) return res.status(400).json({ error: "Bad description length" });
+              post.description = dsc;
+          }
+          await sql`UPDATE roadmap_posts SET data = ${JSON.stringify(post)}::jsonb, updated_at = ${Date.now()} WHERE id = ${postId}`;
+          return res.status(200).json({ post });
       }
 
       // ==========================================
@@ -360,6 +615,25 @@ export default async function handler(req, res) {
 
           } else if (targetOrgId) {
               // --- ORG LIST ---
+              // T-02: без проверки членства любой авторизованный пользователь мог выгрузить проекты чужой организации.
+              let userOrgIds = [];
+              if (user.isVerified && user.userId) {
+                  try {
+                      const clerk = getClerkClient();
+                      const memberships = await clerk.users.getOrganizationMembershipList({ userId: user.userId, limit: 100 });
+                      userOrgIds = extractOrgIds(memberships);
+                  } catch (e) {
+                      // Проверить доступ не удалось — не отдаём данные (fail-closed), но и не «403»: это временный сбой.
+                      console.error("Org membership check failed:", e && e.message ? e.message : e);
+                      return res.status(503).json({ error: "Не удалось проверить доступ к организации. Повторите запрос.", code: "ORG_CHECK_UNAVAILABLE" });
+                  }
+              } else {
+                  return res.status(403).json({ error: "Access denied: not authorized" });
+              }
+              if (!isOrgMember(userOrgIds, targetOrgId)) {
+                  return res.status(403).json({ error: "Access denied: you are not a member of this organization" });
+              }
+
               const { rows } = await sql`
                 SELECT data, org_id FROM projects 
                 WHERE org_id = ${targetOrgId}
@@ -432,6 +706,15 @@ export default async function handler(req, res) {
                return res.status(403).json({ error: "Restricted users cannot modify project settings." });
           }
 
+          // T-06: настройки проекта (имя, команда, доступы, блокировка) меняет только владелец/менеджер
+          // T-368: админ организации проекта получает те же права (team может быть пустым).
+          if (touchesStructuralFields(updates)) {
+              const orgAdmin = await isOrgAdminFor(user, rows[0].org_id);
+              if (!canManageProject(user, rows[0], { orgAdmin })) {
+                  return res.status(403).json({ error: "Insufficient permissions: only owner or manager can change project settings" });
+              }
+          }
+
           const currentDbData = rows[0].data;
           const currentVer = currentDbData._version || 0;
           
@@ -446,11 +729,18 @@ export default async function handler(req, res) {
               updatedAt: 'Just now'
           };
 
-          await sql`
+          const patchUpd = await sql`
             UPDATE projects 
             SET data = ${JSON.stringify(newData)}::jsonb, updated_at = ${Date.now()}
             WHERE id = ${projectId}
+            AND ((data->>'_version')::int = ${currentVer} OR data->>'_version' IS NULL)
           `;
+          if (patchUpd.rowCount === 0) {
+              // T-05: между SELECT и UPDATE версия изменилась — отдаём 409 с актуальным документом
+              const fresh = await sql`SELECT data FROM projects WHERE id = ${projectId}`;
+              const serverData = fresh.rows[0] ? fresh.rows[0].data : null;
+              return res.status(409).json({ error: "Conflict", serverVersion: serverData ? serverData._version : null, project: serverData });
+          }
 
           return res.status(200).json({ success: true, project: newData });
       }
@@ -484,13 +774,42 @@ export default async function handler(req, res) {
                     const member = existingData.team?.find(m => m.id === user.id);
                     if (member?.restrictedAssetId) continue; 
 
-                    await sql`
+                    // T-06: участник без прав на управление не может перезаписать настройки проекта —
+                    // серверные значения структурных полей сохраняются, принимаются только данные ревью.
+                    // T-368: org-админ проекта — управляет (team может быть пустым).
+                    const syncOrgAdmin = await isOrgAdminFor(user, checkExists.rows[0].org_id);
+                    if (!canManageProject(user, checkExists.rows[0], { orgAdmin: syncOrgAdmin })) {
+                        const safeProject = stripStructuralChanges(project, existingData);
+                        safeProject._version = newVersion;
+                        const updSafe = await sql`
+                            UPDATE projects 
+                            SET data = ${JSON.stringify(safeProject)}::jsonb, updated_at = ${Date.now()}
+                            WHERE id = ${project.id}
+                            AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
+                        `;
+                        if (updSafe.rowCount === 0) {
+                            const fresh = await sql`SELECT data FROM projects WHERE id = ${project.id}`;
+                            updatesResults.push({ id: project.id, ...resolveSyncOutcome(0, newVersion, fresh.rows[0] ? fresh.rows[0].data : null) });
+                        } else {
+                            updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                        }
+                        continue;
+                    }
+
+                    const upd = await sql`
                         UPDATE projects 
                         SET data = ${projectJson}::jsonb, org_id = ${orgId}, updated_at = ${Date.now()}
                         WHERE id = ${project.id}
                         AND ((data->>'_version')::int = ${clientVersion} OR data->>'_version' IS NULL);
                     `;
-                    updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    // T-05: 0 обновлённых строк = гонка проиграна → сообщаем конфликт, не врём «updated»
+                    if (upd.rowCount === 0) {
+                        const fresh = await sql`SELECT data FROM projects WHERE id = ${project.id}`;
+                        const serverData = fresh.rows[0] ? fresh.rows[0].data : null;
+                        updatesResults.push({ id: project.id, ...resolveSyncOutcome(0, newVersion, serverData) });
+                    } else {
+                        updatesResults.push({ id: project.id, _version: newVersion, status: 'updated' });
+                    }
                 } else {
                     await sql`
                         INSERT INTO projects (id, owner_id, org_id, data, updated_at, created_at)

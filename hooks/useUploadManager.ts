@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, ProjectAsset, UploadTask, StorageType, User, VideoVersion } from '../types';
 import { generateId, generateVideoThumbnail } from '../services/utils';
@@ -17,6 +17,13 @@ export const useUploadManager = (
     getToken: () => Promise<string | null> 
 ) => {
     const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
+
+    // T-368: зеркало последнего отрендеренного projects — нужно, чтобы получить итоговое
+    // состояние проекта синхронно (апдейтер setProjects в React 18 выполняется не сразу).
+    const projectsRef = useRef(projects);
+    useEffect(() => { projectsRef.current = projects; }, [projects]);
+  // T-44: незавершённые задачи нежизнеспособны после перезагрузки страницы — чистим на маунте
+  useEffect(() => { setUploadTasks(prev => prev.filter(t => t.status !== 'uploading' && t.status !== 'processing')); }, []);
     
     // Throttling Ref to prevent UI freeze
     const lastProgressUpdate = useRef<number>(0);
@@ -36,6 +43,26 @@ export const useUploadManager = (
     const removeUploadTask = (id: string) => {
         setUploadTasks(prev => prev.filter(t => t.id !== id));
     };
+
+    // T-107: watchdog — «залипшие» на 100% задачи закрываются автоматически
+    const stuckSinceRef = useRef<Record<string, number>>({});
+    useEffect(() => {
+        const iv = setInterval(() => {
+            setUploadTasks(prev => {
+                const now = Date.now();
+                let changed = false;
+                const next = prev.filter(t => {
+                    const stuck = (t.status === 'uploading' || t.status === 'processing') && (t.progress || 0) >= 100;
+                    if (!stuck) { delete stuckSinceRef.current[t.id]; return true; }
+                    if (!stuckSinceRef.current[t.id]) stuckSinceRef.current[t.id] = now;
+                    if (now - stuckSinceRef.current[t.id] > 25000) { delete stuckSinceRef.current[t.id]; changed = true; return false; }
+                    return true;
+                });
+                return changed ? next : prev;
+            });
+        }, 5000);
+        return () => clearInterval(iv);
+    }, []);
 
     const handleUploadAsset = async (file: File, projectId: string, useDrive: boolean, targetAssetId?: string) => {
         const taskId = generateId();
@@ -84,7 +111,8 @@ export const useUploadManager = (
             // Extract base name and extension
             let rawTitle = file.name.replace(/\.[^/.]+$/, "");
             // Sanitize: Keep alphanumeric, spaces, dashes, underscores.
-            let assetTitle = rawTitle.replace(/[^\w\s\-_]/gi, '');
+            // T-35: Unicode-aware — кириллица и др. буквы сохраняются (\w в JS — только ASCII)
+            let assetTitle = rawTitle.replace(/[^\p{L}\p{N}\s\-_]/giu, '');
             if (!assetTitle) assetTitle = "Video_Asset";
 
             const ext = file.name.split('.').pop();
@@ -111,7 +139,7 @@ export const useUploadManager = (
             const optimisticVersion: VideoVersion = {
                 id: tempVersionId,
                 versionNumber: nextVersionNumber,
-                filename: finalFileName,
+                filename: file.name, // T-35: оригинальное имя (включая кириллицу)
                 url: localBlobUrl, // Use local blob temporarily
                 storageType: 'local', // Temporary
                 uploadedAt: 'Just now',
@@ -177,125 +205,145 @@ export const useUploadManager = (
                 }
                 assetUrl = localBlobUrl;
                 storageType = 'local';
-            } else if (useS3) {
-                let s3UploadSuccess = false;
-                try {
-                    // --- S3 UPLOAD PATH ---
-                    const token = await getToken();
-                    // 1. Get Presigned URL (PUT)
-                    const presignRes = await fetch('/api/storage?action=presign', {
-                        method: 'POST',
-                        headers: { 
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            operation: 'put',
-                            key: `anotee/${projectId}/${finalFileName}`, 
-                            contentType: file.type,
-                            projectId: projectId // CRITICAL: Upload to Project Owner's Bucket
-                        })
-                    });
+  } else {
+    let s3UploadSuccess = false;
+    if (!useDrive) {
+      // T-356: presign с ВСЕГДА свежим токеном + ретрай при 401.
+      // Clerk-токены короткоживущие (~60 c): при длинной multipart-загрузке токен, взятый
+      // один раз в начале, истекал к середине — часть запросов падала с 401 («Upload failed»).
+      const apiPresign = async (payload: Record<string, unknown>): Promise<Response> => {
+          let lastRes: Response | null = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+              let fresh: string | null = null;
+              try {
+                  fresh = attempt === 0
+                      ? await getToken()
+                      : await (getToken as any)({ skipCache: true });
+              } catch {
+                  fresh = await getToken().catch(() => null);
+              }
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (fresh) headers['Authorization'] = `Bearer ${fresh}`;
+              const r = await fetch('/api/storage?action=presign', {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify(payload),
+              });
+              lastRes = r;
+              if (r.status !== 401) return r;
+          }
+          return lastRes as Response;
+      };
 
-                    if (presignRes.ok) {
-                        const { url: uploadUrl, key } = await presignRes.json();
-
-                        // 2. Upload to S3 directly
-                        await new Promise((resolve, reject) => {
-                            const xhr = new XMLHttpRequest();
-                            
-                            abortController.signal.addEventListener('abort', () => {
-                                xhr.abort();
-                                reject(new Error("Upload cancelled"));
-                            });
-
-                            xhr.open('PUT', uploadUrl);
-                            xhr.setRequestHeader('Content-Type', file.type);
-                            
-                            // Fix for Large Files (50GB+): Prevent browser from aborting long uploads
-                            xhr.timeout = 0;
-
-                            xhr.upload.onprogress = (e) => {
-                                if (e.lengthComputable) {
-                                    updateProgress(Math.round((e.loaded / e.total) * 100));
-                                }
-                            };
-
-                            xhr.onload = () => {
-                                if (xhr.status >= 200 && xhr.status < 300) {
-                                    resolve(true);
-                                } else {
-                                    reject(new Error(`S3 Upload failed: ${xhr.status}`));
-                                }
-                            };
-                            xhr.onerror = () => reject(new Error("Network error during S3 upload"));
-                            xhr.send(file);
-                        });
-
-                        storageType = 's3';
-                        s3Key = key;
-                        s3UploadSuccess = true;
-                    } 
-                } catch (e: any) {
-                    if (e.message === "Upload cancelled") throw e;
-                    console.warn("S3 Upload attempt failed, falling back to Drive/Error", e);
-                    // Fallthrough to Drive if S3 fails (e.g. Owner hasn't configured S3)
-                }
-
-                if (!s3UploadSuccess) {
-                     // --- GOOGLE DRIVE UPLOAD PATH (Fallback) ---
-                    const isDriveReady = GoogleDriveService.isAuthenticated();
-                    if (!isDriveReady) {
-                        throw new Error("Storage Error: S3 not configured for this project, and Drive not connected.");
-                    }
-
-                    const safeProjectName = project ? project.name : "Unknown Project";
-
-                    try {
-                        const appFolder = await GoogleDriveService.ensureAppFolder();
-                        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
-                        
-                        let folderName = assetTitle;
-                        if (targetAssetId && project) {
-                                const existingAsset = project.assets.find(a => a.id === targetAssetId);
-                                if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
-                        }
-
-                        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
-
-                        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName, abortController.signal);
-                        googleDriveId = result.id;
-                        storageType = 'drive';
-                        
-                        await GoogleDriveService.makeFilePublic(result.id);
-
-                    } catch (driveErr: any) {
-                        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) {
-                                throw new Error("Drive Session Expired. Please refresh page/reconnect.");
-                        }
-                        throw driveErr;
-                    }
-                }
-
-            } 
+      if (file.size > 64 * 1024 * 1024) {
+        // T-47: multipart для iOS/больших файлов — обходит лимит одного PUT
+        const s3KeyPath = `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`;
+        const cm = await apiPresign({ operation: 'createMultipart', key: s3KeyPath, contentType: file.type, projectId });
+        if (!cm.ok) throw new Error('Multipart init failed');
+        const { uploadId } = await cm.json();
+        const chunk = 32 * 1024 * 1024;
+        const totalParts = Math.ceil(file.size / chunk);
+        const parts: { ETag: string; PartNumber: number }[] = [];
+        for (let p = 1; p <= totalParts; p++) {
+          if (abortController.signal.aborted) throw new Error('Upload cancelled');
+          const pr = await apiPresign({ operation: 'part', key: s3KeyPath, uploadId, partNumber: p, projectId });
+          if (!pr.ok) throw new Error('Multipart part presign failed');
+          const { url: partUrl } = await pr.json();
+          const blobPart = file.slice((p - 1) * chunk, Math.min(p * chunk, file.size));
+          const etag = await new Promise<string>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            abortController.signal.addEventListener('abort', () => { xhr.abort(); reject(new Error('Upload cancelled')); });
+            xhr.open('PUT', partUrl);
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable) updateProgress(Math.round(((p - 1) * chunk + e.loaded) / file.size * 100)); };
+            xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve((xhr.getResponseHeader('ETag') || '').replace(/"/g, '')); else reject(new Error('Part ' + p + ' failed: ' + xhr.status)); };
+            xhr.onerror = () => reject(new Error('Network error during part upload'));
+            xhr.send(blobPart);
+          });
+          parts.push({ ETag: etag, PartNumber: p });
+        }
+        const comp = await apiPresign({ operation: 'completeMultipart', key: s3KeyPath, uploadId, projectId, parts });
+        if (!comp.ok) throw new Error('Multipart complete failed');
+        storageType = 's3'; s3Key = s3KeyPath; s3UploadSuccess = true;
+      } else {
+        try {
+          const presignRes = await apiPresign({ operation: 'put', key: `anotee/${projectId}/${finalFileName.replace(/[\\/]/g, '_')}`, contentType: file.type, projectId });
+          if (!presignRes.ok) {
+              // T-372: реальная причина отказа presign — без маскировки под «Drive not connected».
+              let reason = 'HTTP ' + presignRes.status;
+              if (presignRes.status === 401) reason = 'сессия истекла — обновите страницу и повторите';
+              else {
+                  const body = await presignRes.json().catch(() => null);
+                  if (body && (body.error || body.message)) reason = String(body.error || body.message).slice(0, 200);
+              }
+              const cfgErr: any = new Error('S3-хранилище не приняло запрос загрузки: ' + reason);
+              cfgErr.isS3ConfigError = true;
+              throw cfgErr;
+          }
+          if (presignRes.ok) {
+            const { url: uploadUrl, key } = await presignRes.json();
+            await new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              abortController.signal.addEventListener('abort', () => { xhr.abort(); reject(new Error('Upload cancelled')); });
+              xhr.open('PUT', uploadUrl);
+              xhr.setRequestHeader('Content-Type', file.type);
+              xhr.timeout = 0;
+              xhr.upload.onprogress = (e) => { if (e.lengthComputable) updateProgress(Math.round((e.loaded / e.total) * 100)); };
+              xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(true); else reject(new Error(`S3 Upload failed: ${xhr.status}`)); };
+              xhr.onerror = () => reject(new Error('Network error during S3 upload'));
+              xhr.send(file);
+            });
+            storageType = 's3'; s3Key = key; s3UploadSuccess = true;
+          }
+        } catch (e: any) {
+          if (e.message === 'Upload cancelled') throw e;
+          // T-372: конфигурационную ошибку S3 не маскируем Drive-фолбэком — показываем реальную причину
+          if (e.isS3ConfigError) throw e;
+          console.warn('S3 Upload attempt failed, falling back to Drive/Error', e);
+        }
+      }
+    }
+    if (!s3UploadSuccess) {
+      const isDriveReady = GoogleDriveService.isAuthenticated();
+      if (!isDriveReady) throw new Error('Storage Error: S3 not configured for this project, and Drive not connected.');
+      const safeProjectName = project ? project.name : 'Unknown Project';
+      try {
+        const appFolder = await GoogleDriveService.ensureAppFolder();
+        const projectFolder = await GoogleDriveService.ensureFolder(safeProjectName, appFolder);
+        let folderName = assetTitle;
+        if (targetAssetId && project) {
+          const existingAsset = project.assets.find(a => a.id === targetAssetId);
+          if (existingAsset) folderName = existingAsset.title.replace(/[^\w\s\-_]/gi, '');
+        }
+        const assetFolder = await GoogleDriveService.ensureFolder(folderName, projectFolder);
+        const result = await GoogleDriveService.uploadFile(file, assetFolder, (p) => updateProgress(p), finalFileName, abortController.signal);
+        googleDriveId = result.id;
+        storageType = 'drive';
+        await GoogleDriveService.makeFilePublic(result.id);
+      } catch (driveErr: any) {
+        if (driveErr.message.includes('401') || driveErr.message.includes('Token')) throw new Error('Drive Session Expired. Please refresh page/reconnect.');
+        throw driveErr;
+      }
+    }
+  }
 
             // 4. Construct Final Project State (Seamless Swap)
-            let finalProjectToSync: Project | null = null;
-            
-            setProjects(currentProjects => {
-                const newAllProjects = [...currentProjects];
-                const idx = newAllProjects.findIndex(p => p.id === projectId);
-                if (idx === -1) return currentProjects;
-                
-                const updatedProject = { ...newAllProjects[idx] };
-                
+            // T-368: раньше итоговый проект «вынимался» из апдейтера setProjects, но в React 18
+            // апдейтеры выполняются не синхронно — переменная оставалась null и блок синхронизации
+            // НЕ выполнялся: файл жил только в оптимистичном UI и исчезал после перезагрузки.
+            // Теперь итог считается чистой функцией applyFinalPatch:
+            //  • локальный стейт — поверх prev (конкурентные правки не теряются);
+            //  • на сервер — снимок из projectsRef (последнее отрендеренное состояние).
+            const applyFinalPatch = (proj: Project): Project => {
+                const updatedProject = { ...proj };
+
                 const assetIdx = updatedProject.assets.findIndex(a => a.id === tempAssetId);
                 if (assetIdx !== -1) {
                     const asset = { ...updatedProject.assets[assetIdx] };
                     const versionIdx = asset.versions.findIndex(v => v.id === tempVersionId);
-                    
+
                     if (versionIdx !== -1) {
                         // Replace optimistic properties with real cloud properties
+                        asset.versions = [...asset.versions];
                         asset.versions[versionIdx] = {
                             ...asset.versions[versionIdx],
                             url: assetUrl,
@@ -304,26 +352,50 @@ export const useUploadManager = (
                             s3Key
                         };
                     }
+                    updatedProject.assets = [...updatedProject.assets];
                     updatedProject.assets[assetIdx] = asset;
                 }
-                
+
                 updatedProject.updatedAt = 'Just now';
-                newAllProjects[idx] = updatedProject;
-                finalProjectToSync = updatedProject;
+                return updatedProject;
+            };
+
+            const refProject = projectsRef.current.find(p => p.id === projectId);
+            const finalProjectToSync: Project | null = refProject ? applyFinalPatch(refProject) : null;
+
+            setProjects(currentProjects => {
+                const idx = currentProjects.findIndex(p => p.id === projectId);
+                if (idx === -1) return currentProjects;
+                const newAllProjects = [...currentProjects];
+                newAllProjects[idx] = applyFinalPatch(currentProjects[idx]);
                 return newAllProjects;
             });
-
             // 5. Try Sync
             if (finalProjectToSync) {
-                try {
-                    await forceSync([finalProjectToSync]);
+try {
+  let syncOk = false;
+  for (let attempt = 1; attempt <= 3 && !syncOk; attempt++) {
+    try {
+      // T-107: финальная синхронизация с таймаутом — иначе виджет «висит» на 100%
+      await Promise.race([
+        forceSync([finalProjectToSync]),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('sync-timeout')), 20000))
+      ]);
+      syncOk = true;
+    } catch (retryErr: any) {
+      if (retryErr && retryErr.message === 'sync-timeout') { syncOk = true; notify('Файл загружен; проект синхронизируется в фоне.', 'info'); break; }
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 600 * attempt)); } else { throw retryErr; }
+    }
+  }
                     
                     updateTask({ status: 'done', progress: 100 });
                     notify("Upload completed", "success");
+                    // T-32: виджет загрузки ведёт себя как тост — авто-закрытие
+                    setTimeout(() => removeUploadTask(taskId), 2500);
 
                 } catch (syncError) {
                     console.error("Sync failed during upload finalization", syncError);
-                    throw new Error("Failed to save project data. Upload cancelled.");
+        throw new Error("Файл загружен в хранилище, но не удалось сохранить проект (проверьте связь). Повторите загрузку — ключ тот же, файл не задублируется.");
                 }
             }
 
@@ -331,6 +403,7 @@ export const useUploadManager = (
             console.error("Upload failed", e);
             updateTask({ status: 'error', error: e.message || "Upload Failed" });
             notify(`Upload failed: ${e.message}`, "error");
+            setTimeout(() => removeUploadTask(taskId), 3500); // T-32: авто-закрытие после ошибки
             
             // Revert optimistic UI on failure
             setProjects(currentProjects => {

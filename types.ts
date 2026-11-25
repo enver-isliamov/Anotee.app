@@ -1,4 +1,4 @@
-
+﻿
 export enum CommentStatus {
   OPEN = 'open',
   RESOLVED = 'resolved'
@@ -45,6 +45,8 @@ export interface Comment {
   status: CommentStatus;
   createdAt: string;
   replies?: Comment[];
+  /** T-20: пометка правки-удаления (из word-level транскрипта) */
+  editKind?: 'delete';
 }
 
 export type StorageType = 'vercel' | 'drive' | 'local' | 's3';
@@ -100,6 +102,8 @@ export interface Project {
   orgId?: string; 
   isLocked?: boolean; 
   publicAccess?: 'view' | 'none'; // New field for link sharing
+  /** T-21: гостевая ссылка на конкретную версию (просмотр без регистрации) */
+  publicShare?: { token: string; assetId: string; versionId: string; createdAt: string } | null;
   _version?: number; // Optimistic locking version
 }
 
